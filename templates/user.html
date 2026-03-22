@@ -48,6 +48,12 @@
         </div>
     </div>
 
+    {% if discount_percent > 0 %}
+    <div style="background: #28a745; color: white; padding: 12px; border-radius: 5px; text-align: center; margin-top: 15px; font-weight: bold; border: 2px dashed #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        🎉 GLOBAL APPRECIATION OFFER! You are eligible for a {{ discount_percent }}% DISCOUNT on all plans today. Inform Admin now!
+    </div>
+    {% endif %}
+
     <!-- P&L Dashboard Section -->
     <h2 style="margin-top: 30px;">📊 My Performance Analyst</h2>
     <div class="pnl-dashboard">
@@ -98,14 +104,14 @@
             <h3>Simulation Notice</h3>
             <p>You are using a <b>Demo Account</b>. Your trades are virtually simulated alongside our global Webhook signals. You do not need API Keys.</p>
             <p>Ready to automate with real money?</p>
-            <button class="btn-buy" style="background: #dc3545; width: 100%;">Upgrade to Real Account</button>
+            <a href="/plans" class="btn-buy" style="background: #dc3545; display: block; text-align: center;">Upgrade to Real Account</a>
         </div>
         {% endif %}
 
         <div class="card">
             <h3>Need Help?</h3>
-            <p><b>Technical Support:</b> +91 9848XXXXXX</p>
-            <p><b>Admin Contact:</b> +91 99XXXXXXX</p>
+            <p><b>Technical Support:</b> +91 9381490610</p>
+            <p><b>Admin Contact:</b> +91 9966123078</p>
             <p>ప్రశ్నలు ఉంటే మా టెక్నికల్ టీమ్‌ని సంప్రదించండి.</p>
         </div>
     </div>
