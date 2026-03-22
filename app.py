@@ -142,6 +142,10 @@ def demo_register():
     </form>
     """
 
+@app.route('/plans')
+def subscription_plans():
+    return render_template('plans.html')
+
 # 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
@@ -236,12 +240,32 @@ def admin_dashboard():
                            demo_users=demo_users, 
                            g_discount=10)
 
-@app.route('/approve-user/<int:user_id>/<int:months>')
+@app.route('/approve-user', methods=['POST'])
 @requires_auth
-def approve_user(user_id, months):
+def approve_user():
+    user_id = int(request.form.get('user_id'))
+    plan = request.form.get('plan')
+    months = int(request.form.get('months', 1))
+    
     user = User.query.get_or_404(user_id)
+    user.user_type = 'REAL'
+    user.selected_plan = plan
     user.is_approved = True
-    user.expiry_date = datetime.now() + timedelta(days=30 * months)
+    
+    now = datetime.now()
+    if user.expiry_date and user.expiry_date > now:
+        user.expiry_date = user.expiry_date + timedelta(days=30 * months)
+    else:
+        user.expiry_date = now + timedelta(days=30 * months)
+        
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/delete-user/<int:user_id>')
+@requires_auth
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
