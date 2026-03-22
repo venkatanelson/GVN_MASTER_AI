@@ -92,6 +92,13 @@ class TradeHistory(db.Model):
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
 
+with app.app_context():
+    db.create_all()
+
+@app.route('/')
+def index():
+    return redirect(url_for('demo_register'))
+
 @app.route('/demo-register', methods=['GET', 'POST'])
 def demo_register():
     if request.method == 'POST':
@@ -156,9 +163,6 @@ def user_dashboard(user_id):
         if days_diff <= 10: pnl_10d += t.pnl
         if days_diff <= 20: pnl_20d += t.pnl
         if days_diff <= 30: pnl_30d += t.pnl
-    
-    # 🌟 Scaling simulation for Demo: if they enter more capital, we could multiply the P&L points 
-    # but for simplicity and transparency, we keep absolute P&L matching standard 1-lot results.
     
     return render_template('user.html', 
                            user=user, 
