@@ -3,23 +3,15 @@ import base64
 import requests
 import concurrent.futures
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
-import re
-from fpdf import FPDF
-import io
 
 app = Flask(__name__)
 
-def get_ist():
-    # Render servers are UTC. IST is UTC+5:30.
-    return datetime.utcnow() + timedelta(hours=5, minutes=30)
-
 # Basic app config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
 
 # 🌟 NEW: Neon PostgreSQL Database URL
 # If DATABASE_URL is in the environment (e.g., Render/Neon), use Postgres. Otherwise, use local SQLite.
@@ -91,75 +83,30 @@ class User(db.Model):
 
 class TradeHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=get_ist)
-    symbol = db.Column(db.String(100), default="ALGO")
-    trade_type = db.Column(db.String(50), default="SIGNAL")
-    qty = db.Column(db.Integer, default=0)
-    entry_price = db.Column(db.Float, default=0.0)
-    exit_price = db.Column(db.Float, default=0.0)
-    sl_target = db.Column(db.String(20), default="None") # Target Hit, SL Hit
-    points = db.Column(db.Float, default=0.0)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
     signal_message = db.Column(db.String(500))
-    pnl = db.Column(db.Float, default=0.0)
+    pnl = db.Column(db.Float, default=0.0) # 🌟 P&L రికార్డ్
     status = db.Column(db.String(50), default="Processed")
-
-class DailyPnL(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, unique=True, nullable=False)
-    pnl = db.Column(db.Float, default=0.0)
 
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
 
-# Create tables
 with app.app_context():
-    try:
-        db.create_all()
-    except Exception as e:
-        print(f"Database creation error: {e}")
+    db.create_all()
 
 @app.route('/')
 def index():
-    if 'user_id' in session:
-        return redirect(url_for('user_dashboard', user_id=session['user_id']))
     return redirect(url_for('demo_register'))
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    import traceback
-    return f"<h3>System Error</h3><pre>Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}</pre>", 500
-
-@app.route('/migrate-db')
-def migrate_db():
-    try:
-        from sqlalchemy import text
-        db.session.execute(text("ALTER TABLE trade_history ADD COLUMN qty INTEGER DEFAULT 0;"))
-        db.session.commit()
-        return "Database migration successful! Added 'qty' column. <a href='/'>Go to Index</a>"
-    except Exception as e:
-        db.session.rollback()
-        return f"Database migration error (maybe already migrated?): {str(e)} <br><br> <a href='/'>Go to Index</a>"
 
 @app.route('/demo-register', methods=['GET', 'POST'])
 def demo_register():
-    if 'user_id' in session:
-        return redirect(url_for('user_dashboard', user_id=session['user_id']))
-    
     if request.method == 'POST':
         username = request.form.get('username')
         phone = request.form.get('phone')
         email = request.form.get('email')
         capital = int(request.form.get('demo_capital', 50000))
         
-        # Check if user already exists first
-        existing_user = User.query.filter((User.email == email) | (User.phone == phone)).first()
-        if existing_user:
-            session.permanent = True
-            session['user_id'] = existing_user.id
-            flash(f"Welcome back, {existing_user.username}!")
-            return redirect(url_for('user_dashboard', user_id=existing_user.id))
-            
         # Protect capital limits (50k to 1 Lakh)
         if capital < 50000: capital = 50000
         if capital > 100000: capital = 100000
@@ -171,42 +118,29 @@ def demo_register():
             user_type='DEMO',
             demo_capital=capital,
             selected_plan='Demo Trial',
-            is_approved=True,
-            expiry_date=get_ist() + timedelta(days=7),
+            is_approved=True, # Auto approve demos usually
+            expiry_date=datetime.now() + timedelta(days=7), # 7 days demo
             algo_status='ON'
         )
+        db.session.add(new_user)
         try:
-            db.session.add(new_user)
             db.session.commit()
-            session.permanent = True
-            session['user_id'] = new_user.id
-            flash("Account created successfully! Welcome to GVN Algo.")
             return redirect(url_for('user_dashboard', user_id=new_user.id))
-        except Exception as e:
+        except:
             db.session.rollback()
-            flash(f"Registration error: {str(e)}")
-            return redirect(url_for('demo_register'))
+            return "Email or Phone already exists!"
             
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if 'user_id' in session:
-        return redirect(url_for('user_dashboard', user_id=session['user_id']))
-    
-    if request.method == 'POST':
-        identifier = request.form.get('identifier')
-        user = User.query.filter((User.email == identifier) | (User.phone == identifier)).first()
-        if user:
-            session.permanent = True
-            session['user_id'] = user.id
-            flash(f"Welcome back, {user.username}!")
-            return redirect(url_for('user_dashboard', user_id=user.id))
-        else:
-            flash("User not found. Please register first.")
-            return redirect(url_for('demo_register'))
-            
-    return render_template('login.html')
+    return """
+    <h2>Demo Registration</h2>
+    <form method="POST">
+        <input type="text" name="username" placeholder="Name" required><br>
+        <input type="text" name="phone" placeholder="Phone" required><br>
+        <input type="email" name="email" placeholder="Email" required><br>
+        <label>Demo Capital (₹50k - ₹1Lakh):</label><br>
+        <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required><br><br>
+        <button type="submit">Start Demo Trading</button>
+    </form>
+    """
 
 @app.route('/plans')
 def subscription_plans():
@@ -215,75 +149,33 @@ def subscription_plans():
 # 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
-    # Persistent session on link click
-    session.permanent = True
-    session['user_id'] = user_id
     user = User.query.get_or_404(user_id)
-    now = get_ist()
-    today_date = now.date()
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
     remaining_days = (user.expiry_date - now).days if user.expiry_date else 0
     
-    # 🌟 Auto Delete old history (Keep only today's detailed history)
-    start_of_today = datetime(today_date.year, today_date.month, today_date.day)
-    TradeHistory.query.filter(TradeHistory.timestamp < start_of_today).delete()
-    db.session.commit()
-
-    # Calculate Dynamic P&L
-    total_trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
-    todays_trades = [t for t in total_trades if t.timestamp.date() == today_date]
+    # --- Calculate Dynamic P&L ---
+    total_trades = TradeHistory.query.all()
     
-    daily_pnl = []
-    pnl_values_list = []
+    pnl_1d = 0
+    pnl_10d = 0
+    pnl_20d = 0
+    pnl_30d = 0
     
-    all_daily = DailyPnL.query.filter(DailyPnL.date >= (today_date - timedelta(days=30))).all()
-    date_to_pnl = {dp.date: dp.pnl for dp in all_daily}
-    
-    for i in range(30):
-        target_date = today_date - timedelta(days=i)
-        
-        if i == 0:
-            day_pnl = sum(t.pnl for t in todays_trades)
-            # Sync today's PnL cleanly
-            dp_record = DailyPnL.query.filter_by(date=today_date).first()
-            if not dp_record:
-                db.session.add(DailyPnL(date=today_date, pnl=day_pnl))
-            else:
-                dp_record.pnl = day_pnl
-            try:
-                db.session.commit()
-            except:
-                db.session.rollback()
-        else:
-            day_pnl = date_to_pnl.get(target_date, 0.0)
-            
-        daily_pnl.append({
-            "day": i + 1,
-            "date": target_date.strftime('%d-%b'),
-            "pnl": round(day_pnl, 2)
-        })
-        pnl_values_list.append(day_pnl)
-
-    pnl_1d = pnl_values_list[0]
-    pnl_10d = sum(pnl_values_list[:10])
-    pnl_20d = sum(pnl_values_list[:20])
-    pnl_30d = sum(pnl_values_list[:30])
-    
-    # Calculate Averages
-    avg_20d = pnl_20d / 20 if pnl_20d != 0 else 0
-    avg_30d = pnl_30d / 30 if pnl_30d != 0 else 0
+    for t in total_trades:
+        days_diff = (now - t.timestamp).days
+        if days_diff <= 1: pnl_1d += t.pnl
+        if days_diff <= 10: pnl_10d += t.pnl
+        if days_diff <= 20: pnl_20d += t.pnl
+        if days_diff <= 30: pnl_30d += t.pnl
     
     return render_template('user.html', 
                            user=user, 
                            remaining_days=max(0, remaining_days),
-                           discount_percent=user.personal_discount + 10,
-                           pnl_1d=round(pnl_1d, 2),
-                           pnl_10d=round(pnl_10d, 2),
-                           pnl_20d=round(pnl_20d, 2),
-                           pnl_30d=round(pnl_30d, 2),
-                           avg_20d=round(avg_20d, 2),
-                           avg_30d=round(avg_30d, 2),
-                           daily_pnl=daily_pnl,
-                           trades=todays_trades)
+                           discount_percent=user.personal_discount + 10, # Base 10 + personal
+                           pnl_1d=pnl_1d,
+                           pnl_10d=pnl_10d,
+                           pnl_20d=pnl_20d,
+                           pnl_30d=pnl_30d)
 
 
 # ---------------------------------------------------------
@@ -295,73 +187,14 @@ def handle_tradingview_alert():
     alert_data = request.json # TradingView Message
     signal_msg = alert_data.get("message", "TV Signal Received")
     
-    # Enhanced Parsing Logic
-    pnl_value = 0.0
-    entry = 0.0
-    exit_p = 0.0
-    pts = 0.0
-    sl_t = "None"
-    qty_val = 0
-    
-    # 1. Parse Prices & Points & Qty
-    qty_match = re.search(r'(?:Qty|Quantity):\s*(\d+)', signal_msg, re.IGNORECASE)
-    if qty_match:
-        qty_val = int(qty_match.group(1))
+    try:
+        pnl_value = float(alert_data.get("pnl", 0.0))
+    except (TypeError, ValueError):
+        pnl_value = 0.0
 
-    price_match = re.search(r'(?:Price|Entry|at):\s*([-+]?\d*\.?\d+)', signal_msg, re.IGNORECASE)
-    entry = float(price_match.group(1)) if price_match else 0.0
-    
-    points_match = re.search(r'(?:Profit|Loss|Pts|Points):\s*([-+]?\d*\.?\d+)', signal_msg, re.IGNORECASE)
-    if points_match:
-        pts = float(points_match.group(1))
-        # If it's a Nifty signal, multiply by 65 as per user request
-        if "NIFTY" in signal_msg.upper():
-            pnl_value = pts * 65
-        else:
-            pnl_value = pts
-    
-    # Detect SL or Target
-    if "TARGET" in signal_msg.upper() or "HIT" in signal_msg.upper():
-        sl_t = "Target Hit"
-        exit_p = entry + pts if pts > 0 else entry
-    elif "SL" in signal_msg.upper() or "STOPLOSS" in signal_msg.upper() or "EXIT" in signal_msg.upper():
-        sl_t = "SL Hit"
-        exit_p = entry - abs(pts) if pts != 0 else entry
-
-    # 2. Extract Cleaner Symbol Name
-    symbol_match = re.search(r'([A-Z\s]+[0-9]*)', signal_msg)
-    clean_symbol = symbol_match.group(1).strip() if symbol_match else "ALGO TRADE"
-
-    # Detect Trade Type
-    t_type = "SIGNAL"
-    msg_upper = signal_msg.upper()
-    if "BUY" in msg_upper: t_type = "BUY"
-    elif "SELL" in msg_upper: t_type = "SELL"
-    elif "TARGET" in msg_upper or "HIT" in msg_upper: t_type = "TARGET"
-    elif "EXIT" in msg_upper or "SL" in msg_upper or "STOPLOSS" in msg_upper: t_type = "STOPLOSS"
-
-    new_trade = TradeHistory(
-        symbol=clean_symbol,
-        trade_type=t_type,
-        qty=qty_val,
-        entry_price=entry,
-        exit_price=exit_p,
-        sl_target=sl_t,
-        points=pts,
-        signal_message=signal_msg, 
-        pnl=pnl_value, 
-        timestamp=get_ist()
-    )
+    # 1. Record in History (Viewable by everyone)
+    new_trade = TradeHistory(signal_message=signal_msg, pnl=pnl_value, timestamp=datetime.utcnow() + timedelta(hours=5, minutes=30))
     db.session.add(new_trade)
-    
-    # Update Daily P&L for long-term history
-    today_dt = get_ist().date()
-    daily_record = DailyPnL.query.filter_by(date=today_dt).first()
-    if not daily_record:
-        db.session.add(DailyPnL(date=today_dt, pnl=pnl_value))
-    else:
-        daily_record.pnl += pnl_value
-        
     db.session.commit()
     
     # 2. Filter REAL Users
@@ -369,7 +202,7 @@ def handle_tradingview_alert():
     
     def execute_trade(u):
         with app.app_context():
-            if u.expiry_date and u.expiry_date > get_ist():
+            if u.expiry_date and u.expiry_date > datetime.now():
                 try:
                     if not u.encrypted_secret_key or not u.dhan_webhook_url:
                         return
@@ -390,6 +223,23 @@ def handle_tradingview_alert():
         executor.map(execute_trade, real_active_users)
             
     return jsonify({"status": "Signals Processed & Saved", "real_trades_fired": len(real_active_users)}), 200
+
+@app.route('/save_api_settings', methods=['POST'])
+def save_api_settings():
+    user_id = int(request.form.get('user_id', 0))
+    if not user_id:
+        return "Invalid User", 400
+        
+    webhook_url = request.form.get('webhook_url')
+    secret_key = request.form.get('secret_key')
+    
+    user = User.query.get_or_404(user_id)
+    user.dhan_webhook_url = webhook_url
+    if secret_key and secret_key != '********':
+        user.encrypted_secret_key = cipher.encrypt(secret_key.encode())
+    
+    db.session.commit()
+    return redirect(url_for('user_dashboard', user_id=user_id))
 
 # ---------------------------------------------------------
 # DASHBOARD LOGIC (Admin & Global)
@@ -416,17 +266,16 @@ def approve_user():
     
     user = User.query.get_or_404(user_id)
     user.user_type = 'REAL'
-    user.selected_plan = plan or "Basic"
+    user.selected_plan = plan
     user.is_approved = True
     
-    now_ist = get_ist()
-    if user.expiry_date and user.expiry_date > now_ist:
+    now = datetime.now()
+    if user.expiry_date and user.expiry_date > now:
         user.expiry_date = user.expiry_date + timedelta(days=30 * months)
     else:
-        user.expiry_date = now_ist + timedelta(days=30 * months)
+        user.expiry_date = now + timedelta(days=30 * months)
         
     db.session.commit()
-    flash(f"User {user.username} Approved Successfully!")
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/delete-user/<int:user_id>')
@@ -447,84 +296,9 @@ def toggle_kill_switch(user_id):
 
 @app.route('/history')
 def trade_history():
-    # Only show TODAY's trades for 'History', as per user requirement (deleted daily)
-    try:
-        now_ist = get_ist()
-        today = now_ist.date()
-        h = TradeHistory.query.filter(db.func.date(TradeHistory.timestamp) == today).order_by(TradeHistory.timestamp.desc()).all()
-        total_pnl = round(sum((t.pnl for t in h if t.pnl is not None)), 2)
-        return render_template('history.html', trades=h, total_pnl=total_pnl, today=today.strftime('%d-%b-%Y'))
-    except Exception as e:
-        print(f"Error in Trade History: {e}")
-        return f"History Error: {e}", 500
-
-@app.route('/download-pnl')
-def download_pnl():
-    # PDF report shows only TODAY's trades
-    today_date = get_ist().date()
-    trades = TradeHistory.query.filter(db.func.date(TradeHistory.timestamp) == today_date).all()
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="Daily Trade Summary Report", ln=True, align='C')
-    pdf.ln(10)
-    
-    # Table Header
-    pdf.set_font("Arial", 'B', size=10)
-    pdf.cell(40, 10, "Time", 1)
-    pdf.cell(50, 10, "Symbol", 1)
-    pdf.cell(30, 10, "Type", 1)
-    pdf.cell(40, 10, "PnL (INR)", 1)
-    pdf.cell(30, 10, "Status", 1)
-    pdf.ln()
-
-    # Table Body
-    pdf.set_font("Arial", size=9)
-    total = 0
-    for t in trades:
-        pdf.cell(40, 10, t.timestamp.strftime('%H:%M:%S'), 1)
-        pdf.cell(50, 10, t.symbol[:25], 1)
-        pdf.cell(30, 10, t.trade_type, 1)
-        pdf.cell(40, 10, str(round(t.pnl, 2)), 1)
-        pdf.cell(30, 10, t.status, 1)
-        pdf.ln()
-        total += t.pnl
-
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', size=11)
-    pdf.cell(200, 10, txt=f"Total Daily P&L: INR {round(total, 2)}", ln=True)
-
-    stream = io.BytesIO()
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-    stream.write(pdf_output)
-    stream.seek(0)
-    
-    return Response(stream, mimetype='application/pdf',
-                    headers={"Content-Disposition": "attachment;filename=daily_pnl_report.pdf"})
-
-# 🌟 NEW: Dashboard Controls
-@app.route('/toggle-algo/<int:user_id>', methods=['POST'])
-def toggle_algo(user_id):
-    user = User.query.get_or_404(user_id)
-    user.algo_status = 'OFF' if user.algo_status == 'ON' else 'ON'
-    db.session.commit()
-    flash(f"Algo is now {user.algo_status}")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/save_api_settings', methods=['POST'])
-def save_api_settings():
-    user_id = int(request.form.get('user_id'))
-    webhook_url = request.form.get('webhook_url')
-    secret_key = request.form.get('secret_key')
-    
-    user = User.query.get_or_404(user_id)
-    user.dhan_webhook_url = webhook_url
-    if secret_key and secret_key != '********':
-        user.encrypted_secret_key = cipher.encrypt(secret_key.encode())
-    
-    db.session.commit()
-    flash("API Settings Saved Successfully!")
-    return redirect(url_for('user_dashboard', user_id=user_id))
+    history = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(1000).all()
+    total_pnl = sum((t.pnl for t in history if t.pnl))
+    return render_template('history.html', trades=history, total_pnl=total_pnl)
 
 @app.route('/clear-history')
 @requires_auth
@@ -533,12 +307,8 @@ def clear_history():
     db.session.commit()
     return redirect(url_for('trade_history'))
 
-@app.route('/logout')
-def logout():
-    session.pop('user_id', None)
-    flash("Logged out successfully!")
-    return redirect(url_for('demo_register'))
-
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
