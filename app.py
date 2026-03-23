@@ -125,6 +125,22 @@ def index():
         return redirect(url_for('user_dashboard', user_id=session['user_id']))
     return redirect(url_for('demo_register'))
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    return f"<h3>System Error</h3><pre>Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}</pre>", 500
+
+@app.route('/migrate-db')
+def migrate_db():
+    try:
+        from sqlalchemy import text
+        db.session.execute(text("ALTER TABLE trade_history ADD COLUMN qty INTEGER DEFAULT 0;"))
+        db.session.commit()
+        return "Database migration successful! Added 'qty' column. <a href='/'>Go to Index</a>"
+    except Exception as e:
+        db.session.rollback()
+        return f"Database migration error (maybe already migrated?): {str(e)} <br><br> <a href='/'>Go to Index</a>"
+
 @app.route('/demo-register', methods=['GET', 'POST'])
 def demo_register():
     if 'user_id' in session:
