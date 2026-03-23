@@ -3,7 +3,7 @@ import base64
 import requests
 import concurrent.futures
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
@@ -88,6 +88,12 @@ class TradeHistory(db.Model):
     pnl = db.Column(db.Float, default=0.0) # 🌟 P&L రికార్డ్
     status = db.Column(db.String(50), default="Processed")
 
+class DailyPnL(db.Model):
+    __tablename__ = 'daily_pnl_tracker'
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, unique=True, nullable=False)
+    pnl = db.Column(db.Float, default=0.0)
+
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
@@ -107,6 +113,12 @@ def demo_register():
         email = request.form.get('email')
         capital = int(request.form.get('demo_capital', 50000))
         
+        existing = User.query.filter((User.email == email) | (User.phone == phone)).first()
+        if existing:
+            session.permanent = True
+            session['user_id'] = existing.id
+            return redirect(url_for('user_dashboard', user_id=existing.id))
+            
         # Protect capital limits (50k to 1 Lakh)
         if capital < 50000: capital = 50000
         if capital > 100000: capital = 100000
@@ -149,24 +161,61 @@ def subscription_plans():
 # 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
+    session.permanent = True
+    session['user_id'] = user_id
     user = User.query.get_or_404(user_id)
     now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_date = now.date()
     remaining_days = (user.expiry_date - now).days if user.expiry_date else 0
     
-    # --- Calculate Dynamic P&L ---
-    total_trades = TradeHistory.query.all()
+    # 🌟 Auto Delete old history (Keep only today's detailed history)
+    start_of_today = datetime(today_date.year, today_date.month, today_date.day)
+    TradeHistory.query.filter(TradeHistory.timestamp < start_of_today).delete()
+    db.session.commit()
     
-    pnl_1d = 0
-    pnl_10d = 0
-    pnl_20d = 0
-    pnl_30d = 0
+    # Parse today's trades for the live historical table dynamically (NO SCHEMA CHANGES!)
+    todays_trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
+    parsed_trades = []
+    import re
+    for t in todays_trades:
+        sm = str(t.signal_message).upper()
+        sym = re.split(r'BUY|SELL|TARGET|SL|STOPLOSS', sm)[0].strip() if sm else "ALGO"
+        
+        t_type = "SIGNAL"
+        if "BUY" in sm: t_type = "BUY"
+        elif "SELL" in sm: t_type = "SELL"
+        
+        res = "Running"
+        if "TARGET" in sm or "HIT" in sm: res = "Target Hit"
+        elif "SL" in sm or "STOPLOSS" in sm or "EXIT" in sm: res = "SL Hit"
+        
+        parsed_trades.append({
+            "time": t.timestamp.strftime('%H:%M:%S'),
+            "symbol": sym[:20],
+            "type": t_type,
+            "result": res,
+            "pnl": t.pnl
+        })
+        
+    # --- Calculate Dynamic Cumulative P&L ---
+    all_daily = DailyPnL.query.filter(DailyPnL.date >= (today_date - timedelta(days=30))).all()
+    date_to_pnl = {dp.date: dp.pnl for dp in all_daily}
     
-    for t in total_trades:
-        days_diff = (now - t.timestamp).days
-        if days_diff <= 1: pnl_1d += t.pnl
-        if days_diff <= 10: pnl_10d += t.pnl
-        if days_diff <= 20: pnl_20d += t.pnl
-        if days_diff <= 30: pnl_30d += t.pnl
+    pnl_1d = sum(t.pnl for t in todays_trades)
+    
+    # Sync today's Live P&L to database so it stays permanently
+    today_record = DailyPnL.query.filter_by(date=today_date).first()
+    if not today_record:
+        db.session.add(DailyPnL(date=today_date, pnl=pnl_1d))
+    else:
+        today_record.pnl = pnl_1d
+    try: db.session.commit()
+    except: db.session.rollback()
+    
+    # Cumulative Sums (10, 20, 30 Days over all records)
+    pnl_10d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 10))
+    pnl_20d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 20))
+    pnl_30d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 30))
     
     return render_template('user.html', 
                            user=user, 
@@ -175,7 +224,8 @@ def user_dashboard(user_id):
                            pnl_1d=pnl_1d,
                            pnl_10d=pnl_10d,
                            pnl_20d=pnl_20d,
-                           pnl_30d=pnl_30d)
+                           pnl_30d=pnl_30d,
+                           parsed_trades=parsed_trades)
 
 
 # ---------------------------------------------------------
@@ -193,8 +243,15 @@ def handle_tradingview_alert():
         pnl_value = 0.0
 
     # 1. Record in History (Viewable by everyone)
-    new_trade = TradeHistory(signal_message=signal_msg, pnl=pnl_value, timestamp=datetime.utcnow() + timedelta(hours=5, minutes=30))
+    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    new_trade = TradeHistory(signal_message=signal_msg, pnl=pnl_value, timestamp=today_dt)
     db.session.add(new_trade)
+    
+    daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
+    if not daily_record:
+        db.session.add(DailyPnL(date=today_dt.date(), pnl=pnl_value))
+    else:
+        daily_record.pnl = DailyPnL.pnl + pnl_value
     db.session.commit()
     
     # 2. Filter REAL Users
