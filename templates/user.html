@@ -219,6 +219,15 @@
             {% if user.user_type == 'REAL' %}
             <div class="card">
                 <h3>🔑 API Settings (Dhan)</h3>
+                <div style="background: #e8f0fe; padding: 12px; border-left: 4px solid #1a73e8; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
+                    <p style="margin: 0 0 8px 0;"><b>💡 How to setup?</b> <a href="https://youtube.com/your-video-link-here" target="_blank" style="color: #dc3545; font-weight:bold; float:right; text-decoration: none;">📺 Watch Video</a></p>
+                    <ol style="margin: 0; padding-left: 20px; color: #444;">
+                        <li>Login to <a href="https://login.dhan.co/?location=DH_WEB" target="_blank" style="color: #1a73e8; font-weight: bold;">Dhan Web</a>.</li>
+                        <li>Go to <b>Orders ➔ Webhooks</b> section.</li>
+                        <li>Select <b>30 Days</b> validity and Generate Webhook.</li>
+                        <li>Copy the <b>URL</b> and <b>Secret Key</b> & paste them below.</li>
+                    </ol>
+                </div>
                 <form action="/save_api_settings" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
                     <label>Webhook URL:</label>
