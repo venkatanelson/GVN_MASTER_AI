@@ -1,1 +1,116 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN Algo - User Demo History</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --success: #28a745;
+            --danger: #dc3545;
+            --bg: #f8f9fa;
+        }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: auto; }
+        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .card { background: #fff; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #efefef; }
+        h2 { color: var(--primary); margin-top: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        
+        .pnl-box { background: #e8f0fe; border-left: 6px solid var(--primary); padding: 20px; margin-bottom: 30px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.02); }
+        .pnl-box span:first-child { font-weight: 600; color: #5f6368; }
+        .pnl-val { font-size: 24px; font-weight: 800; }
+        .profit { color: var(--success); }
+        .loss { color: var(--danger); }
+        
+        table { width: 100%; border-collapse: separate; border-spacing: 0 8px; margin-top: 10px; }
+        th, td { padding: 15px; text-align: left; }
+        th { font-weight: 600; color: #5f6368; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #f1f3f4; }
+        td { background: white; border-top: 1px solid #f1f3f4; border-bottom: 1px solid #f1f3f4; }
+        tr td:first-child { border-left: 1px solid #f1f3f4; border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
+        tr td:last-child { border-right: 1px solid #f1f3f4; border-top-right-radius: 10px; border-bottom-right-radius: 10px; }
+        
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .badge-target { background: #e6f4ea; color: var(--success); }
+        .badge-sl { background: #fce8e6; color: var(--danger); }
+        .badge-info { background: #e8f0fe; color: var(--primary); }
+        
+        .btn { padding: 12px 20px; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: 0.3s; font-size: 14px; }
+        .btn-pdf { background-color: #ff9800; box-shadow: 0 4px 12px rgba(255,152,0,0.2); }
+        .btn-clear { background-color: var(--danger); box-shadow: 0 4px 12px rgba(220,53,69,0.2); }
+        .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
 
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; }
+            .card { box-shadow: none; border: none; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-actions no-print">
+        <a href="/admin-control" class="btn" style="background: #202124;">&larr; Admin Dashboard</a>
+        <div>
+            <button onclick="window.print()" class="btn btn-pdf">📄 Print / PDF</button>
+            <a href="/clear-history" class="btn btn-clear" onclick="return confirm('Clear ALL trade history? This is irreversible!')">🗑️ Wipe Data</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📊 User Demo History <span style="font-size: 14px; font-weight: 400; color: #5f6368; margin-left: auto;">Statement Date: {{ today }}</span></h2>
+        
+        <div class="pnl-box">
+            <span>Overall Performance Summary:</span>
+            <span class="pnl-val {% if total_pnl >= 0 %}profit{% else %}loss{% endif %}">
+                ₹ {{ total_pnl }}
+            </span>
+        </div>
+        
+        <div style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Qty</th>
+                        <th>Type</th>
+                        <th>Entry</th>
+                        <th>Exit</th>
+                        <th>SL / Target</th>
+                        <th>PnL (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trade in trades %}
+                    <tr>
+                        <td style="color: #5f6368;">{{ trade.timestamp.strftime('%H:%M:%S') }}</td>
+                        <td><b>{{ trade.symbol }}</b></td>
+                        <td>{{ trade.qty }}</td>
+                        <td style="font-weight: 600;">{{ trade.trade_type }}</td>
+                        <td>₹ {{ trade.entry_price }}</td>
+                        <td>₹ {{ trade.exit_price }}</td>
+                        <td>
+                            <span class="badge {% if 'Target' in trade.sl_target %}badge-target{% elif 'SL' in trade.sl_target %}badge-sl{% else %}badge-info{% endif %}">
+                                {{ trade.sl_target }}
+                            </span>
+                        </td>
+                        <td class="{% if trade.pnl > 0 %}profit{% elif trade.pnl < 0 %}loss{% endif %}" style="font-weight: 700;">
+                            {% if trade.pnl > 0 %}+{% endif %}{{ trade.pnl }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 50px; color: var(--danger);">No trade activity detected for {{ today }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

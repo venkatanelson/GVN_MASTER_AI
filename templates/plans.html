@@ -1,1 +1,135 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN Algo - Select Your Success Plan</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --secondary: #0d47a1;
+            --success: #28a745;
+            --warning: #ff9800;
+            --danger: #dc3545;
+            --bg: #f8fafc;
+        }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); margin: 0; padding: 0; color: #333; }
+        .container { max-width: 1200px; margin: 60px auto; padding: 0 20px; text-align: center; }
+        
+        .header { margin-bottom: 60px; max-width: 700px; margin-left: auto; margin-right: auto; }
+        .header h1 { font-size: 42px; font-weight: 800; color: #1e293b; margin-bottom: 20px; letter-spacing: -1px; }
+        .header p { font-size: 18px; color: #64748b; line-height: 1.6; }
+        
+        .plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; margin-top: 40px; }
+        
+        .plan-card { 
+            background: #fff; 
+            border-radius: 30px; 
+            padding: 40px; 
+            box-shadow: 0 15px 40px rgba(0,0,0,0.06); 
+            border: 1px solid #f1f3f4; 
+            display: flex; 
+            flex-direction: column; 
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+        .plan-card:hover { transform: translateY(-15px); box-shadow: 0 25px 60px rgba(0,0,0,0.12); }
+        .plan-card h2 { font-size: 26px; font-weight: 700; margin-bottom: 10px; color: #1e293b; }
+        
+        .popular-badge { background: linear-gradient(90deg, #ff9800, #ffb74d); color: white; padding: 6px 16px; border-radius: 50px; font-size: 12px; font-weight: 800; position: absolute; top: 25px; right: 25px; box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3); }
+        
+        .price { font-size: 48px; font-weight: 800; color: #1e293b; margin: 25px 0; display: flex; align-items: baseline; justify-content: center; gap: 5px; }
+        .price span { font-size: 16px; color: #64748b; weight: 500; }
+        
+        .features { list-style: none; padding: 0; text-align: left; margin: 30px 0; flex-grow: 1; }
+        .features li { padding: 12px 0; color: #5f6368; font-size: 15px; display: flex; align-items: center; gap: 10px; }
+        .features li::before { content: "✓"; color: var(--success); font-weight: 900; background: #e6f4ea; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+        .features li.no::before { content: "✕"; color: var(--danger); background: #fce8e6; }
+        
+        .btn-wa { 
+            padding: 16px 24px; 
+            border-radius: 18px; 
+            color: white; 
+            font-weight: 700; 
+            text-decoration: none; 
+            display: block; 
+            transition: 0.3s; 
+            font-size: 16px; 
+            box-shadow: 0 10px 25px rgba(40, 167, 69, 0.3);
+        }
+        .btn-wa:hover { filter: brightness(1.1); transform: scale(1.02); }
+        
+        .back-btn { display: inline-block; margin-top: 50px; color: #64748b; text-decoration: none; font-weight: 600; font-size: 14px; transition: 0.2s; }
+        .back-btn:hover { color: var(--primary); }
+        
+        /* Tier Colors */
+        .plan-basic { border-top: 10px solid var(--primary); }
+        .plan-premium { border-top: 10px solid var(--warning); border-color: var(--warning); box-shadow: 0 20px 50px rgba(255, 152, 0, 0.1); }
+        .plan-ultimate { border-top: 10px solid var(--danger); }
+        
+        .wa-basic { background: var(--primary); box-shadow: 0 10px 25px rgba(26, 115, 232, 0.3); }
+        .wa-premium { background: var(--warning); }
+        .wa-ultimate { background: var(--danger); }
+        
+    </style>
+</head>
+<body>
 
+<div class="container">
+    <div class="header">
+        <h1>Upgrade to Real Profits</h1>
+        <p>మీరు ఎంచుకున్న ప్లాన్‌ని ఆక్టివేట్ చేసుకోడానికి అడ్మిన్‌తో సంప్రదించండి. Real trading, Dhan API ద్వారా ఆటోమేట్ చేయబడుతుంది.</p>
+    </div>
+
+    <div class="plans-grid">
+        <!-- Basic Plan -->
+        <div class="plan-card plan-basic">
+            <h2>Basic Plan</h2>
+            <div class="price">₹ 2,999<span>/ month</span></div>
+            <ul class="features">
+                <li>BankNifty / Nifty Accurate Signals</li>
+                <li>1 Lot Automation - Secure Execution</li>
+                <li>Email Support (Fast Response)</li>
+                <li class="no">No Trailing SL Mechanism</li>
+                <li class="no">Standard Server Speed</li>
+            </ul>
+            <a href="https://wa.me/919966123078?text=Hello%20Admin,%20I%20want%20to%20upgrade%20to%20the%20Basic%20Plan%20for%20Real%20Trading." target="_blank" class="btn-wa wa-basic">Connect on WhatsApp</a>
+        </div>
+
+        <!-- Premium Plan -->
+        <div class="plan-card plan-premium">
+            <div class="popular-badge">🏆 TOP RATING</div>
+            <h2>Premium Pro</h2>
+            <div class="price">₹ 5,999<span>/ month</span></div>
+            <ul class="features">
+                <li>Everything in Basic Plan</li>
+                <li>Manage Upto 5 Lots - Pro Automation</li>
+                <li><b>Priority WhatsApp Support</b></li>
+                <li>Advanced Trailing SL System</li>
+                <li>High Speed Transaction Processing</li>
+            </ul>
+            <a href="https://wa.me/919966123078?text=Hello%20Admin,%20I%20want%20to%20upgrade%20to%20the%20Premium%20Plan%20for%20Real%20Trading." target="_blank" class="btn-wa wa-premium">Go Premium Pro</a>
+        </div>
+
+        <!-- Ultimate Plan -->
+        <div class="plan-card plan-ultimate">
+            <h2>Ultimate Legend</h2>
+            <div class="price">₹ 9,999<span>/ month</span></div>
+            <ul class="features">
+                <li>Premium Pro Features</li>
+                <li><b>Unlimited Lot Size</b></li>
+                <li>Dedicated Personal Trading Server</li>
+                <li>Custom Strategy Integration</li>
+                <li>Personal Trading Consultation</li>
+            </ul>
+            <a href="https://wa.me/919966123078?text=Hello%20Admin,%20I%20want%20to%20upgrade%20to%20the%20Ultimate%20Plan%20for%20Real%20Trading." target="_blank" class="btn-wa wa-ultimate">Be a Trading Legend</a>
+        </div>
+    </div>
+
+    <a href="/" class="back-btn">← Skip for now, back to Dashboard</a>
+</div>
+
+</body>
+</html>
