@@ -108,12 +108,19 @@ def index():
 @app.route('/demo-register', methods=['GET', 'POST'])
 def demo_register():
     if request.method == 'POST':
-        username = request.form.get('username')
-        phone = request.form.get('phone')
-        email = request.form.get('email')
-        capital = int(request.form.get('demo_capital', 50000))
+        username = request.form.get('username', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        try:
+            capital = int(request.form.get('demo_capital', 50000))
+        except ValueError:
+            capital = 50000
         
-        existing = User.query.filter((User.email == email) | (User.phone == phone)).first()
+        # Robust existing user check
+        existing = User.query.filter(
+            db.or_(db.func.lower(User.email) == email, User.phone == phone)
+        ).first()
+        
         if existing:
             session.permanent = True
             session['user_id'] = existing.id
@@ -130,16 +137,24 @@ def demo_register():
             user_type='DEMO',
             demo_capital=capital,
             selected_plan='Demo Trial',
-            is_approved=True, # Auto approve demos usually
-            expiry_date=datetime.now() + timedelta(days=7), # 7 days demo
+            is_approved=True,
+            expiry_date=datetime.now() + timedelta(days=7),
             algo_status='ON'
         )
         db.session.add(new_user)
         try:
             db.session.commit()
+            session.permanent = True
+            session['user_id'] = new_user.id
             return redirect(url_for('user_dashboard', user_id=new_user.id))
-        except:
+        except Exception as e:
             db.session.rollback()
+            # If database raised unique constraint error despite our prior check (e.g., casing issues previously saved)
+            fallback = User.query.filter((User.email.ilike(email)) | (User.phone == phone)).first()
+            if fallback:
+                session.permanent = True
+                session['user_id'] = fallback.id
+                return redirect(url_for('user_dashboard', user_id=fallback.id))
             return "Email or Phone already exists!"
             
     return """
