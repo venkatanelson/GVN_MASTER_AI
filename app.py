@@ -187,24 +187,60 @@ def demo_register():
             
     config = get_admin_config()
     return f"""
-    <h2>Demo Registration</h2>
-    <form method="POST">
-        <input type="text" name="username" placeholder="Name" required><br>
-        <input type="text" name="phone" placeholder="Phone" required><br>
-        <input type="email" name="email" placeholder="Email" required><br>
-        <label>Demo Capital (₹50k - ₹1Lakh):</label><br>
-        <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required><br><br>
-        <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Start Demo Trading</button>
-    </form>
+    <!DOCTYPE html>
+    <html>
+    <head><title>GVN Algo System</title><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; text-align: center;">
     
-    <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; display: inline-block;">
+    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 20px;">
+        
+        <!-- EXISTING USER LOGIN -->
+        <div style="background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; border-top: 5px solid #1a73e8; text-align: left;">
+            <h2 style="color: #1a73e8; margin-top: 0;">🔐 Existing Customer Login</h2>
+            <p style="color: #666; font-size: 14px;">If you already have an account, just enter your phone number below to access your dashboard.</p>
+            <form action="/login" method="POST">
+                <label style="font-weight: bold;">Registered Phone Number:</label><br>
+                <input type="text" name="login_phone" placeholder="Enter Phone Number" required style="width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
+                <button type="submit" style="padding: 12px 20px; background: #1a73e8; color: white; border: none; border-radius: 5px; width: 100%; font-weight: bold; cursor: pointer;">Login to Dashboard</button>
+            </form>
+        </div>
+
+        <!-- NEW USER REGISTRATION -->
+        <div style="background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; border-top: 5px solid #28a745; text-align: left;">
+            <h2 style="color: #28a745; margin-top: 0;">🚀 New Demo Registration</h2>
+            <form method="POST">
+                <input type="text" name="username" placeholder="Full Name" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
+                <input type="text" name="phone" placeholder="Phone Number" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
+                <input type="email" name="email" placeholder="Email Address" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
+                <label style="font-size: 14px; font-weight: bold;">Demo Capital (₹50k - ₹1Lakh):</label><br>
+                <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
+                <button type="submit" style="padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 5px; width: 100%; font-weight: bold; margin-top: 10px; cursor: pointer;">Start Demo Trading</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- SUPPORT BLOCK -->
+    <div style="margin-top: 40px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; display: inline-block; text-align: left;">
         <h3 style="margin-top: 0; color: #856404;">📞 Customer Support</h3>
-        <p style="margin: 5px 0;"><b>Technical Support:</b> <a href="tel:{config.support_number_1}">+91 {config.support_number_1}</a></p>
-        <p style="margin: 5px 0;"><b>Admin Contact:</b> <a href="tel:{config.support_number_2}">+91 {config.support_number_2}</a></p>
-        <p style="font-size: 14px; color: #666; margin-bottom: 0;">(Please contact us if you need help logging in or upgrading)</p>
+        <p style="margin: 5px 0;"><b>Technical Support:</b> <a href="tel:{config.support_number_1}" style="color: #1a73e8; font-weight: bold; text-decoration: none;">+91 {config.support_number_1}</a></p>
+        <p style="margin: 5px 0;"><b>Admin Contact:</b> <a href="tel:{config.support_number_2}" style="color: #1a73e8; font-weight: bold; text-decoration: none;">+91 {config.support_number_2}</a></p>
+        <p style="font-size: 13px; color: #666; margin-bottom: 0;">(Please contact us if you need help logging in or upgrading)</p>
     </div>
-    </div>
+    
+    </body>
+    </html>
     """
+
+@app.route('/login', methods=['POST'])
+def simple_login():
+    phone = request.form.get('login_phone', '').strip()
+    # Find user by exactly matching the phone
+    user = User.query.filter_by(phone=phone).first()
+    if user:
+        session.permanent = True
+        session['user_id'] = user.id
+        return redirect(url_for('user_dashboard', user_id=user.id))
+    return "<h3 style='color:red; text-align:center; font-family:sans-serif; margin-top:50px;'>Phone number not found! Please register as a New User first. <br><br><a href='/'>Go back</a></h3>"
 
 @app.route('/plans')
 def subscription_plans():
