@@ -4,3 +4,4 @@ requests==2.31.0
 cryptography==41.0.4
 psycopg2-binary==2.9.9
 gunicorn==21.2.0
+fpdf==1.7.2
