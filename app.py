@@ -4,6 +4,7 @@ import requests
 import concurrent.futures
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
+import random
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
@@ -29,18 +30,45 @@ fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
 cipher = Fernet(ENCRYPTION_KEY)
 
-# Admin Authentication
-ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+# ---------------------------------------------------------
+# DYNAMIC ADMIN CONFIG & AUTHENTICATION
+# ---------------------------------------------------------
+class AdminConfig(db.Model):
+    __tablename__ = 'admin_system_config'
+    id = db.Column(db.Integer, primary_key=True)
+    admin_user = db.Column(db.String(50), default='admin')
+    admin_pass = db.Column(db.String(50), default='admin123')
+    admin_phone = db.Column(db.String(15), default='9966123078')
+    support_number_1 = db.Column(db.String(15), default='9381490610')
+    support_number_2 = db.Column(db.String(15), default='9966123078')
+    reset_otp = db.Column(db.String(10), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
+
+def get_admin_config():
+    config = AdminConfig.query.first()
+    if not config:
+        config = AdminConfig()
+        db.session.add(config)
+        db.session.commit()
+    return config
 
 def check_auth(username, password):
-    return username == ADMIN_USERNAME and password == ADMIN_PASSWORD
+    config = AdminConfig.query.first()
+    if not config: return username == 'admin' and password == 'admin123'
+    return username == config.admin_user and password == config.admin_pass
 
 def authenticate():
     return Response(
-        'Admin access required.\n'
-        'Could not verify your access level.\n'
-        'Login required (Default: admin / admin123)', 401,
+        '''
+        <html>
+        <body style="font-family: Arial; text-align: center; margin-top: 50px;">
+            <h2>🚨 Admin Access Required</h2>
+            <p>Authentication failed or was cancelled.</p>
+            <p>If you forgot your password, <br><br>
+            <a href="/admin-reset" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">Recover via Phone OTP</a></p>
+        </body>
+        </html>
+        ''', 401,
         {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
 def requires_auth(f):
@@ -157,7 +185,8 @@ def demo_register():
                 return redirect(url_for('user_dashboard', user_id=fallback.id))
             return "Email or Phone already exists!"
             
-    return """
+    config = get_admin_config()
+    return f"""
     <h2>Demo Registration</h2>
     <form method="POST">
         <input type="text" name="username" placeholder="Name" required><br>
@@ -165,8 +194,16 @@ def demo_register():
         <input type="email" name="email" placeholder="Email" required><br>
         <label>Demo Capital (₹50k - ₹1Lakh):</label><br>
         <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required><br><br>
-        <button type="submit">Start Demo Trading</button>
+        <button type="submit" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Start Demo Trading</button>
     </form>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; display: inline-block;">
+        <h3 style="margin-top: 0; color: #856404;">📞 Customer Support</h3>
+        <p style="margin: 5px 0;"><b>Technical Support:</b> <a href="tel:{config.support_number_1}">+91 {config.support_number_1}</a></p>
+        <p style="margin: 5px 0;"><b>Admin Contact:</b> <a href="tel:{config.support_number_2}">+91 {config.support_number_2}</a></p>
+        <p style="font-size: 14px; color: #666; margin-bottom: 0;">(Please contact us if you need help logging in or upgrading)</p>
+    </div>
+    </div>
     """
 
 @app.route('/plans')
@@ -235,12 +272,13 @@ def user_dashboard(user_id):
     return render_template('user.html', 
                            user=user, 
                            remaining_days=max(0, remaining_days),
-                           discount_percent=user.personal_discount + 10, # Base 10 + personal
+                           discount_percent=user.personal_discount + 10,
                            pnl_1d=pnl_1d,
                            pnl_10d=pnl_10d,
                            pnl_20d=pnl_20d,
                            pnl_30d=pnl_30d,
-                           parsed_trades=parsed_trades)
+                           parsed_trades=parsed_trades,
+                           config=get_admin_config())
 
 
 # ---------------------------------------------------------
@@ -327,7 +365,84 @@ def admin_dashboard():
     return render_template('admin.html', 
                            real_users=real_users, 
                            demo_users=demo_users, 
-                           g_discount=10)
+                           g_discount=10,
+                           config=get_admin_config())
+
+@app.route('/update-settings', methods=['POST'])
+@requires_auth
+def update_settings():
+    config = get_admin_config()
+    config.admin_user = request.form.get('admin_user', config.admin_user)
+    config.admin_pass = request.form.get('admin_pass', config.admin_pass)
+    config.admin_phone = request.form.get('admin_phone', config.admin_phone)
+    config.support_number_1 = request.form.get('support_1', config.support_number_1)
+    config.support_number_2 = request.form.get('support_2', config.support_number_2)
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+# --- OTP RESET FLOW ---
+@app.route('/admin-reset', methods=['GET', 'POST'])
+def admin_reset():
+    if request.method == 'POST':
+        phone = request.form.get('phone')
+        config = get_admin_config()
+        if phone == config.admin_phone:
+            # Generate OTP
+            otp = str(random.randint(100000, 999999))
+            config.reset_otp = otp
+            config.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+            db.session.commit()
+            
+            # Simulated SMS send (In reality, use Fast2SMS / Twilio)
+            print(f"-------------\n[SMS MOCK] Sent OTP {otp} to {phone}\n-------------")
+            
+            return f'''
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2>OTP Sent to {phone}</h2>
+                <p style="color:red;">(Since real SMS costs money, check your Server Console to see the mock OTP)</p>
+                <form action="/admin-verify-otp" method="POST">
+                    <input type="text" name="otp" placeholder="Enter 6-digit OTP" required style="padding:10px; width:200px;">
+                    <button type="submit" style="padding:10px 20px; background:#28a745; color:white; border:none;">Verify</button>
+                </form>
+            </div>
+            '''
+        else:
+            return "Invalid Admin Phone Number"
+            
+    return '''
+    <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+        <h2>Forgot Admin Password?</h2>
+        <form action="/admin-reset" method="POST">
+            <input type="text" name="phone" placeholder="Enter your registered Admin Phone" required style="padding:10px; width:250px;">
+            <button type="submit" style="padding:10px 20px; background:#007bff; color:white; border:none;">Send OTP</button>
+        </form>
+    </div>
+    '''
+
+@app.route('/admin-verify-otp', methods=['POST'])
+def admin_verify_otp():
+    otp = request.form.get('otp')
+    config = get_admin_config()
+    if config.reset_otp and config.reset_otp == otp and config.otp_expiry > datetime.utcnow():
+        return '''
+        <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+            <h2>Set New Admin Password</h2>
+            <form action="/admin-set-password" method="POST">
+                <input type="password" name="new_pass" placeholder="Enter New Password" required style="padding:10px; width:200px;">
+                <button type="submit" style="padding:10px 20px; background:#ff9800; color:white; border:none;">Update Password</button>
+            </form>
+        </div>
+        '''
+    return "Invalid or Expired OTP. <a href='/admin-reset'>Try again</a>"
+
+@app.route('/admin-set-password', methods=['POST'])
+def admin_set_password():
+    new_pass = request.form.get('new_pass')
+    config = get_admin_config()
+    config.admin_pass = new_pass
+    config.reset_otp = None # wipe otp
+    db.session.commit()
+    return "Password updated successfully! <a href='/admin-control'>Go to Admin Login</a>"
 
 @app.route('/approve-user', methods=['POST'])
 @requires_auth
