@@ -152,30 +152,20 @@
         {% endif %}
 
         <!-- P&L Dashboard Section -->
-        <h2 style="margin-top: 30px;">📊 My Performance Analyst</h2>
-        <div class="pnl-dashboard">
-            <div class="pnl-card">
-                <h4>Today (1 Day)</h4>
-                <div class="{% if pnl_1d >= 0 %}profit{% else %}loss{% endif %}">
-                    ₹ {{ pnl_1d }}
+        <h2 style="margin-top: 30px;">📊 My 6-Day Performance Analyst</h2>
+        <div class="pnl-dashboard" style="display:flex; flex-wrap:wrap; gap:15px; margin-top:20px;">
+            {% for day in daily_history %}
+            <div class="pnl-card" style="flex: 1; min-width: 120px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #1a73e8;">
+                <h4 style="margin-top: 0; font-size: 14px;">{{ day.date }}</h4>
+                <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}">
+                    ₹ {{ "%.2f"|format(day.pnl) }}
                 </div>
             </div>
-            <div class="pnl-card">
-                <h4>Last 10 Days</h4>
-                <div class="{% if pnl_10d >= 0 %}profit{% else %}loss{% endif %}">
-                    ₹ {{ pnl_10d }}
-                </div>
-            </div>
-            <div class="pnl-card">
-                <h4>Last 20 Days</h4>
-                <div class="{% if pnl_20d >= 0 %}profit{% else %}loss{% endif %}">
-                    ₹ {{ pnl_20d }}
-                </div>
-            </div>
-            <div class="pnl-card">
-                <h4>Last 30 Days</h4>
-                <div class="{% if pnl_30d >= 0 %}profit{% else %}loss{% endif %}">
-                    ₹ {{ pnl_30d }}
+            {% endfor %}
+            <div class="pnl-card" style="flex: 1; min-width: 150px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #ff9800; background-color: #fff8e1;">
+                <h4 style="margin-top: 0; font-size: 15px; color: #ff9800;">TOTAL P&L (6 Days)</h4>
+                <div class="{% if pnl_total_6d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px;">
+                    ₹ {{ "%.2f"|format(pnl_total_6d) }}
                 </div>
             </div>
         </div>
@@ -192,24 +182,49 @@
                 <tr style="background:#1a73e8; color:white;">
                     <th style="padding:10px;">Time</th>
                     <th style="padding:10px;">Symbol</th>
-                    <th style="padding:10px;">Type</th>
                     <th style="padding:10px;">Status</th>
+                    <th style="padding:10px;">Entry</th>
+                    <th style="padding:10px;">Exit</th>
                     <th style="padding:10px;">P&L (₹)</th>
                 </tr>
                 {% for t in parsed_trades %}
-                <tr style="border-bottom:1px solid #ddd;">
+                <tr style="border-bottom:1px solid #ddd; background: {% if t.status == 'Running' %}#fffde7{% else %}#fff{% endif %};">
                     <td style="padding:10px;">{{ t.time }}</td>
-                    <td style="padding:10px;"><b>{{ t.symbol }}</b></td>
-                    <td style="padding:10px;">{{ t.type }}</td>
-                    <td style="padding:10px;"><span class="badge">{{ t.result }}</span></td>
+                    <td style="padding:10px;">
+                        {% if user.user_type == 'DEMO' and t.status == 'Running' %}
+                            <b>NIFTY OPTIONS (Hidden)</b> 🔒
+                        {% else %}
+                            <b>{{ t.symbol }}</b> ({{ t.type }})
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">
+                        {% if t.status == 'Running' %}
+                            <span style="background:orange; color:white; padding: 4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">Running</span>
+                        {% else %}
+                            <span style="background:green; color:white; padding: 4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">Completed</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">
+                        {% if user.user_type == 'DEMO' and t.status == 'Running' %}
+                            ***
+                        {% else %}
+                            {{ t.entry_price }}
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">
+                        {% if t.status == 'Running' %} - {% else %} {{ t.exit_price }} {% endif %}
+                    </td>
                     <td style="padding:10px;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
-                        {% if t.pnl > 0 %}+{% endif %}{{ t.pnl }}
+                        {% if t.status == 'Running' %}
+                            -
+                        {% else %}
+                            {% if t.pnl > 0 %}+{% endif %}{{ "%.2f"|format(t.pnl) }}
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" style="padding:20px; text-align:center; color: #dc3545">Waiting for today's market
-                        signals...</td>
+                    <td colspan="6" style="padding:20px; text-align:center; color: #dc3545">Waiting for today's market signals...</td>
                 </tr>
                 {% endfor %}
             </table>
@@ -218,25 +233,31 @@
         <div class="settings-section">
             {% if user.user_type == 'REAL' %}
             <div class="card">
-                <h3>🔑 API Settings (Dhan)</h3>
+                <h3>🔑 API Settings (Connect Broker)</h3>
                 <div style="background: #e8f0fe; padding: 12px; border-left: 4px solid #1a73e8; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
-                    <p style="margin: 0 0 8px 0;"><b>💡 How to setup?</b> <a href="https://youtube.com/your-video-link-here" target="_blank" style="color: #dc3545; font-weight:bold; float:right; text-decoration: none;">📺 Watch Video</a></p>
-                    <ol style="margin: 0; padding-left: 20px; color: #444;">
-                        <li>Login to <a href="https://web.dhan.co/" target="_blank" style="color: #1a73e8; font-weight: bold;">web.dhan.co</a>.</li>
-                        <li>Go to <b>Orders ➔ Webhooks</b> section.</li>
-                        <li>Select <b>30 Days</b> validity and Generate Webhook.</li>
-                        <li>Copy the <b>URL</b> and <b>Secret Key</b> & paste them below.</li>
-                    </ol>
+                    <p style="margin: 0 0 8px 0;"><b>💡 How to setup?</b></p>
+                    <p style="margin: 0; color: #444;">Select your broker and paste your Webhook URL & Secret Key correctly.</p>
                 </div>
                 <form action="/save_api_settings" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <label>Webhook URL:</label>
-                    <input type="text" name="webhook_url" placeholder="Enter Dhan Webhook URL"
-                        value="{{ user.dhan_webhook_url or '' }}">
-                    <label>Secret Key:</label>
+                    
+                    <label style="font-weight:bold;">Select Broker:</label>
+                    <select name="broker_name" style="width: 95%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="Dhan" {% if broker_config and broker_config.broker_name == 'Dhan' %}selected{% endif %}>Dhan</option>
+                        <option value="Zerodha" {% if broker_config and broker_config.broker_name == 'Zerodha' %}selected{% endif %}>Zerodha</option>
+                        <option value="Upstox" {% if broker_config and broker_config.broker_name == 'Upstox' %}selected{% endif %}>Upstox</option>
+                        <option value="Other" {% if broker_config and broker_config.broker_name == 'Other' %}selected{% endif %}>Other / General Webhook</option>
+                    </select>
+
+                    <label style="font-weight:bold;">Webhook URL:</label>
+                    <input type="text" name="webhook_url" placeholder="Enter Broker Webhook URL"
+                        value="{{ broker_config.webhook_url if broker_config else (user.dhan_webhook_url or '') }}" required>
+                        
+                    <label style="font-weight:bold;">Secret Key / Token:</label>
                     <input type="password" name="secret_key" placeholder="Enter Secret Key"
-                        value="{{ '********' if user.encrypted_secret_key else '' }}">
-                    <button type="submit" class="btn-buy" style="width: 100%;">Save & Secure</button>
+                        value="{{ '********' if (broker_config and broker_config.encrypted_secret_key) or user.encrypted_secret_key else '' }}">
+                        
+                    <button type="submit" class="btn-buy" style="width: 100%; margin-top: 10px;">Save & Connect Broker</button>
                 </form>
             </div>
             {% else %}
