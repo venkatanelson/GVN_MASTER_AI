@@ -77,7 +77,12 @@
                     <td>{{ user.algo_status }}</td>
                     <td>
                         {% if not user.is_approved %}
-                            <a href="/approve-user/{{ user.id }}/1" class="btn btn-approve">Approve (1M)</a>
+                            <form action="/approve-user" method="POST" style="display:inline;">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <input type="hidden" name="plan" value="{{ user.selected_plan or 'Basic' }}">
+                                <input type="hidden" name="months" value="1">
+                                <button type="submit" class="btn btn-approve">Approve (1M)</button>
+                            </form>
                         {% else %}
                             <span style="color: green; font-weight: bold;">✅ Approved</span>
                         {% endif %}
