@@ -1,6 +1,7 @@
 import os
 import base64
 import requests
+import time
 import concurrent.futures
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
@@ -109,18 +110,31 @@ class User(db.Model):
     # Discounts
     personal_discount = db.Column(db.Integer, default=0)
 
-class TradeHistory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
-    signal_message = db.Column(db.String(500))
-    pnl = db.Column(db.Float, default=0.0) # 🌟 P&L రికార్డ్
-    status = db.Column(db.String(50), default="Processed")
-
 class DailyPnL(db.Model):
     __tablename__ = 'daily_pnl_tracker'
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, unique=True, nullable=False)
     pnl = db.Column(db.Float, default=0.0)
+
+class AlgoTrade(db.Model):
+    __tablename__ = 'algo_trades_v2'
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    symbol = db.Column(db.String(100))
+    quantity = db.Column(db.Integer)
+    trade_type = db.Column(db.String(20)) # BUY, SELL
+    status = db.Column(db.String(20)) # Running, Closed
+    entry_price = db.Column(db.Float)
+    exit_price = db.Column(db.Float, nullable=True)
+    pnl = db.Column(db.Float, default=0.0)
+
+class UserBrokerConfig(db.Model):
+    __tablename__ = 'user_broker_config'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, unique=True, nullable=False)
+    broker_name = db.Column(db.String(50), default="Dhan")
+    webhook_url = db.Column(db.String(300))
+    encrypted_secret_key = db.Column(db.LargeBinary)
 
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
@@ -166,7 +180,7 @@ def demo_register():
             demo_capital=capital,
             selected_plan='Demo Trial',
             is_approved=True,
-            expiry_date=datetime.now() + timedelta(days=7),
+            expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=7),
             algo_status='ON'
         )
         db.session.add(new_user)
@@ -258,38 +272,26 @@ def user_dashboard(user_id):
     
     # 🌟 Auto Delete old history (Keep only today's detailed history)
     start_of_today = datetime(today_date.year, today_date.month, today_date.day)
-    TradeHistory.query.filter(TradeHistory.timestamp < start_of_today).delete()
+    AlgoTrade.query.filter(AlgoTrade.timestamp < start_of_today).delete()
     db.session.commit()
     
-    # Parse today's trades for the live historical table dynamically (NO SCHEMA CHANGES!)
-    todays_trades = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).all()
+    # Parse today's trades for the live historical table dynamically
+    todays_trades = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).all()
     parsed_trades = []
-    import re
+    
     for t in todays_trades:
-        sm = str(t.signal_message).upper()
-        sym = re.split(r'BUY|SELL|TARGET|SL|STOPLOSS', sm)[0].strip() if sm else "ALGO"
-        
-        t_type = "SIGNAL"
-        if "BUY" in sm: t_type = "BUY"
-        elif "SELL" in sm: t_type = "SELL"
-        
-        res = "Running"
-        if "TARGET" in sm or "HIT" in sm: res = "Target Hit"
-        elif "SL" in sm or "STOPLOSS" in sm or "EXIT" in sm: res = "SL Hit"
-        
         parsed_trades.append({
             "time": t.timestamp.strftime('%H:%M:%S'),
-            "symbol": sym[:20],
-            "type": t_type,
-            "result": res,
-            "pnl": t.pnl
+            "symbol": t.symbol,
+            "type": t.trade_type,
+            "result": "Target Hit/Sold" if t.status == "Closed" and t.trade_type == "BUY" else ("Running" if t.status == "Running" else "Closed"),
+            "pnl": t.pnl,
+            "status": t.status,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
         })
         
-    # --- Calculate Dynamic Cumulative P&L ---
-    all_daily = DailyPnL.query.filter(DailyPnL.date >= (today_date - timedelta(days=30))).all()
-    date_to_pnl = {dp.date: dp.pnl for dp in all_daily}
-    
-    pnl_1d = sum(t.pnl for t in todays_trades)
+    pnl_1d = sum(t.pnl for t in todays_trades if t.status == 'Closed')
     
     # Sync today's Live P&L to database so it stays permanently
     today_record = DailyPnL.query.filter_by(date=today_date).first()
@@ -300,19 +302,25 @@ def user_dashboard(user_id):
     try: db.session.commit()
     except: db.session.rollback()
     
-    # Cumulative Sums (10, 20, 30 Days over all records)
-    pnl_10d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 10))
-    pnl_20d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 20))
-    pnl_30d = pnl_1d + sum(date_to_pnl.get(today_date - timedelta(days=i), 0.0) for i in range(1, 30))
+    # 6-Day P&L
+    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(6).all()
+    daily_history = []
+    for dp in all_daily:
+        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': dp.pnl})
+        
+    pnl_total_6d = sum(dp['pnl'] for dp in daily_history)
+    
+    # Fetch Broker Config
+    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     
     return render_template('user.html', 
                            user=user, 
+                           broker_config=broker_config,
                            remaining_days=max(0, remaining_days),
                            discount_percent=user.personal_discount + 10,
                            pnl_1d=pnl_1d,
-                           pnl_10d=pnl_10d,
-                           pnl_20d=pnl_20d,
-                           pnl_30d=pnl_30d,
+                           daily_history=daily_history,
+                           pnl_total_6d=pnl_total_6d,
                            parsed_trades=parsed_trades,
                            config=get_admin_config())
 
@@ -324,39 +332,71 @@ def user_dashboard(user_id):
 @app.route('/tv-webhook', methods=['POST'])
 def handle_tradingview_alert():
     alert_data = request.json # TradingView Message
-    signal_msg = alert_data.get("message", "TV Signal Received")
+    
+    symbol = alert_data.get("symbol", "UNKNOWN").strip()
+    txn_type = alert_data.get("transactionType", "BUY").upper()
     
     try:
-        pnl_value = float(alert_data.get("pnl", 0.0))
+        price = float(alert_data.get("price", 0.0))
     except (TypeError, ValueError):
-        pnl_value = 0.0
+        price = 0.0
+        
+    try:
+        qty = int(alert_data.get("quantity", 65))
+    except (TypeError, ValueError):
+        qty = 65
 
-    # 1. Record in History (Viewable by everyone)
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    new_trade = TradeHistory(signal_message=signal_msg, pnl=pnl_value, timestamp=today_dt)
-    db.session.add(new_trade)
     
-    daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
-    if not daily_record:
-        db.session.add(DailyPnL(date=today_dt.date(), pnl=pnl_value))
-    else:
-        daily_record.pnl = DailyPnL.pnl + pnl_value
+    # 1. P&L & Trade Match Logic
+    if txn_type == "BUY":
+        new_trade = AlgoTrade(symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+        db.session.add(new_trade)
+    elif txn_type == "SELL":
+        # Wait 2 seconds for price stability and as requested for "calculating" window
+        time.sleep(2)
+        
+        # Find active
+        active_trade = AlgoTrade.query.filter_by(symbol=symbol, status="Running", trade_type="BUY").order_by(AlgoTrade.id.desc()).first()
+        if active_trade:
+            active_trade.exit_price = price
+            active_trade.pnl = (price - active_trade.entry_price) * qty
+            active_trade.status = "Closed"
+            
+            # Sync daily instantly
+            daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
+            if not daily_record:
+                db.session.add(DailyPnL(date=today_dt.date(), pnl=active_trade.pnl))
+            else:
+                daily_record.pnl += active_trade.pnl
+        else:
+            # Sometime sell comes first, just log it
+            new_trade = AlgoTrade(symbol=symbol, quantity=qty, trade_type="SELL", entry_price=price, status="Closed", timestamp=today_dt)
+            db.session.add(new_trade)
+            
     db.session.commit()
     
-    # 2. Filter REAL Users
+    # 2. Filter REAL Users & Execute Forward
     real_active_users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON', admin_kill_switch=False).all()
     
     def execute_trade(u):
         with app.app_context():
             if u.expiry_date and u.expiry_date > datetime.now():
                 try:
-                    if not u.encrypted_secret_key or not u.dhan_webhook_url:
+                    broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                    webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
+                    enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                    
+                    if not enc_secret or not webhook_url:
                         return
                         
-                    secret_key = cipher.decrypt(u.encrypted_secret_key).decode()
-                    dhan_payload = {"secret": secret_key, "alert_msg": signal_msg}
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    alert_data_copy = alert_data.copy()
                     
-                    response = requests.post(u.dhan_webhook_url, json=dhan_payload, timeout=5)
+                    # Ensure secret is passed accurately
+                    alert_data_copy['secret'] = secret_key
+                    
+                    requests.post(webhook_url, json=alert_data_copy, timeout=5)
                 except Exception as e:
                     print(f"Trade Exception for {u.username}: {e}")
             else:
@@ -364,7 +404,6 @@ def handle_tradingview_alert():
                 expired_user.algo_status = 'OFF'
                 db.session.commit()
 
-    # 3. Use Multi-threading ONLY for Real Users (Demo users just see history)
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         executor.map(execute_trade, real_active_users)
             
@@ -376,13 +415,21 @@ def save_api_settings():
     if not user_id:
         return "Invalid User", 400
         
+    broker_name = request.form.get('broker_name', 'Dhan')
     webhook_url = request.form.get('webhook_url')
     secret_key = request.form.get('secret_key')
     
     user = User.query.get_or_404(user_id)
-    user.dhan_webhook_url = webhook_url
+    
+    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    if not broker_config:
+        broker_config = UserBrokerConfig(user_id=user_id)
+        db.session.add(broker_config)
+        
+    broker_config.broker_name = broker_name
+    broker_config.webhook_url = webhook_url
     if secret_key and secret_key != '********':
-        user.encrypted_secret_key = cipher.encrypt(secret_key.encode())
+        broker_config.encrypted_secret_key = cipher.encrypt(secret_key.encode())
     
     db.session.commit()
     return redirect(url_for('user_dashboard', user_id=user_id))
@@ -519,14 +566,14 @@ def toggle_kill_switch(user_id):
 
 @app.route('/history')
 def trade_history():
-    history = TradeHistory.query.order_by(TradeHistory.timestamp.desc()).limit(1000).all()
-    total_pnl = sum((t.pnl for t in history if t.pnl))
+    history = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).limit(1000).all()
+    total_pnl = sum((t.pnl for t in history if t.status == 'Closed'))
     return render_template('history.html', trades=history, total_pnl=total_pnl)
 
 @app.route('/clear-history')
 @requires_auth
 def clear_history():
-    db.session.query(TradeHistory).delete()
+    db.session.query(AlgoTrade).delete()
     db.session.commit()
     return redirect(url_for('trade_history'))
 
