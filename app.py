@@ -145,6 +145,10 @@ with app.app_context():
 
 @app.route('/')
 def index():
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            return redirect(url_for('user_dashboard', user_id=user.id))
     return redirect(url_for('demo_register'))
 
 @app.route('/demo-register', methods=['GET', 'POST'])
@@ -200,7 +204,8 @@ def demo_register():
             return "Email or Phone already exists!"
             
     config = get_admin_config()
-    return f"""
+    html_content = """
+
     <!DOCTYPE html>
     <html>
     <head><title>GVN Algo System</title><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -236,25 +241,56 @@ def demo_register():
     <!-- SUPPORT BLOCK -->
     <div style="margin-top: 40px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; display: inline-block; text-align: left;">
         <h3 style="margin-top: 0; color: #856404;">📞 Customer Support</h3>
-        <p style="margin: 5px 0;"><b>Technical Support:</b> <a href="tel:{config.support_number_1}" style="color: #1a73e8; font-weight: bold; text-decoration: none;">+91 {config.support_number_1}</a></p>
-        <p style="margin: 5px 0;"><b>Admin Contact:</b> <a href="tel:{config.support_number_2}" style="color: #1a73e8; font-weight: bold; text-decoration: none;">+91 {config.support_number_2}</a></p>
+        <p style="margin: 5px 0;"><b>Technical Support:</b> +91 {{SUPPORT1}}</p>
+        <p style="margin: 5px 0;"><b>Admin Contact:</b> +91 {{SUPPORT2}}</p>
         <p style="font-size: 13px; color: #666; margin-bottom: 0;">(Please contact us if you need help logging in or upgrading)</p>
     </div>
+
+    <script>
+        // Use localStorage to remember the phone number for easier login
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginInput = document.querySelector('input[name="login_phone"]');
+            const savedPhone = localStorage.getItem('last_algo_phone');
+            if (savedPhone && loginInput) {
+                loginInput.value = savedPhone;
+            }
+        });
+
+        // Save phone on SUBMIT of any form
+        document.querySelectorAll('form').forEach(f => {
+            f.addEventListener('submit', function() {
+                const phoneInput = f.querySelector('input[name="phone"]') || f.querySelector('input[name="login_phone"]');
+                if (phoneInput && phoneInput.value) {
+                    localStorage.setItem('last_algo_phone', phoneInput.value.trim());
+                }
+            });
+        });
+    </script>
     
     </body>
     </html>
     """
+    return html_content.replace("{{SUPPORT1}}", str(config.support_number_1)).replace("{{SUPPORT2}}", str(config.support_number_2))
+
+
 
 @app.route('/login', methods=['POST'])
 def simple_login():
-    phone = request.form.get('login_phone', '').strip()
-    # Find user by exactly matching the phone
-    user = User.query.filter_by(phone=phone).first()
+    identifier = request.form.get('login_phone', '').strip().lower()
+    
+    # 🔍 Search by Phone OR Email (more forgiving)
+    user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
+    
     if user:
         session.permanent = True
         session['user_id'] = user.id
         return redirect(url_for('user_dashboard', user_id=user.id))
-    return "<h3 style='color:red; text-align:center; font-family:sans-serif; margin-top:50px;'>Phone number not found! Please register as a New User first. <br><br><a href='/'>Go back</a></h3>"
+    return f"""
+    <div style='text-align:center; font-family:sans-serif; margin-top:100px; padding:20px; border:1px solid #ddd; background:#fff;'>
+        <h3 style='color:red;'>Phone/Email not found ({identifier})!</h3>
+        <p>Please register as a New User first OR check if your database on Render is connected correctly.</p>
+        <a href='/' style='background:#1a73e8; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;'>Go back to Registration</a>
+    </div>"""
 
 @app.route('/plans')
 def subscription_plans():
