@@ -38,7 +38,7 @@ class AdminConfig(db.Model):
     __tablename__ = 'admin_system_config'
     id = db.Column(db.Integer, primary_key=True)
     admin_user = db.Column(db.String(50), default='admin')
-    admin_pass = db.Column(db.String(50), default='admin123')
+    admin_pass = db.Column(db.String(50), default='Kalavathi@12')
     admin_phone = db.Column(db.String(15), default='9966123078')
     support_number_1 = db.Column(db.String(15), default='9381490610')
     support_number_2 = db.Column(db.String(15), default='9966123078')
@@ -55,7 +55,7 @@ def get_admin_config():
 
 def check_auth(username, password):
     config = AdminConfig.query.first()
-    if not config: return username == 'admin' and password == 'admin123'
+    if not config: return username == 'admin' and password == 'Kalavathi@12'
     return username == config.admin_user and password == config.admin_pass
 
 def authenticate():
