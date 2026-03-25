@@ -23,6 +23,8 @@ if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True, "pool_recycle": 280}
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Encryption Key
@@ -307,9 +309,13 @@ def user_dashboard(user_id):
     remaining_days = (user.expiry_date - now).days if user.expiry_date else 0
     
     # 🌟 Auto Delete old history (Keep only today's detailed history)
-    start_of_today = datetime(today_date.year, today_date.month, today_date.day)
-    AlgoTrade.query.filter(AlgoTrade.timestamp < start_of_today).delete()
-    db.session.commit()
+    try:
+        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
+        AlgoTrade.query.filter(AlgoTrade.timestamp < start_of_today).delete()
+        db.session.commit()
+    except Exception as e:
+        print(f"Cleanup Error: {e}")
+        db.session.rollback()
     
     # Parse today's trades for the live historical table dynamically
     todays_trades = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).all()
@@ -368,8 +374,11 @@ def user_dashboard(user_id):
 @app.route('/tv-webhook', methods=['POST'])
 def handle_tradingview_alert():
     alert_data = request.json # TradingView Message
+    print(f"WEBHOOK RECEIVED: {alert_data}")
     
     symbol = alert_data.get("symbol", "UNKNOWN").strip()
+    if "{{" in symbol:
+        print(f"WARNING: Symbol '{symbol}' contains TradingView placeholders. Price/PnL will be 0.0.")
     txn_type = alert_data.get("transactionType", "BUY").upper()
     
     try:
@@ -417,7 +426,8 @@ def handle_tradingview_alert():
     
     def execute_trade(u):
         with app.app_context():
-            if u.expiry_date and u.expiry_date > datetime.now():
+            ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+            if u.expiry_date and u.expiry_date > ist_now:
                 try:
                     broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
                     webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
