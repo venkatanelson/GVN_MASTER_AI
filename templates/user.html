@@ -124,6 +124,17 @@
 <body>
 
     <div class="container">
+        <!-- FLASH MESSAGES -->
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #1a73e8; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); color: #333; font-weight: bold;">
+                🔔 {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
         <div class="header">
             <div>
                 {% if user.user_type == 'DEMO' %}
@@ -137,9 +148,11 @@
             </div>
             <div>
                 <p style="text-align: right;">Algo Status</p>
-                <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}">
-                    {{ user.algo_status }}
-                </button>
+                <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
+                    <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}">
+                        {{ '🟢 ' + user.algo_status + ' (Click to Pause)' if user.algo_status == "ON" else '🔴 ' + user.algo_status + ' (Click to Start)' }}
+                    </button>
+                </a>
             </div>
         </div>
 
