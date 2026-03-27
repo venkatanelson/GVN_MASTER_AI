@@ -14,6 +14,7 @@ app = Flask(__name__)
 
 # Basic app config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31) # 🌟 NEW: Auto-login lasts 1 month
 
 # 🌟 NEW: Neon PostgreSQL Database URL
 # If DATABASE_URL is in the environment (e.g., Render/Neon), use Postgres. Otherwise, use local SQLite.
@@ -32,6 +33,28 @@ static_32_byte_string = b'gvn_secure_key_for_encryption_26'
 fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
 cipher = Fernet(ENCRYPTION_KEY)
+
+# ---------------------------------------------------------
+# TELEGRAM BOT CONFIG
+# ---------------------------------------------------------
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+
+def send_telegram_msg(message):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("TELEGRAM ERROR: Bot Token or Chat ID not found!")
+        return
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"TELEGRAM SEND ERROR: {e}")
 
 # ---------------------------------------------------------
 # DYNAMIC ADMIN CONFIG & AUTHENTICATION
@@ -119,8 +142,9 @@ class DailyPnL(db.Model):
     pnl = db.Column(db.Float, default=0.0)
 
 class AlgoTrade(db.Model):
-    __tablename__ = 'algo_trades_v2'
+    __tablename__ = 'algo_trades_v3'
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # 🌟 NEW: Link to User
     timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
     symbol = db.Column(db.String(100))
     quantity = db.Column(db.Integer)
@@ -155,6 +179,12 @@ def index():
 
 @app.route('/demo-register', methods=['GET', 'POST'])
 def demo_register():
+    # 🌟 NEW: Auto-login check (User doesn't need to register again)
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            return redirect(url_for('user_dashboard', user_id=user.id))
+
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         phone = request.form.get('phone', '').strip()
@@ -298,6 +328,30 @@ def simple_login():
 def subscription_plans():
     return render_template('plans.html')
 
+@app.route('/toggle-algo/<int:user_id>')
+def toggle_algo(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.algo_status == 'ON':
+        user.algo_status = 'OFF'
+        # 🌟 NEW: Auto-close all running trades for this user when they turn it OFF
+        active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
+        for t in active_trades:
+            t.status = 'Closed'
+            t.exit_price = t.entry_price # Simple close at entry as fallback
+        db.session.commit()
+        flash("Algo Stopped and Positions Closed.")
+    else:
+        # Check expiry before turning ON
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        if user.expiry_date and user.expiry_date < now:
+            flash("Subscription Expired! Please renew to start Algo.")
+        else:
+            user.algo_status = 'ON'
+            db.session.commit()
+            flash("Algo Started Successfully!")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
 # 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
@@ -318,7 +372,7 @@ def user_dashboard(user_id):
         db.session.rollback()
     
     # Parse today's trades for the live historical table dynamically
-    todays_trades = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).all()
+    todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
     parsed_trades = []
     
     for t in todays_trades:
@@ -371,89 +425,76 @@ def user_dashboard(user_id):
 # TRADING LOGIC (The Mechanism)
 # ---------------------------------------------------------
 
-@app.route('/tv-webhook', methods=['POST'])
-def handle_tradingview_alert():
-    alert_data = request.json # TradingView Message
-    print(f"WEBHOOK RECEIVED: {alert_data}")
-    
-    symbol = alert_data.get("symbol", "UNKNOWN").strip()
-    if "{{" in symbol:
-        print(f"WARNING: Symbol '{symbol}' contains TradingView placeholders. Price/PnL will be 0.0.")
-    txn_type = alert_data.get("transactionType", "BUY").upper()
-    
-    try:
-        price = float(alert_data.get("price", 0.0))
-    except (TypeError, ValueError):
-        price = 0.0
-        
-    try:
-        qty = int(alert_data.get("quantity", 65))
-    except (TypeError, ValueError):
-        qty = 65
-
+    # 2. Sync for ALL Users based on their status
+    all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
-    # 1. P&L & Trade Match Logic
-    if txn_type == "BUY":
-        new_trade = AlgoTrade(symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
-        db.session.add(new_trade)
-    elif txn_type == "SELL":
-        # Wait 2 seconds for price stability and as requested for "calculating" window
-        time.sleep(2)
+    for u in all_users:
+        # 🌟 Check Expiry & Update Status
+        if u.expiry_date and u.expiry_date < today_dt:
+            if u.algo_status == 'ON':
+                u.algo_status = 'OFF'
+                # Close trades on expiry
+                expired_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
+                for et in expired_trades:
+                    et.status = 'Closed'
+                    et.exit_price = et.entry_price
+                db.session.commit()
+            continue
+
+        if u.algo_status == 'OFF' or u.admin_kill_switch:
+            continue
+
+        # Handle demo/real trade tracking per user
+        if txn_type == "BUY":
+            # Avoid duplications if already running
+            existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
+            if not existing:
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+                db.session.add(new_trade)
         
-        # Find active
-        active_trade = AlgoTrade.query.filter_by(symbol=symbol, status="Running", trade_type="BUY").order_by(AlgoTrade.id.desc()).first()
-        if active_trade:
-            active_trade.exit_price = price
-            active_trade.pnl = (price - active_trade.entry_price) * qty
-            active_trade.status = "Closed"
-            
-            # Sync daily instantly
-            daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
-            if not daily_record:
-                db.session.add(DailyPnL(date=today_dt.date(), pnl=active_trade.pnl))
-            else:
-                daily_record.pnl += active_trade.pnl
-        else:
-            # Sometime sell comes first, just log it
-            new_trade = AlgoTrade(symbol=symbol, quantity=qty, trade_type="SELL", entry_price=price, status="Closed", timestamp=today_dt)
-            db.session.add(new_trade)
-            
-    db.session.commit()
-    
-    # 2. Filter REAL Users & Execute Forward
-    real_active_users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON', admin_kill_switch=False).all()
-    
-    def execute_trade(u):
-        with app.app_context():
-            ist_now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-            if u.expiry_date and u.expiry_date > ist_now:
-                try:
-                    broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
-                    webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
-                    enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
-                    
-                    if not enc_secret or not webhook_url:
-                        return
-                        
+        elif txn_type == "SELL":
+            active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
+            for at in active_trades:
+                exit_val = price if price > 0.0 else at.entry_price
+                at.exit_price = exit_val
+                at.pnl = (exit_val - at.entry_price) * at.quantity
+                at.status = "Closed"
+                
+                # Update Daily P&L Tracker for this user if needed (can be global/per-user)
+                # For now, let's keep DailyPnL as a global metric for the system's performance
+                daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
+                if not daily_record:
+                    db.session.add(DailyPnL(date=today_dt.date(), pnl=at.pnl))
+                else:
+                    daily_record.pnl += at.pnl
+
+        # 3. For REAL users, also forward to Broker
+        if u.user_type == 'REAL' and u.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                
+                if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
                     alert_data_copy = alert_data.copy()
-                    
-                    # Ensure secret is passed accurately
                     alert_data_copy['secret'] = secret_key
-                    
                     requests.post(webhook_url, json=alert_data_copy, timeout=5)
-                except Exception as e:
-                    print(f"Trade Exception for {u.username}: {e}")
-            else:
-                expired_user = User.query.get(u.id)
-                expired_user.algo_status = 'OFF'
-                db.session.commit()
+            except Exception as e:
+                print(f"Forwarding error for {u.username}: {e}")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        executor.map(execute_trade, real_active_users)
-            
-    return jsonify({"status": "Signals Processed & Saved", "real_trades_fired": len(real_active_users)}), 200
+    db.session.commit()
+
+    # 4. Telegram Alert (One summary message)
+    if txn_type == "BUY":
+        tg_msg = f"📈 *ACTIVE BUY SIGNAL*\n---------------------\n🔹 *Symbol*: {symbol}\n🔹 *Price*: {price}\n---------------------\n⚡ _GVN Algo Execution Processed_"
+        send_telegram_msg(tg_msg)
+    else:
+        tg_msg = f"📉 *EXIT SIGNAL*\n---------------------\n🔹 *Symbol*: {symbol}\n🔹 *Exit Price*: {price}\n---------------------\n⚡ _GVN Algo Position Closed_"
+        send_telegram_msg(tg_msg)
+
+    return jsonify({"status": "Signals Processed", "symbol": symbol}), 200
 
 @app.route('/save_api_settings', methods=['POST'])
 def save_api_settings():
@@ -612,7 +653,11 @@ def toggle_kill_switch(user_id):
 
 @app.route('/history')
 def trade_history():
-    history = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).limit(1000).all()
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('demo_register'))
+    
+    history = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(1000).all()
     total_pnl = sum((t.pnl for t in history if t.status == 'Closed'))
     return render_template('history.html', trades=history, total_pnl=total_pnl)
 
