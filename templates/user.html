@@ -135,24 +135,32 @@
           {% endif %}
         {% endwith %}
 
-        <div class="header">
+        <div class="header" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #00c853; background: #f0fff4;{% else %}border-top: 5px solid #1a73e8;{% endif %}">
             <div>
                 {% if user.user_type == 'DEMO' %}
-                <span class="demo-badge">DEMO ACCOUNT</span>
+                <span class="demo-badge">DEMO ACCOUNT (Testing)</span>
+                {% else %}
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+                    <span class="demo-badge" style="background: #00c853;">LIVE REAL ACCOUNT</span>
+                    {% if broker_config %}
+                    <span style="color: #00c853; font-weight: bold; font-size: 13px;">● Dhan Broker Connected ✅</span>
+                    {% endif %}
+                </div>
                 {% endif %}
-                <h1>Welcome, {{ user.username }}</h1>
-                <p>Email: {{ user.email }} | <b>Subscription: {{ remaining_days }} Days Left</b></p>
+                <h1 style="margin: 5px 0;">Welcome, {{ user.username }}</h1>
+                <p style="margin: 0; color: #555;">Email: {{ user.email }} | <b>Subscription: {{ remaining_days }} Days Left</b></p>
                 {% if user.user_type == 'DEMO' %}
-                <p><b>Your Virtual Capital:</b> ₹ {{ user.demo_capital }}</p>
+                <p style="margin: 5px 0;"><b>Your Virtual Capital:</b> ₹ {{ user.demo_capital }}</p>
                 {% endif %}
             </div>
-            <div>
-                <p style="text-align: right;">Algo Status</p>
+            <div style="text-align: right;">
+                <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: bold; color: #333;">Master Algo Force Control</p>
                 <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
-                    <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}">
+                    <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}" style="box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%;">
                         {{ '🟢 ' + user.algo_status + ' (Click to Pause)' if user.algo_status == "ON" else '🔴 ' + user.algo_status + ' (Click to Start)' }}
                     </button>
                 </a>
+                <p style="margin: 5px 0 0 0; font-size: 11px; color: #666;">(Stops execution & Closes positions)</p>
             </div>
         </div>
 
