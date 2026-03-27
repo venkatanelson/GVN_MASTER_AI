@@ -199,6 +199,7 @@
                     <th style="padding:10px;">Entry</th>
                     <th style="padding:10px;">Exit</th>
                     <th style="padding:10px;">P&L (₹)</th>
+                    <th style="padding:10px;">Action</th>
                 </tr>
                 {% for t in parsed_trades %}
                 <tr style="border-bottom:1px solid #ddd; background: {% if t.status == 'Running' %}#fffde7{% else %}#fff{% endif %};">
@@ -232,6 +233,13 @@
                             -
                         {% else %}
                             {% if t.pnl > 0 %}+{% endif %}{{ "%.2f"|format(t.pnl) }}
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">
+                        {% if t.status == 'Running' %}
+                            <a href="/force-close-trade/{{ t.id }}" class="status-btn off" style="padding: 4px 8px; font-size:11px; text-decoration:none;">Force Close 🔴</a>
+                        {% else %}
+                            -
                         {% endif %}
                     </td>
                 </tr>
