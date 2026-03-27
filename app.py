@@ -352,6 +352,47 @@ def toggle_algo(user_id):
     
     return redirect(url_for('user_dashboard', user_id=user_id))
 
+@app.route('/force-close-trade/<int:trade_id>')
+def force_close_trade(trade_id):
+    trade = AlgoTrade.query.get_or_404(trade_id)
+    user_id = session.get('user_id')
+    if not user_id or trade.user_id != user_id:
+        return "Unauthorized", 403
+    
+    if trade.status == 'Running':
+        trade.status = 'Closed'
+        trade.exit_price = trade.entry_price # Marking as break-even on manual close or close at last known
+        trade.pnl = 0.0 # Or calculate based on dummy price if available
+        
+        # 🌟 Forward SELL to Broker if REAL
+        user = User.query.get(user_id)
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    # Craft a manual SELL alert for the broker
+                    manual_alert = {
+                        "secret": secret_key,
+                        "symbol": trade.symbol,
+                        "quantity": trade.quantity,
+                        "transactionType": "SELL",
+                        "orderType": "MARKET",
+                        "productType": "MARGIN",
+                        "message": "Manual Force Close from Dashboard"
+                    }
+                    requests.post(webhook_url, json=manual_alert, timeout=5)
+            except Exception as e:
+                print(f"Force Close Error: {e}")
+        
+        db.session.commit()
+        flash(f"Trade for {trade.symbol} Force Closed Successfully.")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
 # 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
