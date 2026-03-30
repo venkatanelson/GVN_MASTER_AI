@@ -466,6 +466,22 @@ def user_dashboard(user_id):
 # TRADING LOGIC (The Mechanism)
 # ---------------------------------------------------------
 
+@app.route('/tv-webhook', methods=['POST'])
+def tv_webhook():
+    alert_data = request.json
+    if not alert_data:
+        return jsonify({"status": "error", "message": "No data"}), 400
+
+    # 1. Parse Alert Fields
+    symbol = alert_data.get('symbol', 'UNKNOWN')
+    txn_type = str(alert_data.get('transactionType', 'BUY')).upper()
+    try:
+        price = float(alert_data.get('price', 0.0))
+        qty = int(alert_data.get('quantity', 1))
+    except (ValueError, TypeError):
+        price = 0.0
+        qty = 1
+
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
