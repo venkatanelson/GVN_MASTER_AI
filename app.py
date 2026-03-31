@@ -177,6 +177,11 @@ def index():
             return redirect(url_for('user_dashboard', user_id=user.id))
     return render_template('index.html', config=get_admin_config())
 
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('index'))
+
 @app.route('/demo-register', methods=['POST'])
 def demo_register():
     # 🌟 Auto-login check
