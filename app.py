@@ -175,135 +175,65 @@ def index():
         user = User.query.get(session['user_id'])
         if user:
             return redirect(url_for('user_dashboard', user_id=user.id))
-    return redirect(url_for('demo_register'))
+    return render_template('index.html', config=get_admin_config())
 
-@app.route('/demo-register', methods=['GET', 'POST'])
+@app.route('/demo-register', methods=['POST'])
 def demo_register():
-    # 🌟 NEW: Auto-login check (User doesn't need to register again)
+    # 🌟 Auto-login check
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
             return redirect(url_for('user_dashboard', user_id=user.id))
 
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        phone = request.form.get('phone', '').strip()
-        email = request.form.get('email', '').strip().lower()
-        try:
-            capital = int(request.form.get('demo_capital', 50000))
-        except ValueError:
-            capital = 50000
+    username = request.form.get('username', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip().lower()
+    try:
+        capital = int(request.form.get('demo_capital', 50000))
+    except ValueError:
+        capital = 50000
+    
+    # Robust existing user check
+    existing = User.query.filter(
+        db.or_(db.func.lower(User.email) == email, User.phone == phone)
+    ).first()
+    
+    if existing:
+        session.permanent = True
+        session['user_id'] = existing.id
+        return redirect(url_for('user_dashboard', user_id=existing.id))
         
-        # Robust existing user check
-        existing = User.query.filter(
-            db.or_(db.func.lower(User.email) == email, User.phone == phone)
-        ).first()
-        
-        if existing:
+    # Protect capital limits (50k to 1 Lakh)
+    if capital < 50000: capital = 50000
+    if capital > 100000: capital = 100000
+    
+    new_user = User(
+        username=username,
+        phone=phone,
+        email=email,
+        user_type='DEMO',
+        demo_capital=capital,
+        selected_plan='Demo Trial',
+        is_approved=True,
+        expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=7),
+        algo_status='ON'
+    )
+    db.session.add(new_user)
+    try:
+        db.session.commit()
+        session.permanent = True
+        session['user_id'] = new_user.id
+        return redirect(url_for('user_dashboard', user_id=new_user.id))
+    except Exception as e:
+        db.session.rollback()
+        # If database raised unique constraint error despite our prior check
+        fallback = User.query.filter((User.email.ilike(email)) | (User.phone == phone)).first()
+        if fallback:
             session.permanent = True
-            session['user_id'] = existing.id
-            return redirect(url_for('user_dashboard', user_id=existing.id))
-            
-        # Protect capital limits (50k to 1 Lakh)
-        if capital < 50000: capital = 50000
-        if capital > 100000: capital = 100000
-        
-        new_user = User(
-            username=username,
-            phone=phone,
-            email=email,
-            user_type='DEMO',
-            demo_capital=capital,
-            selected_plan='Demo Trial',
-            is_approved=True,
-            expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=7),
-            algo_status='ON'
-        )
-        db.session.add(new_user)
-        try:
-            db.session.commit()
-            session.permanent = True
-            session['user_id'] = new_user.id
-            return redirect(url_for('user_dashboard', user_id=new_user.id))
-        except Exception as e:
-            db.session.rollback()
-            # If database raised unique constraint error despite our prior check (e.g., casing issues previously saved)
-            fallback = User.query.filter((User.email.ilike(email)) | (User.phone == phone)).first()
-            if fallback:
-                session.permanent = True
-                session['user_id'] = fallback.id
-                return redirect(url_for('user_dashboard', user_id=fallback.id))
-            return "Email or Phone already exists!"
-            
-    config = get_admin_config()
-    html_content = """
-
-    <!DOCTYPE html>
-    <html>
-    <head><title>GVN Algo System</title><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-    <body style="font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; text-align: center;">
-    
-    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 20px;">
-        
-        <!-- EXISTING USER LOGIN -->
-        <div style="background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; border-top: 5px solid #1a73e8; text-align: left;">
-            <h2 style="color: #1a73e8; margin-top: 0;">🔐 Existing Customer Login</h2>
-            <p style="color: #666; font-size: 14px;">If you already have an account, just enter your phone number below to access your dashboard.</p>
-            <form action="/login" method="POST">
-                <label style="font-weight: bold;">Registered Phone Number:</label><br>
-                <input type="text" name="login_phone" placeholder="Enter Phone Number" required style="width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
-                <button type="submit" style="padding: 12px 20px; background: #1a73e8; color: white; border: none; border-radius: 5px; width: 100%; font-weight: bold; cursor: pointer;">Login to Dashboard</button>
-            </form>
-        </div>
-
-        <!-- NEW USER REGISTRATION -->
-        <div style="background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 320px; border-top: 5px solid #28a745; text-align: left;">
-            <h2 style="color: #28a745; margin-top: 0;">🚀 New Demo Registration</h2>
-            <form method="POST">
-                <input type="text" name="username" placeholder="Full Name" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
-                <input type="text" name="phone" placeholder="Phone Number" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
-                <input type="email" name="email" placeholder="Email Address" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
-                <label style="font-size: 14px; font-weight: bold;">Demo Capital (₹50k - ₹1Lakh):</label><br>
-                <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required style="width: 90%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px;"><br>
-                <button type="submit" style="padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 5px; width: 100%; font-weight: bold; margin-top: 10px; cursor: pointer;">Start Demo Trading</button>
-            </form>
-        </div>
-    </div>
-    
-    <!-- SUPPORT BLOCK -->
-    <div style="margin-top: 40px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; display: inline-block; text-align: left;">
-        <h3 style="margin-top: 0; color: #856404;">📞 Customer Support</h3>
-        <p style="margin: 5px 0;"><b>Technical Support:</b> +91 {{SUPPORT1}}</p>
-        <p style="margin: 5px 0;"><b>Admin Contact:</b> +91 {{SUPPORT2}}</p>
-        <p style="font-size: 13px; color: #666; margin-bottom: 0;">(Please contact us if you need help logging in or upgrading)</p>
-    </div>
-
-    <script>
-        // Use localStorage to remember the phone number for easier login
-        document.addEventListener('DOMContentLoaded', function() {
-            const loginInput = document.querySelector('input[name="login_phone"]');
-            const savedPhone = localStorage.getItem('last_algo_phone');
-            if (savedPhone && loginInput) {
-                loginInput.value = savedPhone;
-            }
-        });
-
-        // Save phone on SUBMIT of any form
-        document.querySelectorAll('form').forEach(f => {
-            f.addEventListener('submit', function() {
-                const phoneInput = f.querySelector('input[name="phone"]') || f.querySelector('input[name="login_phone"]');
-                if (phoneInput && phoneInput.value) {
-                    localStorage.setItem('last_algo_phone', phoneInput.value.trim());
-                }
-            });
-        });
-    </script>
-    
-    </body>
-    </html>
-    """
-    return html_content.replace("{{SUPPORT1}}", str(config.support_number_1)).replace("{{SUPPORT2}}", str(config.support_number_2))
-
+            session['user_id'] = fallback.id
+            return redirect(url_for('user_dashboard', user_id=fallback.id))
+        flash("Registration Failed: Email or Phone might already exist!")
+        return redirect(url_for('index'))
 
 
 @app.route('/login', methods=['POST'])
