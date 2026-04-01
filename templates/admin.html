@@ -112,6 +112,7 @@
                     <th>Email ID</th>
                     <th>Virtual Capital</th>
                     <th>Expiry Date</th>
+                    <th>Algo Status</th>
                     <th>Contact Action</th>
                 </tr>
             </thead>
@@ -122,6 +123,7 @@
                     <td>{{ user.email }}</td>
                     <td>₹ {{ user.demo_capital }}</td>
                     <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
+                    <td>{{ user.algo_status }}</td>
                     <td>
                         <form action="/approve-user" method="POST" style="display:inline-block; margin-bottom:5px;">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
@@ -137,6 +139,10 @@
                             </select>
                             <button type="submit" class="btn btn-approve" style="padding: 4px 8px; font-size:12px;">Approve as Real</button>
                         </form>
+                        <br>
+                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 4px 8px; font-size:12px; margin-bottom:5px;">
+                            {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE ALGO' }}
+                        </a>
                         <br>
                         <a href="tel:{{ user.phone }}" class="btn btn-call" style="padding: 4px 8px; font-size:12px;">📞 Call</a>
                         <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 4px 8px; font-size:12px; margin-left: 5px;" onclick="return confirm('Delete this Demo user?');">🗑️ Delete</a>
