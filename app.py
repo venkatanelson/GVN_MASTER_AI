@@ -39,8 +39,8 @@ cipher = Fernet(ENCRYPTION_KEY)
 # ---------------------------------------------------------
 # TELEGRAM BOT CONFIG
 # ---------------------------------------------------------
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '1008887074')
 
 def send_telegram_msg(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -51,7 +51,7 @@ def send_telegram_msg(message):
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     try:
         requests.post(url, json=payload, timeout=5)
@@ -405,9 +405,20 @@ def user_dashboard(user_id):
 
 @app.route('/tv-webhook', methods=['POST'])
 def tv_webhook():
+    import json
     alert_data = request.json
     if not alert_data:
-        return jsonify({"status": "error", "message": "No data"}), 400
+        # Fallback to parse it manually if it contains dirty text from TradingView (like {{alert_message}})
+        raw_text = request.get_data(as_text=True)
+        if raw_text and "{" in raw_text and "}" in raw_text:
+            try:
+                # Extract string between first '{' and last '}'
+                json_str = raw_text[raw_text.find('{'):raw_text.rfind('}')+1]
+                alert_data = json.loads(json_str)
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Invalid JSON format: {str(e)}"}), 400
+        else:
+            return jsonify({"status": "error", "message": "No data or not JSON Format"}), 400
 
     # 1. Parse Alert Fields
     symbol = alert_data.get('symbol', 'UNKNOWN')
@@ -482,10 +493,10 @@ def tv_webhook():
 
     # 4. Telegram Alert (One summary message)
     if txn_type == "BUY":
-        tg_msg = f"📈 *ACTIVE BUY SIGNAL*\n---------------------\n🔹 *Symbol*: {symbol}\n🔹 *Price*: {price}\n---------------------\n⚡ _GVN Algo Execution Processed_"
+        tg_msg = f"📈 <b>ACTIVE BUY SIGNAL</b>\n---------------------\n🔹 <b>Symbol</b>: {symbol}\n🔹 <b>Price</b>: {price}\n---------------------\n⚡ <i>GVN Algo Execution Processed</i>"
         send_telegram_msg(tg_msg)
     else:
-        tg_msg = f"📉 *EXIT SIGNAL*\n---------------------\n🔹 *Symbol*: {symbol}\n🔹 *Exit Price*: {price}\n---------------------\n⚡ _GVN Algo Position Closed_"
+        tg_msg = f"📉 <b>EXIT SIGNAL</b>\n---------------------\n🔹 <b>Symbol</b>: {symbol}\n🔹 <b>Exit Price</b>: {price}\n---------------------\n⚡ <i>GVN Algo Position Closed</i>"
         send_telegram_msg(tg_msg)
 
     return jsonify({"status": "Signals Processed", "symbol": symbol}), 200
