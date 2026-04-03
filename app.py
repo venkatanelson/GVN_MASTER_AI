@@ -674,6 +674,53 @@ def clear_history():
     db.session.commit()
     return redirect(url_for('trade_history'))
 
+import threading
+import time
+
+def auto_square_off_task():
+    while True:
+        try:
+            now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+            if now.hour == 15 and 28 <= now.minute <= 29:
+                with app.app_context():
+                    running_trades = AlgoTrade.query.filter_by(status='Running').all()
+                    if running_trades:
+                        for trade in running_trades:
+                            trade.status = 'Closed'
+                            trade.exit_price = trade.entry_price
+                            trade.pnl = 0.0 # Force closed EOD
+                            
+                            user = User.query.get(trade.user_id)
+                            if user and user.user_type == 'REAL' and user.is_approved:
+                                try:
+                                    broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+                                    webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                                    enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                                    if enc_secret and webhook_url:
+                                        secret_key = cipher.decrypt(enc_secret).decode()
+                                        manual_alert = {
+                                            "secret": secret_key,
+                                            "symbol": trade.symbol,
+                                            "quantity": trade.quantity,
+                                            "transactionType": "SELL",
+                                            "orderType": "MARKET",
+                                            "productType": "MARGIN",
+                                            "message": "Auto Square-Off at 3:28 PM"
+                                        }
+                                        requests.post(webhook_url, json=manual_alert, timeout=5)
+                                except Exception as e:
+                                    pass
+                        db.session.commit()
+                        send_telegram_msg("⏰ <b>AUTO SQUARE-OFF</b>\nAll open positions forcefully closed at 15:28 IST to manage overnight gap risk.")
+        except Exception as e:
+            print(f"Auto Square-Off Error: {e}")
+        
+        # Sleep 60 seconds
+        time.sleep(60)
+
+# Start background thread
+threading.Thread(target=auto_square_off_task, daemon=True).start()
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
