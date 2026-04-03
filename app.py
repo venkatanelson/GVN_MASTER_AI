@@ -355,6 +355,7 @@ def user_dashboard(user_id):
     
     for t in todays_trades:
         parsed_trades.append({
+            "id": t.id,
             "time": t.timestamp.strftime('%H:%M:%S'),
             "symbol": t.symbol,
             "type": t.trade_type,
