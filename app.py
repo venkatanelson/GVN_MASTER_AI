@@ -289,6 +289,15 @@ def toggle_algo(user_id):
     
     return redirect(url_for('user_dashboard', user_id=user_id))
 
+@app.route('/renew-demo/<int:user_id>')
+def renew_demo(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.user_type == 'DEMO':
+        user.expiry_date = datetime.utcnow() + timedelta(hours=5, minutes=30, days=6)
+        db.session.commit()
+        flash("Demo Plan Renewed Successfully for another 6 Days!")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
 @app.route('/force-close-trade/<int:trade_id>')
 def force_close_trade(trade_id):
     trade = AlgoTrade.query.get_or_404(trade_id)
@@ -486,7 +495,8 @@ def tv_webhook():
                     secret_key = cipher.decrypt(enc_secret).decode()
                     alert_data_copy = alert_data.copy()
                     alert_data_copy['secret'] = secret_key
-                    requests.post(webhook_url, json=alert_data_copy, timeout=5)
+                    # Send request in background thread to avoid execution delay (Slippage)
+                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': alert_data_copy, 'timeout': 5}).start()
             except Exception as e:
                 print(f"Forwarding error for {u.username}: {e}")
 
