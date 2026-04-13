@@ -37,7 +37,10 @@
             </div>
             <div>
                 <label><b>Admin Password:</b></label><br>
-                <input type="text" name="admin_pass" value="{{ config.admin_pass }}" style="width: 90%; padding: 8px;" required>
+                <div style="position: relative; width: 90%;">
+                    <input type="password" id="admin_pass" name="admin_pass" value="{{ config.admin_pass }}" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
+                    <span onclick="togglePass()" style="position: absolute; right: 8px; top: 8px; cursor: pointer;" title="Show/Hide Password">👁️</span>
+                </div>
             </div>
             <div>
                 <label><b>Tech Support No (User Dashboard):</b></label><br>
@@ -155,5 +158,15 @@
 
 </div>
 
+<script>
+function togglePass() {
+    var x = document.getElementById("admin_pass");
+    if (x.type === "password") {
+        x.type = "text";
+    } else {
+        x.type = "password";
+    }
+}
+</script>
 </body>
 </html>
