@@ -495,13 +495,35 @@ def tv_webhook():
                 broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
                 webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
                 enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
                 
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
-                    alert_data_copy = alert_data.copy()
-                    alert_data_copy['secret'] = secret_key
+                    
+                    # 🌟 TRANSLATOR LOGIC FOR BROKERS 🌟
+                    if broker_name.lower() == 'dhan':
+                        forward_payload = {
+                            "secret": secret_key,
+                            "alertType": "multi_leg_order",
+                            "order_legs": [
+                                {
+                                    "transactionType": "B" if txn_type == "BUY" else "S",
+                                    "orderType": "MKT",
+                                    "quantity": str(qty),
+                                    "exchange": "NFO" if ("NIFTY" in symbol.upper() or "BANK" in symbol.upper() or "SENSEX" in symbol.upper()) else "NSE",
+                                    "symbol": symbol,
+                                    "instrument": "OPT" if ("NIFTY" in symbol.upper() or "BANK" in symbol.upper() or "SENSEX" in symbol.upper()) else "EQ",
+                                    "productType": "M"
+                                }
+                            ]
+                        }
+                    else:
+                        # For Upstox, Zerodha or other standard 3rd party bridges
+                        forward_payload = alert_data.copy()
+                        forward_payload['secret'] = secret_key
+                        
                     # Send request in background thread to avoid execution delay (Slippage)
-                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': alert_data_copy, 'timeout': 5}).start()
+                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': forward_payload, 'timeout': 5}).start()
             except Exception as e:
                 print(f"Forwarding error for {u.username}: {e}")
 
