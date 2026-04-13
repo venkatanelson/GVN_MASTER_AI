@@ -444,6 +444,8 @@ def tv_webhook():
     all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
+    trade_executed = False
+    
     for u in all_users:
         # 🌟 Check Expiry & Update Status
         if u.expiry_date and u.expiry_date < today_dt:
@@ -467,9 +469,12 @@ def tv_webhook():
             if not existing:
                 new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
                 db.session.add(new_trade)
+                trade_executed = True
         
         elif txn_type == "SELL":
             active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
+            if active_trades:
+                trade_executed = True
             for at in active_trades:
                 exit_val = price if price > 0.0 else at.entry_price
                 at.exit_price = exit_val
@@ -502,15 +507,36 @@ def tv_webhook():
 
     db.session.commit()
 
-    # 4. Telegram Alert (One summary message)
-    if txn_type == "BUY":
-        tg_msg = f"📈 <b>ACTIVE BUY SIGNAL</b>\n---------------------\n🔹 <b>Symbol</b>: {symbol}\n🔹 <b>Price</b>: {price}\n---------------------\n⚡ <i>GVN Algo Execution Processed</i>"
-        send_telegram_msg(tg_msg)
-    else:
-        tg_msg = f"📉 <b>EXIT SIGNAL</b>\n---------------------\n🔹 <b>Symbol</b>: {symbol}\n🔹 <b>Exit Price</b>: {price}\n---------------------\n⚡ <i>GVN Algo Position Closed</i>"
-        send_telegram_msg(tg_msg)
+    # 4. Telegram Alert (Send ONLY if a trade was actually executed/closed)
+    if trade_executed:
+        if txn_type == "BUY":
+            target_val = alert_data.get('target', 'N/A')
+            sl_val = alert_data.get('sl', 'N/A')
+            tg_msg = (
+                f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
+                f"💸 <b>Entry Price:</b> <code>₹{price}</code>\n"
+                f"✅ <b>Target:</b> <code>₹{target_val}</code>\n"
+                f"⛔ <b>Stop Loss:</b> <code>₹{sl_val}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ <i>Processed exactly as per GVN Settings</i>"
+            )
+            send_telegram_msg(tg_msg)
+        else:
+            status_msg = alert_data.get('status', 'CLOSED (MANUAL)')
+            icon = "🛑" if "SL" in status_msg else "🏅" if "Target" in status_msg else "📉"
+            tg_msg = (
+                f"{icon} <b>GVN ALGO - {status_msg.upper()}</b> {icon}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
+                f"💸 <b>Exit Price:</b> <code>₹{price}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ <i>Trade Successfully Closed by System</i>"
+            )
+            send_telegram_msg(tg_msg)
 
-    return jsonify({"status": "Signals Processed", "symbol": symbol}), 200
+    return jsonify({"status": "Signals Processed", "symbol": symbol, "executed": trade_executed}), 200
 
 @app.route('/save_api_settings', methods=['POST'])
 def save_api_settings():
