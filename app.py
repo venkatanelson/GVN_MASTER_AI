@@ -261,6 +261,54 @@ def simple_login():
         <a href='/' style='background:#1a73e8; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;'>Go back to Registration</a>
     </div>"""
 
+@app.route('/plans')
+def subscription_plans():
+    return render_template('plans.html')
+
+def square_off_user_trades(user, reason, manual_price=None):
+    active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
+    if not active_trades: return
+    for t in active_trades:
+        t.status = 'Closed'
+        t.exit_price = float(manual_price) if manual_price else t.entry_price
+        t.pnl = (t.exit_price - t.entry_price) * t.quantity
+        
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    if broker_name.lower() == 'dhan':
+                        payload = {"secret": secret_key, "alertType": "multi_leg_order", "order_legs": [{"transactionType": "S", "orderType": "MKT", "quantity": str(t.quantity), "exchange": "NFO" if ("NIFTY" in t.symbol.upper() or "BANK" in t.symbol.upper() or "SENSEX" in t.symbol.upper()) else "NSE", "symbol": t.symbol, "instrument": "OPT" if ("NIFTY" in t.symbol.upper() or "BANK" in t.symbol.upper() or "SENSEX" in t.symbol.upper()) else "EQ", "productType": "M"}]}
+                    else:
+                        payload = {"secret": secret_key, "symbol": t.symbol, "quantity": t.quantity, "transactionType": "SELL", "orderType": "MARKET", "productType": "MARGIN", "message": reason}
+                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': payload, 'timeout': 5}).start()
+            except Exception as e:
+                print(f"Square-off error for {user.username}: {e}", flush=True)
+
+@app.route('/toggle-algo/<int:user_id>')
+def toggle_algo(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.algo_status == 'ON':
+        user.algo_status = 'OFF'
+        manual_price = request.args.get('exit_price')
+        square_off_user_trades(user, "User Paused Dashboard", manual_price)
+        db.session.commit()
+        flash("Algo Stopped and Positions Squared Off Successfully.")
+    else:
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        if user.expiry_date and user.expiry_date < now:
+            flash("Subscription Expired! Please renew to start Algo.")
+        else:
+            user.algo_status = 'ON'
+            db.session.commit()
+            flash("Algo Started Successfully!")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
 @app.route('/force-close-trade/<int:trade_id>')
 def force_close_trade(trade_id):
     trade = AlgoTrade.query.get_or_404(trade_id)
