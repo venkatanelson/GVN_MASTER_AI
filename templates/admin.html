@@ -143,6 +143,8 @@
                             <button type="submit" class="btn btn-approve" style="padding: 4px 8px; font-size:12px;">Approve as Real</button>
                         </form>
                         <br>
+                        <a href="/admin-extend-demo/{{ user.id }}" class="btn" style="background:#1a73e8; padding: 4px 8px; font-size:12px; margin-bottom:5px;" onclick="return confirm('Extend Demo for 1 Month?');">⏳ Extend 1 Month</a>
+                        <br>
                         <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 4px 8px; font-size:12px; margin-bottom:5px;">
                             {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE ALGO' }}
                         </a>
