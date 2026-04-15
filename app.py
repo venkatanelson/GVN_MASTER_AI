@@ -522,10 +522,17 @@ def tv_webhook():
                         forward_payload = alert_data.copy()
                         forward_payload['secret'] = secret_key
                         
-                    # Send request in background thread to avoid execution delay (Slippage)
-                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': forward_payload, 'timeout': 5}).start()
+                    # Send request in background thread and capture response
+                    def send_to_broker(url, payload, usr_name):
+                        try:
+                            resp = requests.post(url, json=payload, timeout=5)
+                            print(f"[BROKER API] {usr_name} -> Status: {resp.status_code}, Response: {resp.text}", flush=True)
+                        except Exception as req_err:
+                            print(f"[BROKER HTTP ERROR] {usr_name} -> {req_err}", flush=True)
+                            
+                    threading.Thread(target=send_to_broker, args=(webhook_url, forward_payload, u.username), daemon=True).start()
             except Exception as e:
-                print(f"Forwarding error for {u.username}: {e}")
+                print(f"Forwarding error for {u.username}: {e}", flush=True)
 
     db.session.commit()
 
