@@ -150,7 +150,9 @@
                 <h1 style="margin: 5px 0;">Welcome, {{ user.username }}</h1>
                 <p style="margin: 0; color: #555;">Email: {{ user.email }} | <b>Subscription: {{ remaining_days }} Days Left</b></p>
                 {% if user.user_type == 'DEMO' %}
-                <p style="margin: 5px 0;"><b>Your Virtual Capital:</b> ₹ {{ user.demo_capital }}</p>
+                <div style="display:flex; align-items:center; gap: 15px; margin-top: 5px;">
+                    <p style="margin: 0;"><b>Your Virtual Capital:</b> ₹ {{ user.demo_capital }}</p>
+                </div>
                 {% endif %}
             </div>
             <div style="text-align: right;">
@@ -158,7 +160,7 @@
                     <a href="/logout" style="text-decoration: none; padding: 6px 15px; background: #dc3545; color: white; border-radius: 20px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🚪 Logout</a>
                 </div>
                 <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: bold; color: #333;">Master Algo Force Control</p>
-                <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
+                <a href="#" onclick="confirmToggle('{{ user.algo_status }}', '/toggle-algo/{{ user.id }}')" style="text-decoration: none;">
                     <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}" style="box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%;">
                         {{ '🟢 ' + user.algo_status + ' (Click to Pause)' if user.algo_status == "ON" else '🔴 ' + user.algo_status + ' (Click to Start)' }}
                     </button>
@@ -320,6 +322,22 @@
         </div>
     </div>
 
+    <script>
+        function confirmToggle(currentStatus, actionUrl) {
+            if (currentStatus === 'ON') {
+                let exitPrice = prompt("You are turning OFF the Algo.\nThis will Force Close any running position!\n\nPlease enter the CURRENT EXIT PRICE to calculate P&L accurately (Leave blank for default entry price):");
+                if (exitPrice !== null) {
+                    if (exitPrice.trim() !== "") {
+                        window.location.href = actionUrl + "?exit_price=" + encodeURIComponent(exitPrice);
+                    } else {
+                        window.location.href = actionUrl;
+                    }
+                }
+            } else {
+                window.location.href = actionUrl;
+            }
+        }
+    </script>
 </body>
 
 </html>
