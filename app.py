@@ -222,7 +222,7 @@ def demo_register():
         demo_capital=capital,
         selected_plan='Demo Trial',
         is_approved=True,
-        expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=7),
+        expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=30),
         algo_status='ON'
     )
     db.session.add(new_user)
@@ -260,43 +260,6 @@ def simple_login():
         <p>Please register as a New User first OR check if your database on Render is connected correctly.</p>
         <a href='/' style='background:#1a73e8; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;'>Go back to Registration</a>
     </div>"""
-
-@app.route('/plans')
-def subscription_plans():
-    return render_template('plans.html')
-
-@app.route('/toggle-algo/<int:user_id>')
-def toggle_algo(user_id):
-    user = User.query.get_or_404(user_id)
-    if user.algo_status == 'ON':
-        user.algo_status = 'OFF'
-        # 🌟 NEW: Auto-close all running trades for this user when they turn it OFF
-        active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
-        for t in active_trades:
-            t.status = 'Closed'
-            t.exit_price = t.entry_price # Simple close at entry as fallback
-        db.session.commit()
-        flash("Algo Stopped and Positions Closed.")
-    else:
-        # Check expiry before turning ON
-        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        if user.expiry_date and user.expiry_date < now:
-            flash("Subscription Expired! Please renew to start Algo.")
-        else:
-            user.algo_status = 'ON'
-            db.session.commit()
-            flash("Algo Started Successfully!")
-    
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/renew-demo/<int:user_id>')
-def renew_demo(user_id):
-    user = User.query.get_or_404(user_id)
-    if user.user_type == 'DEMO':
-        user.expiry_date = datetime.utcnow() + timedelta(hours=5, minutes=30, days=6)
-        db.session.commit()
-        flash("Demo Plan Renewed Successfully for another 6 Days!")
-    return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/force-close-trade/<int:trade_id>')
 def force_close_trade(trade_id):
@@ -451,11 +414,7 @@ def tv_webhook():
         if u.expiry_date and u.expiry_date < today_dt:
             if u.algo_status == 'ON':
                 u.algo_status = 'OFF'
-                # Close trades on expiry
-                expired_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
-                for et in expired_trades:
-                    et.status = 'Closed'
-                    et.exit_price = et.entry_price
+                square_off_user_trades(u, "Subscription Expired")
                 db.session.commit()
             continue
 
@@ -706,6 +665,18 @@ def approve_user():
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin-extend-demo/<int:user_id>')
+@requires_auth
+def admin_extend_demo(user_id):
+    user = User.query.get_or_404(user_id)
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    if user.expiry_date and user.expiry_date > now:
+        user.expiry_date = user.expiry_date + timedelta(days=30)
+    else:
+        user.expiry_date = now + timedelta(days=30)
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/delete-user/<int:user_id>')
 @requires_auth
 def delete_user(user_id):
@@ -719,6 +690,8 @@ def delete_user(user_id):
 def toggle_kill_switch(user_id):
     user = User.query.get_or_404(user_id)
     user.admin_kill_switch = not user.admin_kill_switch
+    if user.admin_kill_switch:
+        square_off_user_trades(user, "Admin Activated Kill Switch")
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
