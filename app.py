@@ -41,22 +41,30 @@ cipher = Fernet(ENCRYPTION_KEY)
 # ---------------------------------------------------------
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '1008887074')
+TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '@indicator_Gvn') # 🌟 Public Channel Added Here
 
 def send_telegram_msg(message):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("TELEGRAM ERROR: Bot Token or Chat ID not found!")
+    if not TELEGRAM_BOT_TOKEN:
+        print("TELEGRAM ERROR: Bot Token not found!")
         return
     
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    try:
-        requests.post(url, json=payload, timeout=5)
-    except Exception as e:
-        print(f"TELEGRAM SEND ERROR: {e}")
+    # We can send to multiple IDs (the original direct chat + the channel)
+    chat_ids = [cid.strip() for cid in str(TELEGRAM_CHAT_ID).split(',') if cid.strip()]
+    
+    if TELEGRAM_CHANNEL_ID and TELEGRAM_CHANNEL_ID not in chat_ids:
+        chat_ids.append(TELEGRAM_CHANNEL_ID)
+        
+    for cid in chat_ids:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": cid,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            print(f"TELEGRAM SEND ERROR to {cid}: {e}")
 
 # ---------------------------------------------------------
 # DYNAMIC ADMIN CONFIG & AUTHENTICATION
@@ -282,7 +290,27 @@ def square_off_user_trades(user, reason, manual_price=None):
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
                     if broker_name.lower() == 'dhan':
-                        payload = {"secret": secret_key, "alertType": "multi_leg_order", "order_legs": [{"transactionType": "S", "orderType": "MKT", "quantity": str(t.quantity), "exchange": "NFO" if ("NIFTY" in t.symbol.upper() or "BANK" in t.symbol.upper() or "SENSEX" in t.symbol.upper()) else "NSE", "symbol": t.symbol, "instrument": "OPT" if ("NIFTY" in t.symbol.upper() or "BANK" in t.symbol.upper() or "SENSEX" in t.symbol.upper()) else "EQ", "productType": "M"}]}
+                        is_nfo = any(idx in t.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
+                        payload = {
+                            "secret": secret_key,
+                            "transactionType": "S",
+                            "orderType": "MKT",
+                            "quantity": str(t.quantity),
+                            "exchange": "NFO" if is_nfo else "NSE",
+                            "symbol": t.symbol,
+                            "instrument": "OPT" if is_nfo else "EQ",
+                            "productType": "M",
+                            "alertType": "multi_leg_order",
+                            "order_legs": [{
+                                "transactionType": "S", 
+                                "orderType": "MKT", 
+                                "quantity": str(t.quantity), 
+                                "exchange": "NFO" if is_nfo else "NSE", 
+                                "symbol": t.symbol, 
+                                "instrument": "OPT" if is_nfo else "EQ", 
+                                "productType": "M"
+                            }]
+                        }
                     else:
                         payload = {"secret": secret_key, "symbol": t.symbol, "quantity": t.quantity, "transactionType": "SELL", "orderType": "MARKET", "productType": "MARGIN", "message": reason}
                     threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': payload, 'timeout': 5}).start()
@@ -332,14 +360,26 @@ def force_close_trade(trade_id):
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
                     # Craft a manual SELL alert for the broker
+                    is_nfo = any(idx in trade.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
                     manual_alert = {
                         "secret": secret_key,
-                        "symbol": trade.symbol,
-                        "quantity": trade.quantity,
                         "transactionType": "SELL",
-                        "orderType": "MARKET",
-                        "productType": "MARGIN",
-                        "message": "Manual Force Close from Dashboard"
+                        "orderType": "MKT",
+                        "quantity": str(trade.quantity),
+                        "exchange": "NFO" if is_nfo else "NSE",
+                        "symbol": trade.symbol,
+                        "instrument": "OPT" if is_nfo else "EQ",
+                        "productType": "M",
+                        "alertType": "multi_leg_order",
+                        "order_legs": [{
+                            "transactionType": "S", 
+                            "orderType": "MKT", 
+                            "quantity": str(trade.quantity), 
+                            "exchange": "NFO" if is_nfo else "NSE", 
+                            "symbol": trade.symbol, 
+                            "instrument": "OPT" if is_nfo else "EQ", 
+                            "productType": "M"
+                        }]
                     }
                     requests.post(webhook_url, json=manual_alert, timeout=5)
             except Exception as e:
@@ -509,17 +549,26 @@ def tv_webhook():
                     
                     # 🌟 TRANSLATOR LOGIC FOR BROKERS 🌟
                     if broker_name.lower() == 'dhan':
+                        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
+                        t_type = "B" if txn_type == "BUY" else "S"
                         forward_payload = {
                             "secret": secret_key,
+                            "transactionType": t_type,
+                            "orderType": "MKT",
+                            "quantity": str(qty),
+                            "exchange": "NFO" if is_nfo else "NSE",
+                            "symbol": symbol,
+                            "instrument": "OPT" if is_nfo else "EQ",
+                            "productType": "M",
                             "alertType": "multi_leg_order",
                             "order_legs": [
                                 {
-                                    "transactionType": "B" if txn_type == "BUY" else "S",
+                                    "transactionType": t_type,
                                     "orderType": "MKT",
                                     "quantity": str(qty),
-                                    "exchange": "NFO" if ("NIFTY" in symbol.upper() or "BANK" in symbol.upper() or "SENSEX" in symbol.upper()) else "NSE",
+                                    "exchange": "NFO" if is_nfo else "NSE",
                                     "symbol": symbol,
-                                    "instrument": "OPT" if ("NIFTY" in symbol.upper() or "BANK" in symbol.upper() or "SENSEX" in symbol.upper()) else "EQ",
+                                    "instrument": "OPT" if is_nfo else "EQ",
                                     "productType": "M"
                                 }
                             ]
@@ -784,14 +833,26 @@ def auto_square_off_task():
                                     enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
                                     if enc_secret and webhook_url:
                                         secret_key = cipher.decrypt(enc_secret).decode()
+                                        is_nfo = any(idx in trade.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
                                         manual_alert = {
                                             "secret": secret_key,
-                                            "symbol": trade.symbol,
-                                            "quantity": trade.quantity,
                                             "transactionType": "SELL",
-                                            "orderType": "MARKET",
-                                            "productType": "MARGIN",
-                                            "message": "Auto Square-Off at 3:28 PM"
+                                            "orderType": "MKT",
+                                            "quantity": str(trade.quantity),
+                                            "exchange": "NFO" if is_nfo else "NSE",
+                                            "symbol": trade.symbol,
+                                            "instrument": "OPT" if is_nfo else "EQ",
+                                            "productType": "M",
+                                            "alertType": "multi_leg_order",
+                                            "order_legs": [{
+                                                "transactionType": "S", 
+                                                "orderType": "MKT", 
+                                                "quantity": str(trade.quantity), 
+                                                "exchange": "NFO" if is_nfo else "NSE", 
+                                                "symbol": trade.symbol, 
+                                                "instrument": "OPT" if is_nfo else "EQ", 
+                                                "productType": "M"
+                                            }]
                                         }
                                         requests.post(webhook_url, json=manual_alert, timeout=5)
                                 except Exception as e:
