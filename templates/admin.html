@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <title>GVN Algo - Admin</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
+        .admin-container { max-width: 1200px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 14px; }
+        th { background-color: #f8f9fa; color: #333; }
+        
+        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; color: white; display: inline-block;}
+        .btn-call { background: #ff9800; }
+        .btn-approve { background: #28a745; }
+        .btn-stop { background: #dc3545; }
+    </style>
+</head>
+<body>
+
+<div class="admin-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px;">
+        <h1 style="margin: 0;">🚀 GVN Algo Master Admin Control</h1>
+        <div>
+            <a href="/ai-dashboard" class="btn btn-approve" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#6366f1; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🤖 AI Paper Trade Engine</a>
+            <a href="/" class="btn btn-stop" style="font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🚪 Logout / Home</a>
+        </div>
+    </div>
+
+    <!-- DYNAMIC SYSTEM SETTINGS -->
+    <div class="card" style="border-top: 5px solid #1a73e8; background: #e8f0fe;">
+        <h2>⚙️ Dynamic System Settings</h2>
+        <form action="/update-settings" method="POST" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+                <label><b>Admin Username:</b></label><br>
+                <input type="text" name="admin_user" value="{{ config.admin_user }}" style="width: 90%; padding: 8px;" required>
+            </div>
+            <div>
+                <label><b>Admin Password:</b></label><br>
+                <div style="position: relative; width: 90%;">
+                    <input type="password" id="admin_pass" name="admin_pass" value="{{ config.admin_pass }}" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
+                    <span onclick="togglePass()" style="position: absolute; right: 8px; top: 8px; cursor: pointer;" title="Show/Hide Password">👁️</span>
+                </div>
+            </div>
+            <div>
+                <label><b>Tech Support No (User Dashboard):</b></label><br>
+                <input type="text" name="support_1" value="{{ config.support_number_1 }}" style="width: 90%; padding: 8px;">
+            </div>
+            <div>
+                <label><b>Admin Contact No (User Dashboard):</b></label><br>
+                <input type="text" name="support_2" value="{{ config.support_number_2 }}" style="width: 90%; padding: 8px;">
+            </div>
+            <div style="grid-column: span 2;">
+                <label><b>Admin Recovery Phone (For Reset OTP):</b></label><br>
+                <input type="text" name="admin_phone" value="{{ config.admin_phone }}" style="width: 45%; padding: 8px;" required>
+            </div>
+            <div style="grid-column: span 2; text-align: center; margin-top: 10px;">
+                <button type="submit" class="btn btn-approve" style="padding: 10px 30px; font-size: 16px;">Save All Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- REAL USERS -->
+    <div class="card">
+        <h2>🔥 Real Accounts (Total: {{ real_users|length }})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>User Detail</th>
+                    <th>Plan</th>
+                    <th>Expiry Date</th>
+                    <th>Algo Status</th>
+                    <th>Admin Approval</th>
+                    <th>Master Control</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in real_users %}
+                <tr>
+                    <td><strong>{{ user.username }}</strong><br><small>{{ user.phone }}</small></td>
+                    <td>{{ user.selected_plan }}</td>
+                    <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
+                    <td>{{ user.algo_status }}</td>
+                    <td>
+                        {% if not user.is_approved %}
+                            <form action="/approve-user" method="POST" style="display:inline;">
+                                <input type="hidden" name="user_id" value="{{ user.id }}">
+                                <input type="hidden" name="plan" value="{{ user.selected_plan or 'Basic' }}">
+                                <input type="hidden" name="months" value="1">
+                                <button type="submit" class="btn btn-approve">Approve (1M)</button>
+                            </form>
+                        {% else %}
+                            <span style="color: green; font-weight: bold;">✅ Approved</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 6px 10px; font-size:12px;">
+                            {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE' }}
+                        </a>
+                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 6px 10px; font-size:12px; margin-left:5px;" onclick="return confirm('Are you sure you want to completely delete this REAL user?');">🗑️ Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- DEMO USERS -->
+    <div class="card" style="border-left: 5px solid #ff9800;">
+        <h2 style="color: #ff9800;">🎯 Demo Accounts (Total: {{ demo_users|length }})</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>User Detail</th>
+                    <th>Email ID</th>
+                    <th>Virtual Capital</th>
+                    <th>Expiry Date</th>
+                    <th>Algo Status</th>
+                    <th>Contact Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in demo_users %}
+                <tr>
+                    <td><strong>{{ user.username }}</strong><br><small>{{ user.phone }}</small></td>
+                    <td>{{ user.email }}</td>
+                    <td>₹ {{ user.demo_capital }}</td>
+                    <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
+                    <td>{{ user.algo_status }}</td>
+                    <td>
+                        <form action="/approve-user" method="POST" style="display:inline-block; margin-bottom:5px;">
+                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            <select name="plan" required style="padding:3px; font-size:12px;">
+                                <option value="Basic">Basic (₹2999)</option>
+                                <option value="Premium">Premium (₹5999)</option>
+                                <option value="Ultimate">Ultimate (₹9999)</option>
+                            </select>
+                            <select name="months" style="padding:3px; font-size:12px;">
+                                <option value="1">1 Month</option>
+                                <option value="3">3 Months</option>
+                                <option value="6">6 Months</option>
+                            </select>
+                            <button type="submit" class="btn btn-approve" style="padding: 4px 8px; font-size:12px;">Approve as Real</button>
+                        </form>
+                        <br>
+                        <a href="/admin-extend-demo/{{ user.id }}" class="btn" style="background:#1a73e8; padding: 4px 8px; font-size:12px; margin-bottom:5px;" onclick="return confirm('Extend Demo for 1 Month?');">⏳ Extend 1 Month</a>
+                        <br>
+                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 4px 8px; font-size:12px; margin-bottom:5px;">
+                            {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE ALGO' }}
+                        </a>
+                        <br>
+                        <a href="tel:{{ user.phone }}" class="btn btn-call" style="padding: 4px 8px; font-size:12px;">📞 Call</a>
+                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 4px 8px; font-size:12px; margin-left: 5px;" onclick="return confirm('Delete this Demo user?');">🗑️ Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+function togglePass() {
+    var x = document.getElementById("admin_pass");
+    if (x.type === "password") {
+        x.type = "text";
+    } else {
+        x.type = "password";
+    }
+}
+</script>
+</body>
+</html>
