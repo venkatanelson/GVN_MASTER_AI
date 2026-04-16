@@ -11,8 +11,12 @@ import random
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
+import nse_option_chain # 🌟 Custom NSE Real-Time Delta Option Engine
 
 app = Flask(__name__)
+
+# Start the NSE Option Chain Background Tracker
+nse_option_chain.start_nse_worker()
 
 # Basic app config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
@@ -506,18 +510,29 @@ def tv_webhook():
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
     if "NIFTY" in symbol and "SPOT" in symbol.upper():
-        # This simulates the AI fetching FII data and Delta 60 Option
-        simulated_strike = f"NIFTY {int(price//100 * 100)} CE" if txn_type == "BUY" else f"NIFTY {int(price//100 * 100)} PE"
+        
+        # --- 🌟 LIVE DIRECT NSE DATA LOGIC ---
+        # Get the mathematically verified Delta 60 Option from our background thread!
+        opt_type = "CE" if txn_type == "BUY" else "PE" # In reality based on GVN algo signal
+        live_strike = nse_option_chain.current_delta_60_strikes.get(opt_type)
+        
+        if live_strike:
+            simulated_strike = f"NIFTY {live_strike} {opt_type}"
+            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike}."
+        else:
+            # Fallback just in case background thread hasn't finished first run
+            simulated_strike = f"NIFTY {int(price//100 * 100)} {opt_type}"
+            reason_msg = "Fallback: Direct Delta 60 NSE calculation still booting..."
         
         # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
         active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
         
         if txn_type == "BUY":
-            if active_ai_trades < 3: # Smart Allocation Limit
+            if active_ai_trades < 60: # Smart Allocation Limit
                 new_ai = AIPaperTrade(
                     strike_selected=simulated_strike, 
                     delta_value=0.60, 
-                    reason="Matched FII/DII Support Data. Gamma Bounce at Level 1.",
+                    reason=reason_msg,
                     entry_price=price,
                     status="RUNNING"
                 )
