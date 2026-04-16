@@ -1,174 +1,158 @@
 <!DOCTYPE html>
-<html lang="te">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>GVN Algo - Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN AI | Zero-To-Hero Cloud Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
-        .admin-container { max-width: 1200px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        h2 { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
-        
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 14px; }
-        th { background-color: #f8f9fa; color: #333; }
-        
-        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; color: white; display: inline-block;}
-        .btn-call { background: #ff9800; }
-        .btn-approve { background: #28a745; }
-        .btn-stop { background: #dc3545; }
+        body { font-family: 'Outfit', sans-serif; background: #0f172a; color: #fff; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; }
+        .glow-text { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
     </style>
 </head>
-<body>
+<body class="min-h-screen p-4 md:p-8">
 
-<div class="admin-container">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px;">
-        <h1 style="margin: 0;">🚀 GVN Algo Master Admin Control</h1>
-        <a href="/" class="btn btn-stop" style="font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🚪 Logout / Home</a>
+<!-- Navbar -->
+<div class="max-w-6xl mx-auto flex justify-between items-center mb-10 pb-4 border-b border-gray-700">
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center font-bold text-lg shadow-lg shadow-cyan-500/50">GVN</div>
+        <h1 class="text-2xl font-bold tracking-tight glow-text">AI Strategy Dashboard</h1>
     </div>
-
-    <!-- DYNAMIC SYSTEM SETTINGS -->
-    <div class="card" style="border-top: 5px solid #1a73e8; background: #e8f0fe;">
-        <h2>⚙️ Dynamic System Settings</h2>
-        <form action="/update-settings" method="POST" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div>
-                <label><b>Admin Username:</b></label><br>
-                <input type="text" name="admin_user" value="{{ config.admin_user }}" style="width: 90%; padding: 8px;" required>
-            </div>
-            <div>
-                <label><b>Admin Password:</b></label><br>
-                <div style="position: relative; width: 90%;">
-                    <input type="password" id="admin_pass" name="admin_pass" value="{{ config.admin_pass }}" style="width: 100%; padding: 8px; box-sizing: border-box;" required>
-                    <span onclick="togglePass()" style="position: absolute; right: 8px; top: 8px; cursor: pointer;" title="Show/Hide Password">👁️</span>
-                </div>
-            </div>
-            <div>
-                <label><b>Tech Support No (User Dashboard):</b></label><br>
-                <input type="text" name="support_1" value="{{ config.support_number_1 }}" style="width: 90%; padding: 8px;">
-            </div>
-            <div>
-                <label><b>Admin Contact No (User Dashboard):</b></label><br>
-                <input type="text" name="support_2" value="{{ config.support_number_2 }}" style="width: 90%; padding: 8px;">
-            </div>
-            <div style="grid-column: span 2;">
-                <label><b>Admin Recovery Phone (For Reset OTP):</b></label><br>
-                <input type="text" name="admin_phone" value="{{ config.admin_phone }}" style="width: 45%; padding: 8px;" required>
-            </div>
-            <div style="grid-column: span 2; text-align: center; margin-top: 10px;">
-                <button type="submit" class="btn btn-approve" style="padding: 10px 30px; font-size: 16px;">Save All Settings</button>
-            </div>
-        </form>
+    <div class="flex gap-4">
+        <a href="/admin-control" class="text-sm text-gray-400 hover:text-white transition">← Admin Panel</a>
+        <a href="/cleanup-ai-data" class="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-semibold hover:bg-red-500/40 border border-red-500/20 transition-all" onclick="return confirm('Clear Paper Trades older than 3 days?')">
+            🧹 Auto Cleanup (Save DB)
+        </a>
     </div>
-
-    <!-- REAL USERS -->
-    <div class="card">
-        <h2>🔥 Real Accounts (Total: {{ real_users|length }})</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>User Detail</th>
-                    <th>Plan</th>
-                    <th>Expiry Date</th>
-                    <th>Algo Status</th>
-                    <th>Admin Approval</th>
-                    <th>Master Control</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in real_users %}
-                <tr>
-                    <td><strong>{{ user.username }}</strong><br><small>{{ user.phone }}</small></td>
-                    <td>{{ user.selected_plan }}</td>
-                    <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
-                    <td>{{ user.algo_status }}</td>
-                    <td>
-                        {% if not user.is_approved %}
-                            <form action="/approve-user" method="POST" style="display:inline;">
-                                <input type="hidden" name="user_id" value="{{ user.id }}">
-                                <input type="hidden" name="plan" value="{{ user.selected_plan or 'Basic' }}">
-                                <input type="hidden" name="months" value="1">
-                                <button type="submit" class="btn btn-approve">Approve (1M)</button>
-                            </form>
-                        {% else %}
-                            <span style="color: green; font-weight: bold;">✅ Approved</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 6px 10px; font-size:12px;">
-                            {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE' }}
-                        </a>
-                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 6px 10px; font-size:12px; margin-left:5px;" onclick="return confirm('Are you sure you want to completely delete this REAL user?');">🗑️ Delete</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- DEMO USERS -->
-    <div class="card" style="border-left: 5px solid #ff9800;">
-        <h2 style="color: #ff9800;">🎯 Demo Accounts (Total: {{ demo_users|length }})</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>User Detail</th>
-                    <th>Email ID</th>
-                    <th>Virtual Capital</th>
-                    <th>Expiry Date</th>
-                    <th>Algo Status</th>
-                    <th>Contact Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in demo_users %}
-                <tr>
-                    <td><strong>{{ user.username }}</strong><br><small>{{ user.phone }}</small></td>
-                    <td>{{ user.email }}</td>
-                    <td>₹ {{ user.demo_capital }}</td>
-                    <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
-                    <td>{{ user.algo_status }}</td>
-                    <td>
-                        <form action="/approve-user" method="POST" style="display:inline-block; margin-bottom:5px;">
-                            <input type="hidden" name="user_id" value="{{ user.id }}">
-                            <select name="plan" required style="padding:3px; font-size:12px;">
-                                <option value="Basic">Basic (₹2999)</option>
-                                <option value="Premium">Premium (₹5999)</option>
-                                <option value="Ultimate">Ultimate (₹9999)</option>
-                            </select>
-                            <select name="months" style="padding:3px; font-size:12px;">
-                                <option value="1">1 Month</option>
-                                <option value="3">3 Months</option>
-                                <option value="6">6 Months</option>
-                            </select>
-                            <button type="submit" class="btn btn-approve" style="padding: 4px 8px; font-size:12px;">Approve as Real</button>
-                        </form>
-                        <br>
-                        <a href="/admin-extend-demo/{{ user.id }}" class="btn" style="background:#1a73e8; padding: 4px 8px; font-size:12px; margin-bottom:5px;" onclick="return confirm('Extend Demo for 1 Month?');">⏳ Extend 1 Month</a>
-                        <br>
-                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 4px 8px; font-size:12px; margin-bottom:5px;">
-                            {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE ALGO' }}
-                        </a>
-                        <br>
-                        <a href="tel:{{ user.phone }}" class="btn btn-call" style="padding: 4px 8px; font-size:12px;">📞 Call</a>
-                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 4px 8px; font-size:12px; margin-left: 5px;" onclick="return confirm('Delete this Demo user?');">🗑️ Delete</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
 </div>
 
-<script>
-function togglePass() {
-    var x = document.getElementById("admin_pass");
-    if (x.type === "password") {
-        x.type = "text";
-    } else {
-        x.type = "password";
-    }
-}
-</script>
+<!-- Main Grid -->
+<div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+    <!-- Stats Panel -->
+    <div class="lg:col-span-1 flex flex-col gap-6">
+        <div class="glass-panel p-6 shadow-xl relative overflow-hidden">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-blue-500 rounded-full opacity-10 blur-2xl"></div>
+            <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider">Demo Capital Allocated</p>
+            <h2 class="text-4xl font-bold mt-2 glow-text">₹ 1,00,000</h2>
+            <div class="mt-4 flex items-center justify-between text-xs text-gray-500">
+                <span>Rule: Max 1 Lakh active</span>
+                <span class="text-green-400">● Live Monitoring</span>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 shadow-xl relative overflow-hidden">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-green-500 rounded-full opacity-10 blur-2xl"></div>
+            <p class="text-sm text-gray-400 font-semibold uppercase tracking-wider">Paper Trading P&L</p>
+            <h2 class="text-4xl font-bold mt-2 text-emerald-400">+ ₹ {{ "%.2f"|format(total_pnl) }}</h2>
+            <div class="mt-4 w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 w-3/4"></div>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6">
+            <h3 class="text-sm text-gray-400 uppercase tracking-wider mb-4">Live API Connectors</h3>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg border border-gray-700/50">
+                    <span class="text-sm font-semibold">Dhan Option Chain</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-green-500/20 text-green-400 border border-green-500/20">Online</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg border border-gray-700/50">
+                    <span class="text-sm font-semibold">Sensibull FII/DII</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-green-500/20 text-green-400 border border-green-500/20">Simulated</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trades Table -->
+    <div class="lg:col-span-3 glass-panel flex flex-col h-full">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="w-full bg-emerald-500/20 border-l-4 border-emerald-500 p-4 text-emerald-300 text-sm font-semibold">
+                {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <div class="p-6 border-b border-gray-700/50 flex justify-between items-center">
+            <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                </span>
+                Active Paper Trades & AI Actions
+            </h2>
+            <div class="px-3 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-bold border border-blue-500/20">Filter: Demo Only</div>
+        </div>
+        
+        <div class="p-6 flex-1 overflow-x-auto">
+            {% if not trades %}
+                <div class="h-40 flex flex-col items-center justify-center text-gray-500 italic">
+                    <svg class="w-10 h-10 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Awaiting PineScript signal on Nifty Spot...
+                </div>
+            {% else %}
+                <table class="w-full text-left border-collapse whitespace-nowrap">
+                    <thead>
+                        <tr class="text-xs uppercase tracking-wider text-gray-500 border-b border-gray-700/50">
+                            <th class="pb-3 px-4 font-semibold">Time / Symbol</th>
+                            <th class="pb-3 px-4 font-semibold text-center">Auto-Selected Delta</th>
+                            <th class="pb-3 px-4 font-semibold">AI Logic / Reason</th>
+                            <th class="pb-3 px-4 font-semibold text-right">Entry / PnL</th>
+                            <th class="pb-3 px-4 font-semibold text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800">
+                        {% for trade in trades %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="py-4 px-4">
+                                <div class="font-bold text-gray-200">{{ trade.strike_selected }}</div>
+                                <div class="text-xs text-gray-500 mt-1">{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            </td>
+                            <td class="py-4 px-4 text-center">
+                                <span class="px-2 py-1 rounded-md text-xs font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/20">
+                                    &Delta; {{ trade.delta_value }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-4">
+                                <div class="text-sm text-gray-300 max-w-[200px] truncate" title="{{ trade.reason }}">
+                                    {{ trade.reason }}
+                                </div>
+                            </td>
+                            <td class="py-4 px-4 text-right">
+                                <div class="text-sm font-mono text-gray-300">₹{{ trade.entry_price }}</div>
+                                {% if trade.pnl > 0 %}
+                                    <div class="text-xs font-bold text-emerald-400 mt-1">+ ₹{{ trade.pnl }}</div>
+                                {% elif trade.pnl < 0 %}
+                                    <div class="text-xs font-bold text-red-500 mt-1">- ₹{{ trade.pnl|abs }}</div>
+                                {% else %}
+                                    <div class="text-xs text-gray-500 mt-1">-</div>
+                                {% endif %}
+                            </td>
+                            <td class="py-4 px-4 text-center">
+                                {% if trade.status == 'RUNNING' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">
+                                        <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-yellow-400 animate-pulse" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
+                                        Running
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-400/10 text-green-400 border border-green-400/20">
+                                        Closed
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endendfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
