@@ -504,9 +504,10 @@ def tv_webhook():
 
     # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    
     if "NIFTY" in symbol and "SPOT" in symbol.upper():
         # This simulates the AI fetching FII data and Delta 60 Option
-        simulated_strike = f"NIFTY {int(price//100 * 100)} CE/PE"
+        simulated_strike = f"NIFTY {int(price//100 * 100)} CE" if txn_type == "BUY" else f"NIFTY {int(price//100 * 100)} PE"
         
         # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
         active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
@@ -517,7 +518,7 @@ def tv_webhook():
                     strike_selected=simulated_strike, 
                     delta_value=0.60, 
                     reason="Matched FII/DII Support Data. Gamma Bounce at Level 1.",
-                    entry_price=150.0, # Simulated avg premium
+                    entry_price=price,
                     status="RUNNING"
                 )
                 db.session.add(new_ai)
@@ -530,8 +531,9 @@ def tv_webhook():
                 at.pnl = 40.0 * 25 # Simulated 40 points profit 
         
         db.session.commit()
-        # Still continue to execute for real users if needed, or return for only spot alerts
-        return jsonify({"status": "success", "message": "AI Engine Intercepted", "ai_strike": simulated_strike})
+        
+        # 🌟 VITAL: Forward this dynamically selected strike to REAL SUBSCRIBERS
+        symbol = simulated_strike
 
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
