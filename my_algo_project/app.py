@@ -723,11 +723,21 @@ def update_settings():
 @app.route('/ai-dashboard')
 @requires_auth
 def ai_dashboard():
-    trades = AIPaperTrade.query.order_by(AIPaperTrade.timestamp.desc()).all()
-    # Calculate paper PNl
-    total_pnl = sum(t.pnl for t in trades if t.status == "CLOSED")
-    
-    return render_template('ai_dashboard.html', trades=trades, total_pnl=total_pnl)
+    try:
+        trades = AIPaperTrade.query.order_by(AIPaperTrade.timestamp.desc()).all()
+        # Calculate paper PNl
+        total_pnl = sum((t.pnl or 0.0) for t in trades if t.status == "CLOSED")
+        return render_template('ai_dashboard.html', trades=trades, total_pnl=total_pnl)
+    except Exception as e:
+        import traceback
+        error_msg = f"<h3>AI Dashboard Error:</h3><pre>{traceback.format_exc()}</pre>"
+        # Ensure tables are created just in case
+        try:
+            db.create_all()
+            error_msg += "<br><b style='color:green;'>Attempted to force-create tables. Please refresh!</b>"
+        except Exception as e2:
+            error_msg += f"<br><b style='color:red;'>DB Create failed: {str(e2)}</b>"
+        return error_msg, 500
 
 @app.route('/cleanup-ai-data')
 @requires_auth
