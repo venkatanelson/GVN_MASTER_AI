@@ -145,6 +145,7 @@ class User(db.Model):
     encrypted_secret_key = db.Column(db.LargeBinary)
     algo_status = db.Column(db.String(10), default='OFF')
     admin_kill_switch = db.Column(db.Boolean, default=False)
+    is_blocked = db.Column(db.Boolean, default=False) # 🌟 NEW: Block abusive users
     
     # Discounts
     personal_discount = db.Column(db.Integer, default=0)
@@ -229,6 +230,9 @@ def demo_register():
     ).first()
     
     if existing:
+        if existing.is_blocked:
+            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account ({existing.phone}) has been blocked by the Administrator.</p></div>""", 403
+        
         session.permanent = True
         session['user_id'] = existing.id
         return redirect(url_for('user_dashboard', user_id=existing.id))
@@ -274,6 +278,9 @@ def simple_login():
     user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
     
     if user:
+        if user.is_blocked:
+            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account has been permanently blocked by the Administrator.</p></div>""", 403
+            
         session.permanent = True
         session['user_id'] = user.id
         return redirect(url_for('user_dashboard', user_id=user.id))
