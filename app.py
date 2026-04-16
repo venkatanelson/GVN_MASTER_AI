@@ -881,6 +881,16 @@ def delete_user(user_id):
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/block-user/<int:user_id>', methods=['POST', 'GET'])
+@requires_auth
+def block_user(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_blocked = not user.is_blocked
+    if user.is_blocked:
+        user.algo_status = 'OFF'
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/toggle-kill-switch/<int:user_id>')
 @requires_auth
 def toggle_kill_switch(user_id):
