@@ -191,9 +191,25 @@ class AIPaperTrade(db.Model):
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
+# REGISTRATION & ROUTES
+# ---------------------------------------------------------
 
 with app.app_context():
     db.create_all()
+    # 🌟 NEW: Auto DB Migration for missing 'is_blocked' column!
+    try:
+        db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        db.session.commit()
+        print("✅ DB Auto-Migration: is_blocked column added.")
+    except Exception:
+        db.session.rollback()
+        # Fallback for Postgres reserved keyword
+        try:
+            db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+            db.session.commit()
+            print("✅ DB Auto-Migration: is_blocked (Postgres) added.")
+        except Exception:
+            db.session.rollback()
 
 @app.route('/')
 def index():
