@@ -203,6 +203,24 @@ def index():
             return redirect(url_for('user_dashboard', user_id=user.id))
     return render_template('index.html', config=get_admin_config())
 
+@app.route('/db-upgrade')
+def db_upgrade():
+    try:
+        # SQLite / Postgres automatic column adder
+        db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        db.session.commit()
+        return "<h3>✅ Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
+    except Exception as e:
+        db.session.rollback()
+        # Fallback for postgres reserved word just in case
+        try:
+            db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+            db.session.commit()
+            return "<h3>✅ Postgres Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
+        except Exception as e2:
+            db.session.rollback()
+            return f"<h3>Database might already be updated, or error:</h3><pre>{str(e2)}</pre> <a href='/admin-control'>Try Admin Panel</a>"
+
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
