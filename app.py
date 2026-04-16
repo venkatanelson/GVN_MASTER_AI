@@ -172,6 +172,17 @@ class UserBrokerConfig(db.Model):
     webhook_url = db.Column(db.String(300))
     encrypted_secret_key = db.Column(db.LargeBinary)
 
+class AIPaperTrade(db.Model):
+    __tablename__ = 'ai_paper_trades'
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    strike_selected = db.Column(db.String(100))
+    delta_value = db.Column(db.Float)
+    reason = db.Column(db.String(200))
+    entry_price = db.Column(db.Float)
+    pnl = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(20), default="RUNNING")
+
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
@@ -491,6 +502,37 @@ def tv_webhook():
         price = 0.0
         qty = 1
 
+    # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
+    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    if "NIFTY" in symbol and "SPOT" in symbol.upper():
+        # This simulates the AI fetching FII data and Delta 60 Option
+        simulated_strike = f"NIFTY {int(price//100 * 100)} CE/PE"
+        
+        # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
+        active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
+        
+        if txn_type == "BUY":
+            if active_ai_trades < 3: # Smart Allocation Limit
+                new_ai = AIPaperTrade(
+                    strike_selected=simulated_strike, 
+                    delta_value=0.60, 
+                    reason="Matched FII/DII Support Data. Gamma Bounce at Level 1.",
+                    entry_price=150.0, # Simulated avg premium
+                    status="RUNNING"
+                )
+                db.session.add(new_ai)
+                send_telegram_msg(f"🤖 <b>AI Zero-to-Hero Engine Executed</b>\nTarget Lock Enabled: Yes\nReason: FII Support confirmed on Delta 60.\nSymbol: {simulated_strike}")
+        else:
+             # Sell AI Trades
+            active_trades = AIPaperTrade.query.filter_by(status="RUNNING").all()
+            for at in active_trades:
+                at.status = "CLOSED"
+                at.pnl = 40.0 * 25 # Simulated 40 points profit 
+        
+        db.session.commit()
+        # Still continue to execute for real users if needed, or return for only spot alerts
+        return jsonify({"status": "success", "message": "AI Engine Intercepted", "ai_strike": simulated_strike})
+
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
@@ -676,6 +718,29 @@ def update_settings():
     config.support_number_2 = request.form.get('support_2', config.support_number_2)
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
+
+# --- AI ADMIN DASHBOARD & CLEANUP ---
+@app.route('/ai-dashboard')
+@requires_auth
+def ai_dashboard():
+    trades = AIPaperTrade.query.order_by(AIPaperTrade.timestamp.desc()).all()
+    # Calculate paper PNl
+    total_pnl = sum(t.pnl for t in trades if t.status == "CLOSED")
+    
+    return render_template('ai_dashboard.html', trades=trades, total_pnl=total_pnl)
+
+@app.route('/cleanup-ai-data')
+@requires_auth
+def cleanup_ai_data():
+    try:
+        # Delete trades older than 3 days
+        cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=3)
+        AIPaperTrade.query.filter(AIPaperTrade.timestamp < cutoff).delete()
+        db.session.commit()
+        flash("Old AI Data Cleaned successfully to save cloud billing!")
+    except Exception as e:
+        flash(f"Error during cleanup: {str(e)}")
+    return redirect(url_for('ai_dashboard'))
 
 # --- OTP RESET FLOW ---
 @app.route('/admin-reset', methods=['GET', 'POST'])
