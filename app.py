@@ -344,18 +344,18 @@ def square_off_user_trades(user, reason, manual_price=None):
                 webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
                 enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
                 broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                    if enc_secret and webhook_url:
-                        secret_key = cipher.decrypt(enc_secret).decode()
-                        broker_api.execute_broker_order_async(
-                            broker_name=broker_name,
-                            webhook_url=webhook_url,
-                            secret_key=secret_key,
-                            symbol=t.symbol,
-                            transaction_type="SELL",
-                            quantity=t.quantity,
-                            user_name=user.username
-                        )
-                except Exception as e:
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    broker_api.execute_broker_order_async(
+                        broker_name=broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=t.symbol,
+                        transaction_type="SELL",
+                        quantity=t.quantity,
+                        user_name=user.username
+                    )
+            except Exception as e:
                 print(f"Square-off error for {user.username}: {e}", flush=True)
 
 @app.route('/toggle-algo/<int:user_id>')
