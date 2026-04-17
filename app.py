@@ -177,6 +177,8 @@ class UserBrokerConfig(db.Model):
     broker_name = db.Column(db.String(50), default="Dhan")
     webhook_url = db.Column(db.String(300))
     encrypted_secret_key = db.Column(db.LargeBinary)
+    client_id = db.Column(db.String(100), nullable=True)
+    encrypted_access_token = db.Column(db.LargeBinary, nullable=True)
 
 class AIPaperTrade(db.Model):
     __tablename__ = 'ai_paper_trades'
@@ -201,16 +203,22 @@ with app.app_context():
     try:
         db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
         db.session.commit()
-        print("✅ DB Auto-Migration: is_blocked column added.")
     except Exception:
         db.session.rollback()
-        # Fallback for Postgres reserved keyword
         try:
             db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
             db.session.commit()
-            print("✅ DB Auto-Migration: is_blocked (Postgres) added.")
         except Exception:
             db.session.rollback()
+            
+    # Auto Migration for UserBrokerConfig new fields
+    try:
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN client_id VARCHAR(100);'))
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_access_token BLOB;'))
+        db.session.commit()
+        print("✅ DB Auto-Migration: user_broker_config API fields added.")
+    except Exception:
+        db.session.rollback()
 
 @app.route('/')
 def index():
@@ -582,6 +590,35 @@ def tv_webhook():
 
         # Handle demo/real trade tracking per user
         if txn_type == "BUY":
+            # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
+            # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
+            running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
+            for rt in running_trades:
+                if rt.symbol != symbol:
+                    rt.status = 'Closed'
+                    rt.exit_price = rt.entry_price - 15.0 # Assuming a default 15-point stop loss
+                    rt.pnl = -15.0 * rt.quantity
+                    
+                    # Force close at broker
+                    if u.user_type == 'REAL' and u.is_approved:
+                        try:
+                            broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                            webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
+                            enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                            if enc_secret:
+                                secret_key = cipher.decrypt(enc_secret).decode()
+                                broker_api.execute_broker_order_async(
+                                    broker_name=broker_conf.broker_name if broker_conf else "Dhan",
+                                    webhook_url=webhook_url,
+                                    secret_key=secret_key,
+                                    symbol=rt.symbol,
+                                    transaction_type="SELL",
+                                    quantity=rt.quantity,
+                                    user_name=u.username
+                                )
+                        except Exception as e:
+                            pass
+
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
@@ -671,6 +708,8 @@ def save_api_settings():
     broker_name = request.form.get('broker_name', 'Dhan')
     webhook_url = request.form.get('webhook_url')
     secret_key = request.form.get('secret_key')
+    client_id = request.form.get('client_id')
+    access_token = request.form.get('access_token')
     
     user = User.query.get_or_404(user_id)
     
@@ -683,6 +722,10 @@ def save_api_settings():
     broker_config.webhook_url = webhook_url
     if secret_key and secret_key != '********':
         broker_config.encrypted_secret_key = cipher.encrypt(secret_key.encode())
+    
+    broker_config.client_id = client_id
+    if access_token and access_token != '********':
+        broker_config.encrypted_access_token = cipher.encrypt(access_token.encode())
     
     db.session.commit()
     return redirect(url_for('user_dashboard', user_id=user_id))
