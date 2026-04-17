@@ -283,12 +283,20 @@
                         <option value="Other" {% if broker_config and broker_config.broker_name == 'Other' %}selected{% endif %}>Other / General Webhook</option>
                     </select>
 
-                    <label style="font-weight:bold;">Webhook URL:</label>
-                    <input type="text" name="webhook_url" placeholder="Enter Broker Webhook URL"
-                        value="{{ broker_config.webhook_url if broker_config else (user.dhan_webhook_url or '') }}" required>
+                    <label style="font-weight:bold;">Client ID (For DhanHQ API):</label>
+                    <input type="text" name="client_id" placeholder="Enter Dhan Client ID (e.g. 1103172877)"
+                        value="{{ broker_config.client_id if broker_config else '' }}">
                         
-                    <label style="font-weight:bold;">Secret Key / Token:</label>
-                    <input type="password" name="secret_key" placeholder="Enter Secret Key"
+                    <label style="font-weight:bold;">Access Token (DhanHQ) / Secret Key:</label>
+                    <input type="password" name="access_token" placeholder="Enter Access Token"
+                        value="{{ '********' if (broker_config and broker_config.encrypted_access_token) else '' }}">
+
+                    <label style="font-weight:bold; margin-top: 15px; display: block; color: #555;">[Optional] Webhook URL:</label>
+                    <input type="text" name="webhook_url" placeholder="Enter Webhook URL (if using old method)"
+                        value="{{ broker_config.webhook_url if broker_config else (user.dhan_webhook_url or '') }}">
+                        
+                    <label style="font-weight:bold; color: #555;">[Optional] Webhook Secret:</label>
+                    <input type="password" name="secret_key" placeholder="Enter Webhook Secret"
                         value="{{ '********' if (broker_config and broker_config.encrypted_secret_key) or user.encrypted_secret_key else '' }}">
                         
                     <button type="submit" class="btn-buy" style="width: 100%; margin-top: 10px;">Save & Connect Broker</button>
