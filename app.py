@@ -12,6 +12,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import nse_option_chain # 🌟 Custom NSE Real-Time Delta Option Engine
+import broker_api
 
 app = Flask(__name__)
 
@@ -343,34 +344,18 @@ def square_off_user_trades(user, reason, manual_price=None):
                 webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
                 enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
                 broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
-                    if broker_name.lower() == 'dhan':
-                        is_nfo = any(idx in t.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-                        payload = {
-                            "secret": secret_key,
-                            "transactionType": "S",
-                            "orderType": "MKT",
-                            "quantity": str(t.quantity),
-                            "exchange": "NFO" if is_nfo else "NSE",
-                            "symbol": t.symbol,
-                            "instrument": "OPT" if is_nfo else "EQ",
-                            "productType": "M",
-                            "alertType": "multi_leg_order",
-                            "order_legs": [{
-                                "transactionType": "S", 
-                                "orderType": "MKT", 
-                                "quantity": str(t.quantity), 
-                                "exchange": "NFO" if is_nfo else "NSE", 
-                                "symbol": t.symbol, 
-                                "instrument": "OPT" if is_nfo else "EQ", 
-                                "productType": "M"
-                            }]
-                        }
-                    else:
-                        payload = {"secret": secret_key, "symbol": t.symbol, "quantity": t.quantity, "transactionType": "SELL", "orderType": "MARKET", "productType": "MARGIN", "message": reason}
-                    threading.Thread(target=requests.post, args=(webhook_url,), kwargs={'json': payload, 'timeout': 5}).start()
-            except Exception as e:
+                    if enc_secret and webhook_url:
+                        secret_key = cipher.decrypt(enc_secret).decode()
+                        broker_api.execute_broker_order_async(
+                            broker_name=broker_name,
+                            webhook_url=webhook_url,
+                            secret_key=secret_key,
+                            symbol=t.symbol,
+                            transaction_type="SELL",
+                            quantity=t.quantity,
+                            user_name=user.username
+                        )
+                except Exception as e:
                 print(f"Square-off error for {user.username}: {e}", flush=True)
 
 @app.route('/toggle-algo/<int:user_id>')
@@ -415,29 +400,15 @@ def force_close_trade(trade_id):
                 
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
-                    # Craft a manual SELL alert for the broker
-                    is_nfo = any(idx in trade.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-                    manual_alert = {
-                        "secret": secret_key,
-                        "transactionType": "SELL",
-                        "orderType": "MKT",
-                        "quantity": str(trade.quantity),
-                        "exchange": "NFO" if is_nfo else "NSE",
-                        "symbol": trade.symbol,
-                        "instrument": "OPT" if is_nfo else "EQ",
-                        "productType": "M",
-                        "alertType": "multi_leg_order",
-                        "order_legs": [{
-                            "transactionType": "S", 
-                            "orderType": "MKT", 
-                            "quantity": str(trade.quantity), 
-                            "exchange": "NFO" if is_nfo else "NSE", 
-                            "symbol": trade.symbol, 
-                            "instrument": "OPT" if is_nfo else "EQ", 
-                            "productType": "M"
-                        }]
-                    }
-                    requests.post(webhook_url, json=manual_alert, timeout=5)
+                    broker_api.execute_broker_order_async(
+                        broker_name="Dhan" if not broker_conf else broker_conf.broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=trade.symbol,
+                        transaction_type="SELL",
+                        quantity=trade.quantity,
+                        user_name=user.username
+                    )
             except Exception as e:
                 print(f"Force Close Error: {e}")
         
@@ -646,47 +617,15 @@ def tv_webhook():
                 
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
-                    
-                    # 🌟 TRANSLATOR LOGIC FOR BROKERS 🌟
-                    if broker_name.lower() == 'dhan':
-                        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-                        t_type = "B" if txn_type == "BUY" else "S"
-                        forward_payload = {
-                            "secret": secret_key,
-                            "transactionType": t_type,
-                            "orderType": "MKT",
-                            "quantity": str(qty),
-                            "exchange": "NFO" if is_nfo else "NSE",
-                            "symbol": symbol,
-                            "instrument": "OPT" if is_nfo else "EQ",
-                            "productType": "M",
-                            "alertType": "multi_leg_order",
-                            "order_legs": [
-                                {
-                                    "transactionType": t_type,
-                                    "orderType": "MKT",
-                                    "quantity": str(qty),
-                                    "exchange": "NFO" if is_nfo else "NSE",
-                                    "symbol": symbol,
-                                    "instrument": "OPT" if is_nfo else "EQ",
-                                    "productType": "M"
-                                }
-                            ]
-                        }
-                    else:
-                        # For Upstox, Zerodha or other standard 3rd party bridges
-                        forward_payload = alert_data.copy()
-                        forward_payload['secret'] = secret_key
-                        
-                    # Send request in background thread and capture response
-                    def send_to_broker(url, payload, usr_name):
-                        try:
-                            resp = requests.post(url, json=payload, timeout=5)
-                            print(f"[BROKER API] {usr_name} -> Status: {resp.status_code}, Response: {resp.text}", flush=True)
-                        except Exception as req_err:
-                            print(f"[BROKER HTTP ERROR] {usr_name} -> {req_err}", flush=True)
-                            
-                    threading.Thread(target=send_to_broker, args=(webhook_url, forward_payload, u.username), daemon=True).start()
+                    broker_api.execute_broker_order_async(
+                        broker_name=broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=symbol,
+                        transaction_type=txn_type,
+                        quantity=qty,
+                        user_name=u.username
+                    )
             except Exception as e:
                 print(f"Forwarding error for {u.username}: {e}", flush=True)
 
