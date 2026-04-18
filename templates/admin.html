@@ -63,6 +63,45 @@
         </form>
     </div>
 
+    <!-- 💰 PENDING PAYMENTS -->
+    <div class="card" style="border-top: 5px solid #28a745;">
+        <h2>💰 Pending Payment Verifications (₹300 Signal Unlock)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Plan</th>
+                    <th>UTR / Transaction ID</th>
+                    <th>Screenshot</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pending_payments %}
+                <tr>
+                    <td><strong>ID: {{ p.user_id }}</strong></td>
+                    <td><span style="background: #e8f0fe; padding: 2px 6px; border-radius: 4px; font-weight: bold;">{{ p.plan_selected }}</span></td>
+                    <td><code>{{ p.utr_number }}</code></td>
+                    <td>
+                        <a href="/static/uploads/payments/{{ p.screenshot_path }}" target="_blank">
+                            <img src="/static/uploads/payments/{{ p.screenshot_path }}" style="height: 50px; border: 1px solid #ccc; border-radius: 5px;">
+                            <br><small>View Full Size</small>
+                        </a>
+                    </td>
+                    <td>
+                        <form action="/approve-payment/{{ p.id }}" method="POST" style="display:flex; gap:5px;">
+                            <button name="action" value="APPROVE" class="btn btn-approve" style="padding: 4px 8px; font-size:12px;">✅ Approve</button>
+                            <button name="action" value="REJECT" class="btn btn-stop" style="padding: 4px 8px; font-size:12px;">❌ Reject</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center; color: #999;">No pending payment requests.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <!-- REAL USERS -->
     <div class="card">
         <h2>🔥 Real Accounts (Total: {{ real_users|length }})</h2>
@@ -73,6 +112,7 @@
                     <th>Plan</th>
                     <th>Expiry Date</th>
                     <th>Algo Status</th>
+                    <th>Signal Lock</th>
                     <th>Admin Approval</th>
                     <th>Master Control</th>
                 </tr>
@@ -84,6 +124,11 @@
                     <td>{{ user.selected_plan }}</td>
                     <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
                     <td>{{ user.algo_status }}</td>
+                    <td>
+                        <a href="/toggle-signal-lock/{{ user.id }}" class="btn" style="background: {{ '#dc3545' if user.is_locked else '#6c757d' }}; padding: 4px 8px; font-size: 11px;">
+                            {{ '🔒 LOCKED' if user.is_locked else '🔓 UNLOCKED' }}
+                        </a>
+                    </td>
                     <td>
                         {% if not user.is_approved %}
                             <form action="/approve-user" method="POST" style="display:inline;">
@@ -121,6 +166,7 @@
                     <th>Virtual Capital</th>
                     <th>Expiry Date</th>
                     <th>Algo Status</th>
+                    <th>Signal Lock</th>
                     <th>Contact Action</th>
                 </tr>
             </thead>
@@ -132,6 +178,11 @@
                     <td>₹ {{ user.demo_capital }}</td>
                     <td>{{ user.expiry_date.strftime('%d-%m-%Y') if user.expiry_date else 'N/A' }}</td>
                     <td>{{ user.algo_status }}</td>
+                    <td>
+                        <a href="/toggle-signal-lock/{{ user.id }}" class="btn" style="background: {{ '#dc3545' if user.is_locked else '#6c757d' }}; padding: 4px 8px; font-size: 11px;">
+                            {{ '🔒 LOCKED' if user.is_locked else '🔓 UNLOCKED' }}
+                        </a>
+                    </td>
                     <td>
                         <form action="/approve-user" method="POST" style="display:inline-block; margin-bottom:5px;">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
