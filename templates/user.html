@@ -156,6 +156,19 @@
             border-radius: 10px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
+
+        /* 🚫 SCREENSHOT PROTECTION (CSS) */
+        @media print {
+            body { display: none !important; }
+        }
+        {% if not user.is_admin %}
+        body {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        {% endif %}
     </style>
 </head>
 
@@ -423,6 +436,27 @@
     </div>
 
     <script>
+        // 🚫 SCREENSHOT PROTECTION (JS)
+        {% if not user.is_admin %}
+        document.addEventListener('contextmenu', event => event.preventDefault());
+        
+        document.addEventListener('keydown', function(e) {
+            // Block PrintScreen, Ctrl+P, Ctrl+S, Ctrl+U, Ctrl+Shift+I
+            if (e.key == "PrintScreen" || (e.ctrlKey && (e.key == "p" || e.key == "s" || e.key == "u" || (e.shiftKey && (e.key == "i" || e.key == "j" || e.key == "c"))))) {
+                e.preventDefault();
+                alert("Screenshots and Copying are DISABLED to protect GVN Master Algo signals.");
+            }
+        });
+
+        // Blurred content on blur (switching tabs)
+        window.addEventListener('blur', () => {
+            document.body.style.filter = 'blur(10px)';
+        });
+        window.addEventListener('focus', () => {
+            document.body.style.filter = 'none';
+        });
+        {% endif %}
+
         function confirmToggle(currentStatus, actionUrl) {
             if (currentStatus === 'ON') {
                 let exitPrice = prompt("You are turning OFF the Algo.\nThis will Force Close any running position!\n\nPlease enter the CURRENT EXIT PRICE to calculate P&L accurately (Leave blank for default entry price):");
