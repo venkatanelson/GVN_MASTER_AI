@@ -118,6 +118,44 @@
             margin-bottom: 15px;
             display: inline-block;
         }
+
+        /* 🔒 NEW: Blur for Locked Signals */
+        .locked-data {
+            filter: blur(5px);
+            user-select: none;
+            pointer-events: none;
+            color: #888;
+        }
+        
+        .unlock-banner {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background: #fff;
+            margin: 10% auto;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 
@@ -201,6 +239,15 @@
                 Statement (PDF)</a>
         </div>
 
+        <!-- 🔒 LOCK BANNER FOR LOCKED USERS -->
+        {% if user.is_locked %}
+        <div class="unlock-banner">
+            <h3 style="margin: 0; color: #856404;">🔒 SIGNALS LOCKED (PRO FEATURE)</h3>
+            <p style="margin: 5px 0 15px 0;">To see today's Strike Prices and Entry/Exit points in real-time, please pay <b>₹300</b> (Valid for 24 Hours).</p>
+            <button onclick="document.getElementById('paymentModal').style.display='block'" class="btn-buy" style="background: #1a73e8;">🔓 Unlock Now for ₹300</button>
+        </div>
+        {% endif %}
+
         <!-- History Section for Today -->
         <div class="card" style="margin-top: 30px;">
             <h3>⚡ Today's Live Signals (Auto deletes tomorrow)</h3>
@@ -218,8 +265,8 @@
                 <tr style="border-bottom:1px solid #ddd; background: {% if t.status == 'Running' %}#fffde7{% else %}#fff{% endif %};">
                     <td style="padding:10px;">{{ t.time }}</td>
                     <td style="padding:10px;">
-                        {% if user.user_type == 'DEMO' and t.status == 'Running' %}
-                            <b>NIFTY OPTIONS (Hidden)</b> 🔒
+                        {% if (user.user_type == 'DEMO' and t.status == 'Running') or user.is_locked %}
+                            <span class="locked-data">NIFTY OPTIONS (Hidden)</span> 🔒
                         {% else %}
                             <b>{{ t.symbol }}</b> ({{ t.type }})
                         {% endif %}
@@ -232,8 +279,8 @@
                         {% endif %}
                     </td>
                     <td style="padding:10px;">
-                        {% if user.user_type == 'DEMO' and t.status == 'Running' %}
-                            ***
+                        {% if (user.user_type == 'DEMO' and t.status == 'Running') or user.is_locked %}
+                            <span class="locked-data">₹ ***.**</span>
                         {% else %}
                             {{ t.entry_price }}
                         {% endif %}
@@ -335,6 +382,43 @@
                 </p>
                 <p style="color: #555; font-size: 14px; margin-top: 15px;">ప్రశ్నలు లేదా సందేహాలు ఉంటే పై నెంబర్లపై క్లిక్ చేసి <b>సూటిగా వాట్సాప్ (WhatsApp)</b> లో మెసేజ్ చేసి మాట్లాడగలరు.</p>
             </div>
+        </div>
+    </div>
+
+    <!-- 💳 PAYMENT MODAL -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-top: 0;">🔓 Unlock High-Profit Signals</h2>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                <p><b>Pay via PhonePe/UPI:</b></p>
+                <p style="font-size: 20px; color: #1a73e8; font-weight: bold; margin: 5px 0;">93814 90610</p>
+                <p style="font-size: 13px; color: #666;">(Name: VENKATA NELSON)</p>
+            </div>
+            
+            <form action="/upload-payment" method="POST" enctype="multipart/form-data">
+                <label style="font-weight:bold;">1. Select Unlock Plan:</label>
+                <div style="display: flex; gap: 10px; margin: 10px 0;">
+                    <label style="flex: 1; padding: 10px; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; text-align: center;">
+                        <input type="radio" name="plan_type" value="1-Day" checked style="display: none;">
+                        <b>₹ 300</b><br><small>1 Day Access</small>
+                    </label>
+                    <label style="flex: 1; padding: 10px; border: 2px solid #1a73e8; border-radius: 8px; cursor: pointer; text-align: center; background: #e8f0fe;">
+                        <input type="radio" name="plan_type" value="7-Day" style="display: none;">
+                        <b>₹ 1000</b><br><small>7 Days Access</small>
+                    </label>
+                </div>
+
+                <label style="font-weight:bold;">2. Enter Transaction ID (UTR):</label>
+                <input type="text" name="utr_number" placeholder="Enter 12-digit UTR Number" required>
+                
+                <label style="font-weight:bold;">3. Upload Payment Screenshot:</label>
+                <input type="file" name="screenshot" accept="image/*" required style="border:none; margin-bottom: 20px;">
+                
+                <div style="display:flex; gap: 10px;">
+                    <button type="submit" class="btn-buy" style="flex: 1; background: #28a745;">🚀 Confirm Payment</button>
+                    <button type="button" onclick="document.getElementById('paymentModal').style.display='none'" class="btn-buy" style="flex: 1; background: #6c757d;">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
