@@ -151,6 +151,10 @@ class User(db.Model):
     admin_kill_switch = db.Column(db.Boolean, default=False)
     is_blocked = db.Column(db.Boolean, default=False) # 🌟 NEW: Block abusive users
     
+    # 🌟 NEW: Signal Lock/Unlock Feature
+    is_locked = db.Column(db.Boolean, default=True) # If true, details are hidden
+    signals_unlocked_until = db.Column(db.DateTime, nullable=True) # Date until which signals are free
+    
     # Discounts
     personal_discount = db.Column(db.Integer, default=0)
 
@@ -195,6 +199,16 @@ class AIPaperTrade(db.Model):
     entry_price = db.Column(db.Float)
     pnl = db.Column(db.Float, default=0.0)
     status = db.Column(db.String(20), default="RUNNING")
+
+class PaymentScreenshot(db.Model):
+    __tablename__ = 'payment_screenshots'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    screenshot_path = db.Column(db.String(300), nullable=False)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    status = db.Column(db.String(20), default="PENDING") # PENDING, APPROVED, REJECTED
+    utr_number = db.Column(db.String(100), nullable=True)
+    plan_selected = db.Column(db.String(50), default="1-Day") # 1-Day or 7-Day
 
 # ---------------------------------------------------------
 # DHAN AUTO-REFRESH LOGIC
@@ -570,6 +584,12 @@ def user_dashboard(user_id):
     
     # Fetch Broker Config
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+
+    # 🔒 Check if signal unlock has expired
+    if not user.is_locked and user.signals_unlocked_until:
+        if user.signals_unlocked_until < datetime.utcnow() + timedelta(hours=5, minutes=30):
+            user.is_locked = True
+            db.session.commit()
     
     return render_template('user.html', 
                            user=user, 
@@ -845,10 +865,12 @@ def admin_dashboard():
     # 🌟 Split Users
     real_users = User.query.filter_by(user_type='REAL').all()
     demo_users = User.query.filter_by(user_type='DEMO').all()
+    pending_payments = PaymentScreenshot.query.filter_by(status='PENDING').all()
     
     return render_template('admin.html', 
                            real_users=real_users, 
                            demo_users=demo_users, 
+                           pending_payments=pending_payments,
                            g_discount=10,
                            config=get_admin_config())
 
@@ -1020,6 +1042,75 @@ def toggle_kill_switch(user_id):
     if user.admin_kill_switch:
         square_off_user_trades(user, "Admin Activated Kill Switch")
     db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/toggle-signal-lock/<int:user_id>')
+@requires_auth
+def toggle_signal_lock(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_locked = not user.is_locked
+    if not user.is_locked:
+        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=1)
+    db.session.commit()
+    flash(f"Signal Lock for {user.username} is now {'ON' if user.is_locked else 'OFF'}")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/upload-payment', methods=['POST'])
+def upload_payment():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('demo_register'))
+        
+    utr = request.form.get('utr_number')
+    plan = request.form.get('plan_type', '1-Day')
+    file = request.files.get('screenshot')
+    
+    if file:
+        filename = f"payment_{user_id}_{int(time.time())}.png"
+        upload_folder = os.path.join('static', 'uploads', 'payments')
+        os.makedirs(upload_folder, exist_ok=True)
+        filepath = os.path.join(upload_folder, filename)
+        file.save(filepath)
+        
+        new_payment = PaymentScreenshot(
+            user_id=user_id,
+            screenshot_path=filename,
+            utr_number=utr,
+            plan_selected=plan
+        )
+        db.session.add(new_payment)
+        db.session.commit()
+        
+        flash(f"{plan} Payment Screenshot Uploaded! Admin will verify soon.")
+        
+        # Send Telegram notification to admin
+        user = User.query.get(user_id)
+        send_telegram_msg(f"💰 <b>NEW PAYMENT REQUEST ({plan})</b>\nUser: {user.username}\nPhone: {user.phone}\nUTR: {utr}\nPlease check Admin Panel to approve.")
+        
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/approve-payment/<int:payment_id>', methods=['POST'])
+@requires_auth
+def approve_payment(payment_id):
+    payment = PaymentScreenshot.query.get_or_404(payment_id)
+    user = User.query.get(payment.user_id)
+    
+    action = request.form.get('action')
+    if action == 'APPROVE':
+        payment.status = "APPROVED"
+        user.is_locked = False
+        
+        # Determine duration
+        days = 1 if payment.plan_selected == "1-Day" else 7
+        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=days)
+        
+        db.session.commit()
+        flash(f"Payment for {user.username} ({payment.plan_selected}) Approved!")
+    else:
+        payment.status = "REJECTED"
+        db.session.commit()
+        flash(f"Payment for {user.username} Rejected.")
+        
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/history')
