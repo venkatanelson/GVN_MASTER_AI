@@ -150,6 +150,7 @@ class User(db.Model):
     algo_status = db.Column(db.String(10), default='OFF')
     admin_kill_switch = db.Column(db.Boolean, default=False)
     is_blocked = db.Column(db.Boolean, default=False) # 🌟 NEW: Block abusive users
+    is_admin = db.Column(db.Boolean, default=False) # 🌟 NEW: Admin bypass for security
     
     # 🌟 NEW: Signal Lock/Unlock Feature
     is_locked = db.Column(db.Boolean, default=True) # If true, details are hidden
@@ -268,7 +269,22 @@ def dhan_refresh_worker():
             time.sleep(120) # Prevent multiple runs in same minute
         time.sleep(30)
 
+def cleanup_old_screenshots():
+    """Deletes payment screenshots older than 7 days from storage and DB."""
+    while True:
+        with app.app_context():
+            cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=7)
+            old_payments = PaymentScreenshot.query.filter(PaymentScreenshot.timestamp < cutoff).all()
+            for p in old_payments:
+                file_path = os.path.join('static', 'uploads', 'payments', p.screenshot_path)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                db.session.delete(p)
+            db.session.commit()
+        time.sleep(86400) # Run once a day
+
 threading.Thread(target=dhan_refresh_worker, daemon=True).start()
+threading.Thread(target=cleanup_old_screenshots, daemon=True).start()
 
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
@@ -278,15 +294,34 @@ with app.app_context():
     db.create_all()
     # 🌟 NEW: Auto DB Migration for missing 'is_blocked' column!
     try:
-        db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
         db.session.commit()
     except Exception:
         db.session.rollback()
-        try:
-            db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT false;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_locked BOOLEAN DEFAULT true;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN signals_unlocked_until TIMESTAMP;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
             
     # Auto Migration for UserBrokerConfig new fields
     try:
