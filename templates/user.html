@@ -229,22 +229,25 @@
         {% endif %}
 
         <!-- P&L Dashboard Section -->
-        <h2 style="margin-top: 30px;">📊 My 6-Day Performance Analyst</h2>
-        <div class="pnl-dashboard" style="display:flex; flex-wrap:wrap; gap:15px; margin-top:20px;">
-            {% for day in daily_history %}
-            <div class="pnl-card" style="flex: 1; min-width: 120px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #1a73e8;">
-                <h4 style="margin-top: 0; font-size: 14px;">{{ day.date }}</h4>
-                <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}">
-                    ₹ {{ "%.2f"|format(day.pnl) }}
+        <h2 style="margin-top: 30px;">📊 My 30-Day Performance Analyst</h2>
+        <div style="position: relative;">
+            <div class="pnl-dashboard" style="display:flex; flex-wrap: nowrap; overflow-x: auto; gap:15px; margin-top:20px; padding-bottom: 15px; scroll-behavior: smooth;">
+                <div class="pnl-card" style="flex: 0 0 auto; min-width: 150px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #ff9800; background-color: #fff8e1;">
+                    <h4 style="margin-top: 0; font-size: 15px; color: #ff9800;">TOTAL P&L (30 Days)</h4>
+                    <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px;">
+                        ₹ {{ "%.2f"|format(pnl_total_30d) }}
+                    </div>
                 </div>
-            </div>
-            {% endfor %}
-            <div class="pnl-card" style="flex: 1; min-width: 150px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #ff9800; background-color: #fff8e1;">
-                <h4 style="margin-top: 0; font-size: 15px; color: #ff9800;">TOTAL P&L (6 Days)</h4>
-                <div class="{% if pnl_total_6d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px;">
-                    ₹ {{ "%.2f"|format(pnl_total_6d) }}
+                {% for day in daily_history %}
+                <div class="pnl-card" style="flex: 0 0 auto; min-width: 120px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #1a73e8;">
+                    <h4 style="margin-top: 0; font-size: 14px;">{{ day.date }}</h4>
+                    <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}">
+                        ₹ {{ "%.2f"|format(day.pnl) }}
+                    </div>
                 </div>
+                {% endfor %}
             </div>
+            <p style="text-align: right; margin-top: -10px; font-size: 12px; color: #888;"><i>&rarr; Swipe or scroll right for previous days</i></p>
         </div>
 
         <div style="text-align: center; margin-top: 20px;">
@@ -326,6 +329,25 @@
 
         <div class="settings-section">
             {% if user.user_type == 'REAL' %}
+            <div class="card">
+                <h3>🔢 Trade Quantity (Lot Size)</h3>
+                <div style="background: #fff8e1; padding: 12px; border-left: 4px solid #ff9800; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
+                    <p style="margin: 0;"><b>Select Quantity Multiplier:</b> Adjust this to trade with 1 Lot, 2 Lots, 3 Lots, etc. The default signal quantity will be multiplied by this number.</p>
+                </div>
+                <form action="/update-lots" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <label style="font-weight:bold;">Number of Lots:</label>
+                    <select name="trade_lots" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;" onchange="this.form.submit()">
+                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1 Lot (Default)</option>
+                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2 Lots</option>
+                        <option value="3" {% if user.trade_lots == 3 %}selected{% endif %}>3 Lots</option>
+                        <option value="4" {% if user.trade_lots == 4 %}selected{% endif %}>4 Lots</option>
+                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5 Lots</option>
+                        <option value="10" {% if user.trade_lots == 10 %}selected{% endif %}>10 Lots</option>
+                    </select>
+                </form>
+            </div>
+
             <div class="card">
                 <h3>🔑 API Settings (Connect Broker)</h3>
                 <div style="background: #e8f0fe; padding: 12px; border-left: 4px solid #1a73e8; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
