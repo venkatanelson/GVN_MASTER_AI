@@ -787,7 +787,7 @@ def tv_webhook():
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
                 if u.user_type == 'DEMO':
-                    actual_qty = qty * 2 # Fix 2 lots for DEMO
+                    actual_qty = qty # Master already sends default quantity (e.g. 2 lots)
                 else:
                     actual_qty = qty * (getattr(u, 'trade_lots', 1) or 1)
                 
