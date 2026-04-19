@@ -754,6 +754,11 @@ def tv_webhook():
 
         # Handle demo/real trade tracking per user
         if txn_type == "BUY":
+            if u.user_type == 'DEMO':
+                user_execution_qty = qty
+            else:
+                user_execution_qty = qty * (getattr(u, 'trade_lots', 1) or 1)
+                
             # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
             # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
             running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
@@ -786,12 +791,7 @@ def tv_webhook():
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
-                if u.user_type == 'DEMO':
-                    actual_qty = qty # Master already sends default quantity (e.g. 2 lots)
-                else:
-                    actual_qty = qty * (getattr(u, 'trade_lots', 1) or 1)
-                
-                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=actual_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=user_execution_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
                 db.session.add(new_trade)
                 trade_executed = True
         
@@ -799,11 +799,14 @@ def tv_webhook():
             active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
             if active_trades:
                 trade_executed = True
+            
+            user_execution_qty = 0 # Default if no trades found
             for at in active_trades:
                 exit_val = price if price > 0.0 else at.entry_price
                 at.exit_price = exit_val
                 at.pnl = (exit_val - at.entry_price) * at.quantity
                 at.status = "Closed"
+                user_execution_qty += at.quantity # Send the exact quantity we bought
                 
                 # Update Daily P&L Tracker for this user if needed (can be global/per-user)
                 # For now, let's keep DailyPnL as a global metric for the system's performance
@@ -814,7 +817,7 @@ def tv_webhook():
                     daily_record.pnl += at.pnl
 
         # 3. For REAL users, also forward to Broker
-        if u.user_type == 'REAL' and u.is_approved:
+        if u.user_type == 'REAL' and u.is_approved and user_execution_qty > 0:
             try:
                 broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
                 webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
@@ -835,7 +838,7 @@ def tv_webhook():
                         secret_key=secret_key,
                         symbol=symbol,
                         transaction_type=txn_type,
-                        quantity=actual_qty if txn_type == "BUY" else qty,
+                        quantity=user_execution_qty,
                         user_name=u.username,
                         client_id=broker_conf.client_id if broker_conf else None,
                         access_token=access_token
