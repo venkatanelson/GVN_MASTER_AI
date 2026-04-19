@@ -336,14 +336,14 @@
                 </div>
                 <form action="/update-lots" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <label style="font-weight:bold;">Number of Lots:</label>
+                    <label style="font-weight:bold;">Quantity Multiplier:</label>
                     <select name="trade_lots" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;" onchange="this.form.submit()">
-                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1 Lot (Default)</option>
-                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2 Lots</option>
-                        <option value="3" {% if user.trade_lots == 3 %}selected{% endif %}>3 Lots</option>
-                        <option value="4" {% if user.trade_lots == 4 %}selected{% endif %}>4 Lots</option>
-                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5 Lots</option>
-                        <option value="10" {% if user.trade_lots == 10 %}selected{% endif %}>10 Lots</option>
+                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1x (Default - Same as Master)</option>
+                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2x (Double Quantity)</option>
+                        <option value="3" {% if user.trade_lots == 3 %}selected{% endif %}>3x (Triple Quantity)</option>
+                        <option value="4" {% if user.trade_lots == 4 %}selected{% endif %}>4x Quantity</option>
+                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5x Quantity</option>
+                        <option value="10" {% if user.trade_lots == 10 %}selected{% endif %}>10x Quantity</option>
                     </select>
                 </form>
             </div>
