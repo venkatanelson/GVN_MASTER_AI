@@ -158,6 +158,9 @@ class User(db.Model):
     
     # Discounts
     personal_discount = db.Column(db.Integer, default=0)
+    
+    # 🌟 NEW: Customized Quantity Size Selection
+    trade_lots = db.Column(db.Integer, default=1)
 
 class DailyPnL(db.Model):
     __tablename__ = 'daily_pnl_tracker'
@@ -319,6 +322,12 @@ with app.app_context():
 
     try:
         db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN trade_lots INTEGER DEFAULT 1;'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -609,13 +618,13 @@ def user_dashboard(user_id):
     try: db.session.commit()
     except: db.session.rollback()
     
-    # 6-Day P&L
-    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(6).all()
+    # 30-Day P&L
+    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
     daily_history = []
     for dp in all_daily:
         daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': dp.pnl})
         
-    pnl_total_6d = sum(dp['pnl'] for dp in daily_history)
+    pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
     
     # Fetch Broker Config
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
@@ -633,10 +642,22 @@ def user_dashboard(user_id):
                            discount_percent=user.personal_discount + 10,
                            pnl_1d=pnl_1d,
                            daily_history=daily_history,
-                           pnl_total_6d=pnl_total_6d,
+                           pnl_total_30d=pnl_total_30d,
                            parsed_trades=parsed_trades,
                            config=get_admin_config())
 
+@app.route('/update-lots', methods=['POST'])
+def update_lots():
+    user_id = request.form.get('user_id')
+    trade_lots = int(request.form.get('trade_lots', 1))
+    
+    user = User.query.get(user_id)
+    if user:
+        user.trade_lots = trade_lots
+        db.session.commit()
+        flash(f"Trading Quantity Updated to {trade_lots} Lot(s) Successfully!")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
 
 # ---------------------------------------------------------
 # TRADING LOGIC (The Mechanism)
@@ -765,7 +786,12 @@ def tv_webhook():
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
-                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+                if u.user_type == 'DEMO':
+                    actual_qty = qty * 2 # Fix 2 lots for DEMO
+                else:
+                    actual_qty = qty * (getattr(u, 'trade_lots', 1) or 1)
+                
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=actual_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
                 db.session.add(new_trade)
                 trade_executed = True
         
@@ -809,7 +835,7 @@ def tv_webhook():
                         secret_key=secret_key,
                         symbol=symbol,
                         transaction_type=txn_type,
-                        quantity=qty,
+                        quantity=actual_qty if txn_type == "BUY" else qty,
                         user_name=u.username,
                         client_id=broker_conf.client_id if broker_conf else None,
                         access_token=access_token
@@ -1154,14 +1180,23 @@ def trade_history():
     if not user_id:
         return redirect(url_for('demo_register'))
     
-    history = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(1000).all()
-    total_pnl = sum((t.pnl for t in history if t.status == 'Closed'))
-    return render_template('history.html', trades=history, total_pnl=total_pnl)
+    # Show Monthly P&L from DailyPnL table
+    daily_pnls = DailyPnL.query.order_by(DailyPnL.date.desc()).all()
+    monthly_data = {}
+    for dp in daily_pnls:
+        month_key = dp.date.strftime('%B %Y') # "April 2026"
+        if month_key not in monthly_data:
+            monthly_data[month_key] = 0.0
+        monthly_data[month_key] += dp.pnl
+        
+    history = [{'month': k, 'pnl': v} for k, v in monthly_data.items()]
+    total_pnl = sum((t['pnl'] for t in history))
+    return render_template('history.html', history=history, total_pnl=total_pnl)
 
 @app.route('/clear-history')
 @requires_auth
 def clear_history():
-    db.session.query(AlgoTrade).delete()
+    db.session.query(DailyPnL).delete()
     db.session.commit()
     return redirect(url_for('trade_history'))
 
