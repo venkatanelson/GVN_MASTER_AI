@@ -211,9 +211,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 def nse_background_worker():
     while True:
         try:
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                 analyze_and_update_gvn_scanner(symbol)
-                time.sleep(2) # Small delay between index updates
+                time.sleep(2) 
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
         time.sleep(10)
