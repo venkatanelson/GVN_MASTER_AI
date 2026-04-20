@@ -104,3 +104,45 @@ def execute_broker_order_async(broker_name, webhook_url, secret_key, symbol, tra
             print(f"❌ Trade FAILED for {user_name}")
 
     threading.Thread(target=run_order, daemon=True).start()
+def force_square_off_all_positions(client_id, access_token):
+    """
+    Fetches all open positions and squares them off immediately.
+    """
+    try:
+        dhan = dhanhq(client_id, access_token)
+        positions_resp = dhan.get_positions()
+        
+        if positions_resp.get('status') == 'success':
+            positions = positions_resp.get('data', [])
+            closed_count = 0
+            for pos in positions:
+                net_qty = int(pos.get('netQty', 0))
+                if net_qty != 0:
+                    # Square off by placing opposite order
+                    security_id = pos.get('securityId')
+                    exchange = pos.get('exchangeSegment')
+                    product = pos.get('productType')
+                    
+                    txn_type = dhan.SELL if net_qty > 0 else dhan.BUY
+                    qty = abs(net_qty)
+                    
+                    dhan.place_order(
+                        tag="ADMIN_FORCE_EXIT",
+                        transaction_type=txn_type,
+                        exchange_segment=exchange,
+                        product_type=product,
+                        order_type=dhan.MARKET,
+                        validity=dhan.DAY,
+                        security_id=security_id,
+                        quantity=qty,
+                        price=0
+                    )
+                    closed_count += 1
+            print(f"🛑 [ADMIN] Force Closed {closed_count} positions for client {client_id}")
+            return True
+        else:
+            print(f"⚠️ No active positions to close for client {client_id}")
+            return True
+    except Exception as e:
+        print(f"❌ [FORCE SQUARE OFF ERROR] {e}")
+        return False
