@@ -14,6 +14,8 @@ current_delta_60_strikes = {
 # Global memory for GVN Zero-to-Hero Scanner
 gvn_scanner_data = {
     "NIFTY": [],
+    "BANKNIFTY": [],
+    "FINNIFTY": [],
     "SENSEX": [],
     "last_updated": None
 }
@@ -147,36 +149,36 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                                 best_pe_60 = strike
                         
                         # --- 🚀 ZERO TO HERO SCANNER (Delta 0.20 - 0.50) ---
-                        if 0.20 <= delta <= 0.50:
-                            # 9:15 Candle Logic (Approx)
+                        # --- 🚀 ZERO TO HERO SCANNER (Expanded Multi-Index) ---
+                        if 0.15 <= delta <= 0.55: # Slightly wider range for better ITM/OTM coverage
                             h915 = ltp * 1.05 
                             l915 = ltp * 0.95
                             levels = calculate_gvn_levels(h915, l915)
                             
-                            # GVN AI Intelligence (G-Score Calculation)
                             score = 0
                             zone = "NORMAL"
                             
-                            # Zone Logic: Rejection points carry the most weight
-                            if ltp <= levels["Level_1"]: 
-                                zone = "🚀 BUY ZONE (L1 REJECTION)"
-                                score += 50
-                            elif ltp <= levels["Level_7"]: 
-                                zone = "⚡ ENTRY ZONE (L7 SUPPORT)"
-                                score += 35
-                            elif ltp >= levels["Level_5"]:
-                                zone = "🎯 TARGET 0.5 REACHED"
-                                score += 10
+                            # ITM/ATM Logic: Level 7 or Level 6
+                            if delta >= 0.45: 
+                                if ltp <= levels["Level_7"]:
+                                    zone = "🔥 ITM/ATM SUPPORT (L7)"
+                                    score += 55
+                                elif ltp <= levels["Level_6"]:
+                                    zone = "⚡ MOMENTUM ZONE (L6)"
+                                    score += 40
+                            # OTM Logic: Level 1 Rejection
+                            else:
+                                if ltp <= levels["Level_1"]: 
+                                    zone = "🚀 OTM BUY ZONE (L1)"
+                                    score += 60
+                                elif ltp <= levels["Level_7"]:
+                                    zone = "⚡ OTM ENTRY (L7)"
+                                    score += 30
                             
-                            # Momentum Factors (Volume & OI)
-                            if vol > 50000: score += 20
-                            if oi_chg > 0: score += 15
-                            if vol > 100000: score += 10 # Extra bonus for high liquidity
+                            if vol > 50000: score += 15
+                            if oi_chg > 0: score += 10
                             
-                            # Normalize score to max 100
                             final_score = min(100, score)
-                            
-                            # Potential Labeling
                             potential = "MODERATE"
                             if final_score >= 80: potential = "VERY HIGH 💎"
                             elif final_score >= 50: potential = "HIGH 🔥"
@@ -209,12 +211,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 def nse_background_worker():
     while True:
         try:
-            analyze_and_update_gvn_scanner("NIFTY")
-            # Sensex tracking can be added here if SENSEX option chain API is available (usually via a broker like Dhan)
-            # analyze_and_update_gvn_scanner("SENSEX") 
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+                analyze_and_update_gvn_scanner(symbol)
+                time.sleep(2) # Small delay between index updates
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
-        time.sleep(15)
+        time.sleep(10)
 
 def start_nse_worker():
     thread = threading.Thread(target=nse_background_worker, daemon=True)
