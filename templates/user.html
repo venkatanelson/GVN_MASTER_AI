@@ -255,6 +255,76 @@
                 Statement (PDF)</a>
         </div>
 
+        <!-- 🚀 GVN ZERO-TO-HERO LIVE SCANNER -->
+        <div class="card" style="margin-top: 30px; border-top: 5px solid #6366f1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; color: #6366f1;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
+                <span id="scanner-timer" style="font-size: 12px; color: #888;">Updating in 15s...</span>
+            </div>
+            <p style="font-size: 13px; color: #666; margin-top: 5px;">Monitoring 10 high-potential OTM strikes based on 9:15 AM Fibonacci Levels.</p>
+            
+            <div style="overflow-x: auto;">
+                <table id="gvn-scanner-table" style="width:100%; border-collapse: collapse; margin-top:15px; text-align: left; font-size: 13px;">
+                    <tr style="background:#f8f9fa; border-bottom: 2px solid #eee;">
+                        <th style="padding:12px;">Option Strike</th>
+                        <th style="padding:12px;">LTP</th>
+                        <th style="padding:12px;">Delta</th>
+                        <th style="padding:12px;">GVN AI Zone</th>
+                        <th style="padding:12px;">Potential</th>
+                    </tr>
+                    <tbody id="scanner-body">
+                        <tr><td colspan="5" style="text-align:center; padding:20px; color:#888;">Fetching live market data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <script>
+            function updateScanner() {
+                fetch('/api/gvn-scanner')
+                    .then(response => response.json())
+                    .then(result => {
+                        const body = document.getElementById('scanner-body');
+                        const data = result.data.NIFTY || [];
+                        
+                        if (data.length === 0) {
+                            body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">Market closed or data unavailable.</td></tr>';
+                            return;
+                        }
+
+                        let html = '';
+                        data.forEach(item => {
+                            let zoneColor = "#666";
+                            let zoneBg = "#f0f0f0";
+                            
+                            if (item.zone.includes("LEVEL 1")) { zoneColor = "#fff"; zoneBg = "#dc3545"; }
+                            else if (item.zone.includes("LEVEL 7")) { zoneColor = "#fff"; zoneBg = "#ff9800"; }
+                            else if (item.zone.includes("TARGET")) { zoneColor = "#fff"; zoneBg = "#28a745"; }
+
+                            let potentialColor = item.potential.includes("HIGH") ? "#dc3545" : "#666";
+
+                            html += `
+                                <tr style="border-bottom: 1px solid #f0f0f0;">
+                                    <td style="padding:12px; font-weight:bold;">${item.strike}</td>
+                                    <td style="padding:12px;">₹ ${item.ltp}</td>
+                                    <td style="padding:12px;">${item.delta}</td>
+                                    <td style="padding:12px;">
+                                        <span style="background: ${zoneBg}; color: ${zoneColor}; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">
+                                            ${item.zone}
+                                        </span>
+                                    </td>
+                                    <td style="padding:12px; font-weight:bold; color: ${potentialColor};">${item.potential}</td>
+                                </tr>
+                            `;
+                        });
+                        body.innerHTML = html;
+                        document.getElementById('scanner-timer').innerText = "Last Updated: " + result.data.last_updated.split(' ')[1];
+                    });
+            }
+            setInterval(updateScanner, 15000);
+            updateScanner();
+        </script>
+
         <!-- 🔒 LOCK BANNER FOR LOCKED USERS -->
         {% if user.is_locked %}
         <div class="unlock-banner">
