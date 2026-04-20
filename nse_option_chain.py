@@ -11,6 +11,9 @@ current_delta_60_strikes = {
     "last_updated": None
 }
 
+# Global memory to store live option LTPs for Auto-Square-Off
+live_option_ltps = {}
+
 # --- Black-Scholes Delta Calculation ---
 def norm_cdf(x):
     """Cumulative distribution function for the standard normal distribution."""
@@ -99,6 +102,7 @@ def analyze_and_find_delta_60():
             # Analyze CE
             if "CE" in item:
                 iv_ce = item["CE"].get("impliedVolatility", 0)
+                live_option_ltps[f"{int(strike)}_CE"] = item["CE"].get("lastPrice", 0)
                 if iv_ce > 0:
                     sigma_ce = iv_ce / 100.0
                     delta_ce = calculate_delta(underlying_value, strike, T, r, sigma_ce, "CE")
@@ -111,6 +115,7 @@ def analyze_and_find_delta_60():
             # Analyze PE
             if "PE" in item:
                 iv_pe = item["PE"].get("impliedVolatility", 0)
+                live_option_ltps[f"{int(strike)}_PE"] = item["PE"].get("lastPrice", 0)
                 if iv_pe > 0:
                     sigma_pe = iv_pe / 100.0
                     pe_delta_mag = abs(calculate_delta(underlying_value, strike, T, r, sigma_pe, "PE"))
@@ -127,13 +132,13 @@ def analyze_and_find_delta_60():
         print(f"[NSE AI] LIVE Updated: Spot={underlying_value} | Best CE 0.6 Delta={best_ce_strike} | Best PE 0.6 Delta={best_pe_strike}")
 
 def nse_background_worker():
-    """Runs continuously in the background fetching data every 3 minutes."""
+    """Runs continuously in the background fetching data."""
     while True:
         try:
             analyze_and_find_delta_60()
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
-        time.sleep(180) # Refresh every 3 mins to avoid NSE blocking
+        time.sleep(60) # Reduced to 60 secs to catch LTP faster for Auto-SL
 
 def start_nse_worker():
     thread = threading.Thread(target=nse_background_worker, daemon=True)
