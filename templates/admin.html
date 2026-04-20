@@ -31,6 +31,66 @@
         </div>
     </div>
 
+    <!-- 🛡️ AI SECURITY SYSTEM DASHBOARD -->
+    <div class="card" style="border-top: 5px solid #dc3545; background: #fff5f5;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="color: #dc3545; margin: 0;">🛡️ AI Security System (Antivirus & Firewall)</h2>
+            <div id="security-badge" style="padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 14px; background: #28a745; color: white;">
+                SYSTEM SECURE
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 20px;">
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ffccd5; text-align: center;">
+                <small style="color: #666; font-weight: bold;">ATTACK MODE</small><br>
+                <span id="attack-mode-status" style="font-size: 18px; font-weight: bold; color: {{ '#ff0000' if config.attack_mode else '#28a745' }};">
+                    {{ '🔥 FEVER (ULTRA)' if config.attack_mode else '🟢 NORMAL' }}
+                </span>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ffccd5; text-align: center;">
+                <small style="color: #666; font-weight: bold;">BLOCKED IPs</small><br>
+                <span id="blocked-count" style="font-size: 18px; font-weight: bold; color: #dc3545;">0</span>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ffccd5; text-align: center;">
+                <small style="color: #666; font-weight: bold;">INTEGRITY MONITOR</small><br>
+                <span style="font-size: 18px; font-weight: bold; color: #1a73e8;">🔒 LOCKED</span>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ffccd5; text-align: center;">
+                <small style="color: #666; font-weight: bold;">SENSITIVITY</small><br>
+                <span id="sensitivity-level" style="font-size: 18px; font-weight: bold; color: #ff9800;">AI ACTIVE</span>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: center;">
+            <a href="/admin/toggle-attack-mode" class="btn {{ 'btn-approve' if config.attack_mode else 'btn-stop' }}" style="padding: 10px 20px; font-weight: bold;">
+                {{ '🛑 DEACTIVATE FEVER MODE' if config.attack_mode else '🔥 ACTIVATE ATTACK MODE (FEVER)' }}
+            </a>
+            <a href="/admin/clear-firewall" class="btn" style="background: #6c757d; padding: 10px 20px; font-weight: bold;" onclick="return confirm('Clear all blocked IPs?');">🧹 CLEAR FIREWALL</a>
+        </div>
+        <p style="text-align: center; font-size: 12px; color: #dc3545; margin-top: 10px; font-weight: bold;">
+            ⚠️ "Attack Mode" makes the AI extremely sensitive to request frequencies. Use only during active DDoS or Bot attacks.
+        </p>
+    </div>
+
+    <script>
+    function updateSecurityStatus() {
+        fetch('/admin/security-status')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('blocked-count').innerText = data.blocked_count;
+                const badge = document.getElementById('security-badge');
+                if (data.attack_mode) {
+                    badge.innerText = "🚨 UNDER ATTACK";
+                    badge.style.background = "#ff0000";
+                } else {
+                    badge.innerText = "🟢 SYSTEM SECURE";
+                    badge.style.background = "#28a745";
+                }
+            });
+    }
+    setInterval(updateSecurityStatus, 5000);
+    updateSecurityStatus();
+    </script>
+
     <!-- DYNAMIC SYSTEM SETTINGS -->
     <div class="card" style="border-top: 5px solid #1a73e8; background: #e8f0fe;">
         <h2>⚙️ Dynamic System Settings</h2>
