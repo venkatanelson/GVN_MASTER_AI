@@ -46,8 +46,7 @@ fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
 cipher = Fernet(ENCRYPTION_KEY)
 
-# 🛡️ INITIALIZE AI SECURITY ENGINE
-security = SecurityShield(tg_sender=send_telegram_msg)
+
 
 
 # ---------------------------------------------------------
@@ -80,7 +79,11 @@ def send_telegram_msg(message):
         except Exception as e:
             print(f"TELEGRAM SEND ERROR to {cid}: {e}")
 
+# 🛡️ INITIALIZE AI SECURITY ENGINE
+security = SecurityShield(tg_sender=send_telegram_msg)
+
 # ---------------------------------------------------------
+
 # DYNAMIC ADMIN CONFIG & AUTHENTICATION
 # ---------------------------------------------------------
 class AdminConfig(db.Model):
