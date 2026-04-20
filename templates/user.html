@@ -183,8 +183,18 @@
                 🔔 {{ message }}
               </div>
             {% endfor %}
-          {% endif %}
         {% endwith %}
+
+        <!-- 🛡️ LEGAL DISCLAIMER & RISK DISCLOSURE -->
+        <div style="background: #fff5f5; border: 1px solid #feb2b2; padding: 18px; border-radius: 10px; margin-bottom: 25px; border-left: 6px solid #f56565; box-shadow: 0 4px 6px rgba(245, 101, 101, 0.1);">
+            <h4 style="margin: 0 0 8px 0; color: #c53030; font-size: 16px;">⚠️ LEGAL DISCLAIMER & RISK DISCLOSURE / ముఖ్య గమనిక:</h4>
+            <p style="margin: 0; font-size: 13.5px; color: #742a2a; line-height: 1.7;">
+                <b>GVN Algo</b> సాఫ్ట్ వేర్ కేవలం ఎడ్యుకేషనల్ మరియు డెమో పర్పస్ కోసం మాత్రమే. షేర్ మార్కెట్ ట్రేడింగ్ లో గణనీయమైన ఆర్థిక రిస్క్ ఉంటుంది. మీ ట్రేడింగ్ నిర్ణయాల వల్ల కలిగే ఎటువంటి లాభనష్టాలకు GVN లేదా అడ్మిన్ బాధ్యత వహించదు. 
+                <br><br>
+                <span style="font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px;">English Notice:</span><br>
+                <i>GVN Algo is a proprietary algorithmic research platform intended solely for educational and simulation-based analysis. Our system is designed to evaluate market probabilities and is not an endorsement for live financial speculation. Algorithmic trading entails significant risk, and past performance is not indicative of future results. GVN and its administrators assume zero liability for any direct or consequential financial damages resulting from the use of this software. By accessing this platform, you acknowledge that all trading decisions are made at your sole discretion and risk.</i>
+            </p>
+        </div>
 
         <div class="header" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #00c853; background: #f0fff4;{% else %}border-top: 5px solid #1a73e8;{% endif %}">
             <div>
