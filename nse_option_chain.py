@@ -11,10 +11,46 @@ current_delta_60_strikes = {
     "last_updated": None
 }
 
+# Global memory for GVN Zero-to-Hero Scanner
+gvn_scanner_data = {
+    "NIFTY": [],
+    "SENSEX": [],
+    "last_updated": None
+}
+
 # Global memory to store live option LTPs for Auto-Square-Off
 live_option_ltps = {}
 # History of last 10 LTPs for Balloon Pressure Logic
 option_ltp_history = {} 
+
+# --- GVN Fibonacci Level Calculator ---
+def calculate_gvn_levels(high915, low915):
+    """
+    Calculates GVN Master Fibonacci Levels based on the 9:15 AM candle.
+    Formula: result = (H-L)/2, n1=H+result, n2=L+result, 
+             gvn0=n2*0.118/0.5, gvn100=n1*0.786/0.5
+    """
+    if not high915 or not low915: return {}
+    
+    diff = high915 - low915
+    result = diff / 2
+    n1 = high915 + result
+    n2 = low915 + result
+    
+    gvn0 = n2 * 0.118 / 0.5
+    gvn100 = n1 * 0.786 / 0.5
+    gvnR = gvn100 - gvn0
+    
+    levels = {
+        "Level_0": gvn100, # Top
+        "Level_1": gvn0,   # Base / Support
+        "Level_2": gvn0 + 0.763 * gvnR,
+        "Level_3": gvn0 + 0.618 * gvnR,
+        "Level_5": gvn0 + 0.500 * gvnR,
+        "Level_6": gvn0 + 0.382 * gvnR,
+        "Level_7": gvn0 + 0.220 * gvnR # High reaction zone
+    }
+    return levels
 
 # --- Black-Scholes Delta Calculation ---
 def norm_cdf(x):
@@ -22,15 +58,6 @@ def norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 def calculate_delta(S, K, T, r, sigma, option_type):
-    """
-    Calculate Option Delta using Black-Scholes.
-    S: Spot Price
-    K: Strike Price
-    T: Time to Expiry (in years)
-    r: Risk-free rate (approx 0.07 for India usually, but we use 0.0)
-    sigma: Implied Volatility (IV / 100)
-    option_type: "CE" or "PE"
-    """
     if T <= 0 or sigma <= 0:
         return 1.0 if (option_type == "CE" and S > K) or (option_type == "PE" and S < K) else 0.0
 
@@ -43,126 +70,138 @@ def calculate_delta(S, K, T, r, sigma, option_type):
 # --- NSE Data Fetching ---
 def fetch_nse_option_chain(symbol="NIFTY"):
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br"
     }
-
     try:
-        # First request to get cookies
         session = requests.Session()
         session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        
-        # Second request to get the actual JSON
         response = session.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
-        else:
-            print(f"[NSE API] Error: Status {response.status_code}")
-            return None
+        return None
     except Exception as e:
         print(f"[NSE API] Exception: {e}")
         return None
 
-def analyze_and_find_delta_60():
-    global current_delta_60_strikes
+def analyze_and_update_gvn_scanner(symbol="NIFTY"):
+    global current_delta_60_strikes, gvn_scanner_data
     
-    data = fetch_nse_option_chain()
-    if not data or "records" not in data:
-        return
+    data = fetch_nse_option_chain(symbol)
+    if not data or "records" not in data: return
         
     records = data["records"]
     underlying_value = records["underlyingValue"]
-    
-    # Find the nearest expiry
     expiry_dates = records["expiryDates"]
-    if not expiry_dates:
-        return
+    if not expiry_dates: return
     nearest_expiry = expiry_dates[0]
     
-    # Parse date for Time to Expiry (T)
-    # Expiry format: '25-Apr-2026'
+    # Time to Expiry (T)
     expiry_dt = datetime.strptime(nearest_expiry, "%d-%b-%Y")
     now_dt = datetime.now()
-    days_to_expiry = (expiry_dt - now_dt).days
-    # If today is expiry, set a minimal fraction of a day to avoid Division By Zero
-    T = max(days_to_expiry, 0.01) / 365.0  
+    days_to_expiry = max((expiry_dt - now_dt).days, 0.01)
+    T = days_to_expiry / 365.0  
+    r = 0.07 
+
+    strikes_pool = []
     
-    r = 0.07 # Risk free rate approx 7%
-    
-    best_ce_strike = None
-    best_pe_strike = None
-    closest_ce_diff = 100
-    closest_pe_diff = 100
+    # Delta 60 logic remains for main execution
+    best_ce_60 = None
+    best_pe_60 = None
+    closest_ce_diff = 1.0
+    closest_pe_diff = 1.0
 
     for item in records["data"]:
         if item["expiryDate"] == nearest_expiry:
             strike = item["strikePrice"]
             
-            # Analyze CE
-            if "CE" in item:
-                iv_ce = item["CE"].get("impliedVolatility", 0)
-                ltp_ce = item["CE"].get("lastPrice", 0)
-                key_ce = f"{int(strike)}_CE"
-                live_option_ltps[key_ce] = ltp_ce
-                
-                # Update History
-                if key_ce not in option_ltp_history:
-                    option_ltp_history[key_ce] = []
-                option_ltp_history[key_ce].append(ltp_ce)
-                if len(option_ltp_history[key_ce]) > 10:
-                    option_ltp_history[key_ce].pop(0)
-
-                if iv_ce > 0:
-                    sigma_ce = iv_ce / 100.0
-                    delta_ce = calculate_delta(underlying_value, strike, T, r, sigma_ce, "CE")
+            for opt_type in ["CE", "PE"]:
+                if opt_type in item:
+                    opt = item[opt_type]
+                    ltp = opt.get("lastPrice", 0)
+                    iv = opt.get("impliedVolatility", 0)
+                    vol = opt.get("totalTradedVolume", 0)
+                    oi_chg = opt.get("changeinOpenInterest", 0)
                     
-                    diff = abs(delta_ce - 0.60)
-                    if diff < closest_ce_diff:
-                        closest_ce_diff = diff
-                        best_ce_strike = strike
-
-            # Analyze PE
-            if "PE" in item:
-                iv_pe = item["PE"].get("impliedVolatility", 0)
-                ltp_pe = item["PE"].get("lastPrice", 0)
-                key_pe = f"{int(strike)}_PE"
-                live_option_ltps[key_pe] = ltp_pe
-                
-                # Update History
-                if key_pe not in option_ltp_history:
-                    option_ltp_history[key_pe] = []
-                option_ltp_history[key_pe].append(ltp_pe)
-                if len(option_ltp_history[key_pe]) > 10:
-                    option_ltp_history[key_pe].pop(0)
-
-                if iv_pe > 0:
-                    sigma_pe = iv_pe / 100.0
-                    pe_delta_mag = abs(calculate_delta(underlying_value, strike, T, r, sigma_pe, "PE"))
+                    key = f"{int(strike)}_{opt_type}"
+                    live_option_ltps[key] = ltp
                     
-                    diff = abs(pe_delta_mag - 0.60)
-                    if diff < closest_pe_diff:
-                        closest_pe_diff = diff
-                        best_pe_strike = strike
+                    # History for Balloon Pressure
+                    if key not in option_ltp_history: option_ltp_history[key] = []
+                    option_ltp_history[key].append(ltp)
+                    if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
 
-    if best_ce_strike and best_pe_strike:
-        current_delta_60_strikes["CE"] = int(best_ce_strike)
-        current_delta_60_strikes["PE"] = int(best_pe_strike)
-        current_delta_60_strikes["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[NSE AI] LIVE Updated: Spot={underlying_value} | Best CE 0.6 Delta={best_ce_strike} | Best PE 0.6 Delta={best_pe_strike}")
+                    if iv > 0:
+                        sigma = iv / 100.0
+                        delta = abs(calculate_delta(underlying_value, strike, T, r, sigma, opt_type))
+                        
+                        # --- 🌟 DELTA 60 SELECTION ---
+                        if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
+                            if opt_type == "CE":
+                                closest_ce_diff = abs(delta - 0.60)
+                                best_ce_60 = strike
+                            else:
+                                closest_pe_diff = abs(delta - 0.60)
+                                best_pe_60 = strike
+                        
+                        # --- 🚀 ZERO TO HERO SCANNER (Delta 0.20 - 0.50) ---
+                        if 0.20 <= delta <= 0.50:
+                            # 9:15 Candle Logic (Approx using high/low if real-time tracking missed it)
+                            # In a real app, we'd store the 9:15 LTP. Here we use an approximation or mock for levels.
+                            # For demo, we assume 9:15 High/Low is roughly +- 10% of opening price.
+                            # TO-DO: Integrate real 9:15 candle data from broker history
+                            h915 = ltp * 1.05 
+                            l915 = ltp * 0.95
+                            levels = calculate_gvn_levels(h915, l915)
+                            
+                            # Determine Current Zone
+                            zone = "NORMAL"
+                            if ltp <= levels["Level_1"]: zone = "🚀 LEVEL 1 REJECTION (BUY ZONE)"
+                            elif ltp <= levels["Level_7"]: zone = "⚡ LEVEL 7 SUPPORT (ENTRY ZONE)"
+                            elif ltp >= levels["Level_5"]: zone = "🎯 TARGET 0.5 REACHED"
+                            
+                            # Potential Score (Volume + OI Build-up)
+                            potential = "MODERATE"
+                            if vol > 50000 and oi_chg > 0: potential = "HIGH 🔥"
+                            elif vol > 100000: potential = "VERY HIGH 💎"
+
+                            strikes_pool.append({
+                                "strike": f"{int(strike)} {opt_type}",
+                                "ltp": ltp,
+                                "delta": round(delta, 2),
+                                "zone": zone,
+                                "potential": potential,
+                                "levels": levels
+                            })
+
+    # Update Global Memory
+    if best_ce_60 and best_pe_60:
+        current_delta_60_strikes["CE"] = int(best_ce_60)
+        current_delta_60_strikes["PE"] = int(best_pe_60)
+        current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
+
+    # Sort and take top 5 CE and 5 PE for scanner
+    ce_strikes = sorted([s for s in strikes_pool if "CE" in s["strike"]], key=lambda x: x["delta"], reverse=True)[:5]
+    pe_strikes = sorted([s for s in strikes_pool if "PE" in s["strike"]], key=lambda x: x["delta"], reverse=True)[:5]
+    
+    gvn_scanner_data[symbol] = ce_strikes + pe_strikes
+    gvn_scanner_data["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    print(f"[NSE SCANNER] {symbol} Updated | Strikes Monitored: {len(gvn_scanner_data[symbol])}")
 
 def nse_background_worker():
-    """Runs continuously in the background fetching data."""
     while True:
         try:
-            analyze_and_find_delta_60()
+            analyze_and_update_gvn_scanner("NIFTY")
+            # Sensex tracking can be added here if SENSEX option chain API is available (usually via a broker like Dhan)
+            # analyze_and_update_gvn_scanner("SENSEX") 
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
-        time.sleep(15) # High frequency polling for Balloon Pressure accuracy
+        time.sleep(15)
 
 def start_nse_worker():
     thread = threading.Thread(target=nse_background_worker, daemon=True)
     thread.start()
-    print("[NSE AI Engine] Started Live Polling...")
+    print("[NSE AI Engine] Started Live Fibonacci Polling...")
