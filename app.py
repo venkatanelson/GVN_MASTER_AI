@@ -16,6 +16,8 @@ import broker_api
 import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
 import threading
+from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
+
 
 app = Flask(__name__)
 
@@ -43,6 +45,10 @@ static_32_byte_string = b'gvn_secure_key_for_encryption_26'
 fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
 cipher = Fernet(ENCRYPTION_KEY)
+
+# 🛡️ INITIALIZE AI SECURITY ENGINE
+security = SecurityShield(tg_sender=send_telegram_msg)
+
 
 # ---------------------------------------------------------
 # TELEGRAM BOT CONFIG
@@ -87,6 +93,8 @@ class AdminConfig(db.Model):
     support_number_2 = db.Column(db.String(15), default='9966123078')
     reset_otp = db.Column(db.String(10), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
+    attack_mode = db.Column(db.Boolean, default=False) # 🛡️ Security Mode Toggle
+
 
 def get_admin_config():
     config = AdminConfig.query.first()
@@ -381,6 +389,37 @@ threading.Thread(target=auto_stop_loss_worker, daemon=True).start()
 # REGISTRATION & ROUTES
 # ---------------------------------------------------------
 
+@app.before_request
+def start_security():
+    # Inject security instance into app context if needed
+    if not hasattr(security, 'app'):
+        security.init_app(app)
+
+@app.route('/admin/security-status')
+@requires_auth
+def security_status():
+    status = security.get_status()
+    config = get_admin_config()
+    status['attack_mode_db'] = config.attack_mode
+    return jsonify(status)
+
+@app.route('/admin/toggle-attack-mode')
+@requires_auth
+def toggle_attack_mode():
+    config = get_admin_config()
+    config.attack_mode = not config.attack_mode
+    security.set_attack_mode(config.attack_mode)
+    db.session.commit()
+    return redirect(url_for('admin_control'))
+
+@app.route('/admin/clear-firewall')
+@requires_auth
+def clear_firewall():
+    security.blocked_ips.clear()
+    flash("🛡️ Firewall cleared. All blocked IPs are now whitelisted.")
+    return redirect(url_for('admin_control'))
+
+
 with app.app_context():
     db.create_all()
     # 🌟 NEW: Auto DB Migration for missing 'is_blocked' column!
@@ -404,6 +443,12 @@ with app.app_context():
 
     try:
         db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN signals_unlocked_until TIMESTAMP;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "admin_system_config" ADD COLUMN attack_mode BOOLEAN DEFAULT false;'))
         db.session.commit()
     except Exception:
         db.session.rollback()
