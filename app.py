@@ -572,6 +572,15 @@ def simple_login():
 def subscription_plans():
     return render_template('plans.html')
 
+@app.route('/api/gvn-scanner')
+def gvn_scanner_api():
+    """Returns the latest Zero-to-Hero scanner data for NIFTY and SENSEX."""
+    return jsonify({
+        "status": "success",
+        "data": nse_option_chain.gvn_scanner_data,
+        "delta_60": nse_option_chain.current_delta_60_strikes
+    })
+
 def square_off_user_trades(user, reason, manual_price=None):
     active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
     if not active_trades: return
