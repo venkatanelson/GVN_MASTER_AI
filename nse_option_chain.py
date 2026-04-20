@@ -13,6 +13,8 @@ current_delta_60_strikes = {
 
 # Global memory to store live option LTPs for Auto-Square-Off
 live_option_ltps = {}
+# History of last 10 LTPs for Balloon Pressure Logic
+option_ltp_history = {} 
 
 # --- Black-Scholes Delta Calculation ---
 def norm_cdf(x):
@@ -102,7 +104,17 @@ def analyze_and_find_delta_60():
             # Analyze CE
             if "CE" in item:
                 iv_ce = item["CE"].get("impliedVolatility", 0)
-                live_option_ltps[f"{int(strike)}_CE"] = item["CE"].get("lastPrice", 0)
+                ltp_ce = item["CE"].get("lastPrice", 0)
+                key_ce = f"{int(strike)}_CE"
+                live_option_ltps[key_ce] = ltp_ce
+                
+                # Update History
+                if key_ce not in option_ltp_history:
+                    option_ltp_history[key_ce] = []
+                option_ltp_history[key_ce].append(ltp_ce)
+                if len(option_ltp_history[key_ce]) > 10:
+                    option_ltp_history[key_ce].pop(0)
+
                 if iv_ce > 0:
                     sigma_ce = iv_ce / 100.0
                     delta_ce = calculate_delta(underlying_value, strike, T, r, sigma_ce, "CE")
@@ -115,7 +127,17 @@ def analyze_and_find_delta_60():
             # Analyze PE
             if "PE" in item:
                 iv_pe = item["PE"].get("impliedVolatility", 0)
-                live_option_ltps[f"{int(strike)}_PE"] = item["PE"].get("lastPrice", 0)
+                ltp_pe = item["PE"].get("lastPrice", 0)
+                key_pe = f"{int(strike)}_PE"
+                live_option_ltps[key_pe] = ltp_pe
+                
+                # Update History
+                if key_pe not in option_ltp_history:
+                    option_ltp_history[key_pe] = []
+                option_ltp_history[key_pe].append(ltp_pe)
+                if len(option_ltp_history[key_pe]) > 10:
+                    option_ltp_history[key_pe].pop(0)
+
                 if iv_pe > 0:
                     sigma_pe = iv_pe / 100.0
                     pe_delta_mag = abs(calculate_delta(underlying_value, strike, T, r, sigma_pe, "PE"))
@@ -138,7 +160,7 @@ def nse_background_worker():
             analyze_and_find_delta_60()
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
-        time.sleep(60) # Reduced to 60 secs to catch LTP faster for Auto-SL
+        time.sleep(15) # High frequency polling for Balloon Pressure accuracy
 
 def start_nse_worker():
     thread = threading.Thread(target=nse_background_worker, daemon=True)
