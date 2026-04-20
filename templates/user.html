@@ -281,7 +281,7 @@
                 <tr style="border-bottom:1px solid #ddd; background: {% if t.status == 'Running' %}#fffde7{% else %}#fff{% endif %};">
                     <td style="padding:10px;">{{ t.time }}</td>
                     <td style="padding:10px;">
-                        {% if (user.user_type == 'DEMO' and t.status == 'Running') or user.is_locked %}
+                        {% if user.is_locked %}
                             <span class="locked-data">NIFTY OPTIONS (Hidden)</span> 🔒
                         {% else %}
                             <b>{{ t.symbol }}</b> ({{ t.type }})
@@ -295,7 +295,7 @@
                         {% endif %}
                     </td>
                     <td style="padding:10px;">
-                        {% if (user.user_type == 'DEMO' and t.status == 'Running') or user.is_locked %}
+                        {% if user.is_locked %}
                             <span class="locked-data">₹ ***.**</span>
                         {% else %}
                             {{ t.entry_price }}
