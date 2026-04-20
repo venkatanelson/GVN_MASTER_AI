@@ -18,7 +18,7 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             "quantity": str(quantity),
             "exchange": "NFO" if is_nfo else "NSE",
             "symbol": symbol,
-            "instrument": "OPT" if is_nfo else "EQ",
+            "instrument": "OPTIDX" if is_nfo else "EQ",
             "productType": "M",
             "price": "0"
         }
@@ -62,10 +62,11 @@ def place_dhan_official_api_order(client_id, access_token, symbol, txn_type, qty
         # NOTE: Dhan API place_order requires security_id.
         # If 'symbol' passed is numeric, it works. If it's a text symbol, it might fail.
         # But for this implementation, we will try to use it as is.
+        exchange_const = getattr(dhan, 'FNO', 'FNO')
         order = dhan.place_order(
-            tag=symbol,
+            tag=symbol[:20],  # Dhan tag limits to 20 chars
             transaction_type=dhan.BUY if txn_type.upper() == "BUY" else dhan.SELL,
-            exchange_segment=dhan.NFO if is_nfo else dhan.NSE,
+            exchange_segment=exchange_const if is_nfo else dhan.NSE,
             product_type=dhan.MARGIN,
             order_type=dhan.MARKET,
             validity=dhan.DAY,
