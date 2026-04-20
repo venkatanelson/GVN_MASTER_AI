@@ -719,10 +719,10 @@ def user_dashboard(user_id):
     all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
     daily_history = []
     for dp in all_daily:
-        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': dp.pnl})
+        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': dp.pnl or 0.0})
         
     pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
-    
+        
     # Fetch Broker Config
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
 
