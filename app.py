@@ -1026,6 +1026,43 @@ def admin_dashboard():
                            g_discount=10,
                            config=get_admin_config())
 
+@app.route('/admin/force-square-off/<int:user_id>')
+@requires_auth
+def force_square_off(user_id):
+    user = User.query.get_or_404(user_id)
+    # 1. Close in Local DB
+    square_off_user_trades(user, reason="ADMIN_FORCE_STOP")
+    # 2. Close in Broker API if REAL
+    if user.user_type == 'REAL':
+        broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+        if broker_conf and broker_conf.encrypted_access_token:
+            try:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
+            except: pass
+    flash(f"🛑 Force Square Off executed for {user.username}")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/global-kill-switch')
+@requires_auth
+def global_kill_switch():
+    users = User.query.all()
+    count = 0
+    for u in users:
+        active_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
+        if active_trades:
+            square_off_user_trades(u, reason="GLOBAL_KILL_SWITCH")
+            if u.user_type == 'REAL':
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                if broker_conf and broker_conf.encrypted_access_token:
+                    try:
+                        access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                        broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
+                    except: pass
+            count += 1
+    flash(f"⚠️ GLOBAL KILL SWITCH: Closed trades for {count} users!")
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/update-settings', methods=['POST'])
 @requires_auth
 def update_settings():
