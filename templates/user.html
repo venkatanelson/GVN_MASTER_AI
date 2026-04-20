@@ -265,25 +265,38 @@
                 Statement (PDF)</a>
         </div>
 
-        <!-- 🚀 GVN ZERO-TO-HERO LIVE SCANNER -->
-        <div class="card" style="margin-top: 30px; border-top: 5px solid #6366f1;">
+        <!-- 🚀 GVN ZERO-TO-HERO PREMIUM SCANNER -->
+        <style>
+            .pulse-buy { animation: pulse-red 1.5s infinite; }
+            @keyframes pulse-red { 
+                0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+                70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+            }
+            .progress-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+            .progress-fill { height: 100%; transition: width 0.5s ease; }
+        </style>
+        <div class="card" style="margin-top: 30px; border-top: 6px solid #6366f1; background: linear-gradient(to bottom, #ffffff, #f8f9ff);">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h3 style="margin: 0; color: #6366f1;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
-                <span id="scanner-timer" style="font-size: 12px; color: #888;">Updating in 15s...</span>
+                <h3 style="margin: 0; color: #4f46e5; font-size: 1.4rem;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
+                <div style="text-align: right;">
+                    <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Updating Live...</span>
+                </div>
             </div>
-            <p style="font-size: 13px; color: #666; margin-top: 5px;">Monitoring 10 high-potential OTM strikes based on 9:15 AM Fibonacci Levels.</p>
+            <p style="font-size: 13px; color: #666; margin-top: 8px;">Monitoring high-frequency OTM reactions across 10 strikes using the proprietary 9:15 GVN Fibonacci Grid.</p>
             
-            <div style="overflow-x: auto;">
-                <table id="gvn-scanner-table" style="width:100%; border-collapse: collapse; margin-top:15px; text-align: left; font-size: 13px;">
-                    <tr style="background:#f8f9fa; border-bottom: 2px solid #eee;">
-                        <th style="padding:12px;">Option Strike</th>
-                        <th style="padding:12px;">LTP</th>
-                        <th style="padding:12px;">Delta</th>
-                        <th style="padding:12px;">GVN AI Zone</th>
-                        <th style="padding:12px;">Potential</th>
-                    </tr>
+            <div style="overflow-x: auto; margin-top: 20px;">
+                <table id="gvn-scanner-table" style="width:100%; border-collapse: separate; border-spacing: 0 8px; text-align: left; font-size: 13.5px;">
+                    <thead>
+                        <tr style="color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                            <th style="padding:10px 15px;">Option Strike</th>
+                            <th style="padding:10px 15px;">LTP & Delta</th>
+                            <th style="padding:10px 15px;">Fibonacci Zone (9:15 AM)</th>
+                            <th style="padding:10px 15px;">Potential Score</th>
+                        </tr>
+                    </thead>
                     <tbody id="scanner-body">
-                        <tr><td colspan="5" style="text-align:center; padding:20px; color:#888;">Fetching live market data...</td></tr>
+                        <tr><td colspan="4" style="text-align:center; padding:30px; color:#9ca3af; font-style: italic;">Synchronizing with NSE Data Engine...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -296,39 +309,55 @@
                     .then(result => {
                         const body = document.getElementById('scanner-body');
                         const data = result.data.NIFTY || [];
-                        
                         if (data.length === 0) {
-                            body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">Market closed or data unavailable.</td></tr>';
+                            body.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px;">Market Analysis Paused.</td></tr>';
                             return;
                         }
 
                         let html = '';
                         data.forEach(item => {
-                            let zoneColor = "#666";
-                            let zoneBg = "#f0f0f0";
+                            let zoneColor = "#4b5563";
+                            let zoneBg = "#f3f4f6";
+                            let isPulse = false;
                             
-                            if (item.zone.includes("LEVEL 1")) { zoneColor = "#fff"; zoneBg = "#dc3545"; }
-                            else if (item.zone.includes("LEVEL 7")) { zoneColor = "#fff"; zoneBg = "#ff9800"; }
-                            else if (item.zone.includes("TARGET")) { zoneColor = "#fff"; zoneBg = "#28a745"; }
-
-                            let potentialColor = item.potential.includes("HIGH") ? "#dc3545" : "#666";
+                            if (item.zone.includes("BUY")) { zoneColor = "#fff"; zoneBg = "#ef4444"; isPulse = true; }
+                            else if (item.zone.includes("ENTRY")) { zoneColor = "#fff"; zoneBg = "#f59e0b"; }
+                            
+                            let potColor = item.score >= 70 ? "#ef4444" : (item.score >= 40 ? "#f59e0b" : "#6b7280");
+                            
+                            // Calculate level progress (Approx)
+                            let progress = 0;
+                            try {
+                                const range = item.levels.Level_0 - item.levels.Level_1;
+                                progress = Math.min(100, Math.max(0, ((item.ltp - item.levels.Level_1) / range) * 100));
+                            } catch(e) {}
 
                             html += `
-                                <tr style="border-bottom: 1px solid #f0f0f0;">
-                                    <td style="padding:12px; font-weight:bold;">${item.strike}</td>
-                                    <td style="padding:12px;">₹ ${item.ltp}</td>
-                                    <td style="padding:12px;">${item.delta}</td>
-                                    <td style="padding:12px;">
-                                        <span style="background: ${zoneBg}; color: ${zoneColor}; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">
+                                <tr style="background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-radius: 8px;">
+                                    <td style="padding:15px; border-radius: 8px 0 0 8px; font-weight: 800; color: #1f2937; border-left: 4px solid ${potColor};">
+                                        ${item.strike}
+                                    </td>
+                                    <td style="padding:15px;">
+                                        <span style="font-size: 15px; font-weight: 700;">₹ ${item.ltp}</span><br>
+                                        <small style="color: #9ca3af; font-weight: 500;">Δ ${item.delta}</small>
+                                    </td>
+                                    <td style="padding:15px;">
+                                        <span class="${isPulse ? 'pulse-buy' : ''}" style="background: ${zoneBg}; color: ${zoneColor}; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 11px;">
                                             ${item.zone}
                                         </span>
+                                        <div class="progress-bar"><div class="progress-fill" style="width: ${progress}%; background: ${potColor};"></div></div>
                                     </td>
-                                    <td style="padding:12px; font-weight:bold; color: ${potentialColor};">${item.potential}</td>
+                                    <td style="padding:15px; border-radius: 0 8px 8px 0;">
+                                        <div style="display:flex; align-items:center; gap: 10px;">
+                                            <span style="font-weight: 900; color: ${potColor}; font-size: 14px;">${item.score}%</span>
+                                            <small style="color: #6b7280; font-weight: 600;">${item.potential}</small>
+                                        </div>
+                                    </td>
                                 </tr>
                             `;
                         });
                         body.innerHTML = html;
-                        document.getElementById('scanner-timer').innerText = "Last Updated: " + result.data.last_updated.split(' ')[1];
+                        document.getElementById('scanner-timer').innerText = "Last Updated: " + result.data.last_updated;
                     });
             }
             setInterval(updateScanner, 15000);
