@@ -286,8 +286,64 @@ def cleanup_old_screenshots():
             db.session.commit()
         time.sleep(86400) # Run once a day
 
+def auto_stop_loss_worker():
+    """Continuously checks running trades and auto squares off if loss exceeds 15 points using NSE LTPs."""
+    import re
+    while True:
+        try:
+            with app.app_context():
+                running_trades = AlgoTrade.query.filter_by(status='Running').all()
+                if not running_trades:
+                    time.sleep(10)
+                    continue
+                
+                # We need live LTPs from the NSE engine memory
+                if not hasattr(nse_option_chain, 'live_option_ltps') or not nse_option_chain.live_option_ltps:
+                    time.sleep(10)
+                    continue
+                    
+                for trade in running_trades:
+                    # Example symbol: NIFTY260421P24400 or NIFTY 24050 CE
+                    # We need to extract strike and type
+                    strike_match = re.search(r'(\d+)', trade.symbol)
+                    if not strike_match: continue
+                    
+                    strike = strike_match.group(1)
+                    opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+                    if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
+                    
+                    key = f"{strike}_{opt_type}"
+                    ltp = nse_option_chain.live_option_ltps.get(key)
+                    
+                    if ltp and ltp > 0:
+                        # Check stop loss condition (15 points)
+                        if trade.trade_type == "BUY" and (trade.entry_price - ltp) >= 15.0:
+                            print(f"🚨 [AUTO SL HIT] {trade.symbol} | Entry: {trade.entry_price} | LTP: {ltp}")
+                            
+                            user = User.query.get(trade.user_id)
+                            if user:
+                                square_off_user_trades(user, "Auto SL Hit", manual_price=ltp)
+                                db.session.commit()
+                                
+                                # Send Alert
+                                tg_msg = (
+                                    f"🛑 <b>GVN ALGO - AUTO STOP LOSS TRIGGERED</b> 🛑\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"🎯 <b>Symbol:</b> <code>{trade.symbol}</code>\n"
+                                    f"💸 <b>Exit Price:</b> <code>₹{ltp}</code>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"⚡ <i>Auto Squared-Off by Backend to prevent further loss!</i>"
+                                )
+                                send_telegram_msg(tg_msg)
+        except Exception as e:
+            print(f"[AUTO SL WORKER ERROR] {e}")
+            
+        time.sleep(15) # Check every 15 seconds
+
 threading.Thread(target=dhan_refresh_worker, daemon=True).start()
 threading.Thread(target=cleanup_old_screenshots, daemon=True).start()
+threading.Thread(target=auto_stop_loss_worker, daemon=True).start()
+
 
 # ---------------------------------------------------------
 # REGISTRATION & ROUTES
