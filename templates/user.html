@@ -277,13 +277,14 @@
             .progress-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
             .progress-fill { height: 100%; transition: width 0.5s ease; }
         </style>
-        <div class="card" style="margin-top: 30px; border-top: 6px solid #6366f1; background: linear-gradient(to bottom, #ffffff, #f8f9ff);">
+        <div class="card" style="margin-top: 30px; border-top: 6px solid #6366f1; background: linear-gradient(to bottom, #ffffff, #f8f9ff); position: relative; overflow: hidden;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin: 0; color: #4f46e5; font-size: 1.4rem;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
                 <div style="display: flex; gap: 5px; background: #f3f4f6; padding: 4px; border-radius: 10px;">
                     <button class="index-tab active" onclick="switchIndex('NIFTY')">NIFTY</button>
                     <button class="index-tab" onclick="switchIndex('BANKNIFTY')">BANKNIFTY</button>
                     <button class="index-tab" onclick="switchIndex('FINNIFTY')">FINNIFTY</button>
+                    <button class="index-tab" onclick="switchIndex('SENSEX')">SENSEX</button>
                 </div>
                 <div style="text-align: right;">
                     <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Updating Live...</span>
@@ -293,24 +294,39 @@
             <style>
                 .index-tab { border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 12px; transition: 0.3s; background: transparent; color: #6b7280; }
                 .index-tab.active { background: white; color: #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .locked-blur { filter: blur(8px); pointer-events: none; user-select: none; }
+                .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
             </style>
 
-            <p style="font-size: 13px; color: #666; margin-top: 8px;">Monitoring high-frequency OTM (L1 Rejection) and ITM (L7/L6 Support) reactions across all major indices.</p>
+            <p style="font-size: 13px; color: #666; margin-top: 8px;">Monitoring high-frequency OTM and ITM reactions across the <b>GVN Master Alpha Grid</b>.</p>
             
-            <div style="overflow-x: auto; margin-top: 20px;">
-                <table id="gvn-scanner-table" style="width:100%; border-collapse: separate; border-spacing: 0 8px; text-align: left; font-size: 13.5px;">
-                    <thead>
-                        <tr style="color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
-                            <th style="padding:10px 15px;">Option Strike</th>
-                            <th style="padding:10px 15px;">LTP & Delta</th>
-                            <th style="padding:10px 15px;">Fibonacci Zone (9:15 AM)</th>
-                            <th style="padding:10px 15px;">Potential Score</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scanner-body">
-                        <tr><td colspan="4" style="text-align:center; padding:30px; color:#9ca3af; font-style: italic;">Synchronizing with NSE Data Engine...</td></tr>
-                    </tbody>
-                </table>
+            <div id="scanner-container" style="position: relative;">
+                {% if user.is_locked %}
+                <div class="lock-overlay">
+                    <div style="background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
+                        <span style="font-size: 40px;">🔒</span>
+                        <h4 style="margin: 10px 0; color: #111827;">Scanner Data Locked</h4>
+                        <p style="font-size: 12px; color: #6b7280; max-width: 250px;">Please unlock signals to view live Fibonacci Alpha Grid levels and potential scores.</p>
+                        <a href="#payment-section" style="display: inline-block; margin-top: 10px; padding: 8px 20px; background: #4f46e5; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px;">Unlock Now</a>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="{% if user.is_locked %}locked-blur{% endif %}" style="overflow-x: auto; margin-top: 20px;">
+                    <table id="gvn-scanner-table" style="width:100%; border-collapse: separate; border-spacing: 0 8px; text-align: left; font-size: 13.5px;">
+                        <thead>
+                            <tr style="color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
+                                <th style="padding:10px 15px;">Option Strike</th>
+                                <th style="padding:10px 15px;">LTP & Delta</th>
+                                <th style="padding:10px 15px;">GVN Master Alpha Grid</th>
+                                <th style="padding:10px 15px;">Potential Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scanner-body">
+                            <tr><td colspan="4" style="text-align:center; padding:30px; color:#9ca3af; font-style: italic;">Synchronizing with NSE Data Engine...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
