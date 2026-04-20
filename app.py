@@ -704,7 +704,7 @@ def user_dashboard(user_id):
             "exit_price": t.exit_price,
         })
         
-    pnl_1d = sum(t.pnl for t in todays_trades if t.status == 'Closed')
+    pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
     
     # Sync today's Live P&L to database so it stays permanently
     today_record = DailyPnL.query.filter_by(date=today_date).first()
@@ -719,7 +719,7 @@ def user_dashboard(user_id):
     all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
     daily_history = []
     for dp in all_daily:
-        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': dp.pnl or 0.0})
+        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)})
         
     pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
         
