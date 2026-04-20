@@ -265,7 +265,6 @@
             <a href="/history" class="btn-buy" style="background:#28a745; display: inline-block;">📄 Download Full P&L
                 Statement (PDF)</a>
         </div>
-
         <!-- 🚀 GVN ZERO-TO-HERO PREMIUM SCANNER -->
         <style>
             .pulse-buy { animation: pulse-red 1.5s infinite; }
@@ -276,7 +275,12 @@
             }
             .progress-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
             .progress-fill { height: 100%; transition: width 0.5s ease; }
+            .index-tab { border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 12px; transition: 0.3s; background: transparent; color: #6b7280; }
+            .index-tab.active { background: white; color: #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .locked-blur { filter: blur(8px); pointer-events: none; user-select: none; }
+            .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
         </style>
+
         <div class="card" style="margin-top: 30px; border-top: 6px solid #6366f1; background: linear-gradient(to bottom, #ffffff, #f8f9ff); position: relative; overflow: hidden;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin: 0; color: #4f46e5; font-size: 1.4rem;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
@@ -290,13 +294,6 @@
                     <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Updating Live...</span>
                 </div>
             </div>
-            
-            <style>
-                .index-tab { border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 12px; transition: 0.3s; background: transparent; color: #6b7280; }
-                .index-tab.active { background: white; color: #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                .locked-blur { filter: blur(8px); pointer-events: none; user-select: none; }
-                .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
-            </style>
 
             <p style="font-size: 13px; color: #666; margin-top: 8px;">Monitoring high-frequency OTM and ITM reactions across the <b>GVN Master Alpha Grid</b>.</p>
             
@@ -306,7 +303,7 @@
                     <div style="background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
                         <span style="font-size: 40px;">🔒</span>
                         <h4 style="margin: 10px 0; color: #111827;">Scanner Data Locked</h4>
-                        <p style="font-size: 12px; color: #6b7280; max-width: 250px;">Please unlock signals to view live Fibonacci Alpha Grid levels and potential scores.</p>
+                        <p style="font-size: 12px; color: #6b7280; max-width: 250px;">Please unlock signals to view live GVN Master Alpha Grid levels and potential scores.</p>
                         <a href="#payment-section" style="display: inline-block; margin-top: 10px; padding: 8px 20px; background: #4f46e5; color: white; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px;">Unlock Now</a>
                     </div>
                 </div>
@@ -400,15 +397,6 @@
             setInterval(updateScanner, 10000);
             updateScanner();
         </script>
-
-        <!-- 🔒 LOCK BANNER FOR LOCKED USERS -->
-        {% if user.is_locked %}
-        <div class="unlock-banner">
-            <h3 style="margin: 0; color: #856404;">🔒 SIGNALS LOCKED (PRO FEATURE)</h3>
-            <p style="margin: 5px 0 15px 0;">To see today's Strike Prices and Entry/Exit points in real-time, please pay <b>₹300</b> (Valid for 24 Hours).</p>
-            <button onclick="document.getElementById('paymentModal').style.display='block'" class="btn-buy" style="background: #1a73e8;">🔓 Unlock Now for ₹300</button>
-        </div>
-        {% endif %}
 
         <!-- History Section for Today -->
         <div class="card" style="margin-top: 30px;">
