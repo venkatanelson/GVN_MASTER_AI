@@ -286,6 +286,9 @@ def cleanup_old_screenshots():
             db.session.commit()
         time.sleep(86400) # Run once a day
 
+# Global memory for Balloon Pressure Hold tracking
+trade_hold_memory = {}
+
 def auto_stop_loss_worker():
     """Continuously checks running trades and auto squares off if loss exceeds 15 points using NSE LTPs."""
     import re
@@ -304,7 +307,6 @@ def auto_stop_loss_worker():
                     
                 for trade in running_trades:
                     # Example symbol: NIFTY260421P24400 or NIFTY 24050 CE
-                    # We need to extract strike and type
                     strike_match = re.search(r'(\d+)', trade.symbol)
                     if not strike_match: continue
                     
@@ -314,16 +316,40 @@ def auto_stop_loss_worker():
                     
                     key = f"{strike}_{opt_type}"
                     ltp = nse_option_chain.live_option_ltps.get(key)
+                    ltp_history = nse_option_chain.option_ltp_history.get(key, [])
                     
                     if ltp and ltp > 0:
-                        # Check stop loss condition (15 points)
-                        if trade.trade_type == "BUY" and (trade.entry_price - ltp) >= 15.0:
+                        loss = trade.entry_price - ltp
+                        
+                        # --- BALLOON PRESSURE LOGIC ---
+                        if trade.trade_type == "BUY" and loss >= 15.0:
+                            # Check if price is showing a bounce or stabilization in the last 3-4 ticks
+                            is_bouncing = False
+                            if len(ltp_history) >= 3:
+                                last_3 = ltp_history[-3:]
+                                # If latest LTP is greater than or equal to previous two, it's stabilizing/bouncing
+                                if last_3[-1] >= last_3[-2] and last_3[-1] > last_3[0]:
+                                    is_bouncing = True
+                            
+                            trade_id = str(trade.id)
+                            hold_count = trade_hold_memory.get(trade_id, 0)
+                            
+                            # If bouncing (Balloon Pressure), hold for max 3 polling cycles (approx 45s)
+                            if is_bouncing and hold_count < 3:
+                                trade_hold_memory[trade_id] = hold_count + 1
+                                print(f"🎈 [BALLOON PRESSURE] Holding {trade.symbol} | Loss: {loss} | Hold Count: {hold_count+1}/3")
+                                continue
+                            
+                            # If no bounce or hold limit reached, Square-Off
                             print(f"🚨 [AUTO SL HIT] {trade.symbol} | Entry: {trade.entry_price} | LTP: {ltp}")
                             
                             user = User.query.get(trade.user_id)
                             if user:
                                 square_off_user_trades(user, "Auto SL Hit", manual_price=ltp)
                                 db.session.commit()
+                                
+                                # Clear hold memory
+                                if trade_id in trade_hold_memory: del trade_hold_memory[trade_id]
                                 
                                 # Send Alert
                                 tg_msg = (
@@ -332,11 +358,17 @@ def auto_stop_loss_worker():
                                     f"🎯 <b>Symbol:</b> <code>{trade.symbol}</code>\n"
                                     f"💸 <b>Exit Price:</b> <code>₹{ltp}</code>\n"
                                     f"━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"⚡ <i>Auto Squared-Off by Backend to prevent further loss!</i>"
+                                    f"⚡ <i>Auto Squared-Off by Backend! (Balloon Pressure Hold Expired)</i>"
                                 )
                                 send_telegram_msg(tg_msg)
+                        else:
+                            # Reset hold count if price recovers above 15-point loss
+                            trade_id = str(trade.id)
+                            if trade_id in trade_hold_memory:
+                                del trade_hold_memory[trade_id]
         except Exception as e:
             print(f"[AUTO SL WORKER ERROR] {e}")
+        time.sleep(5) # Check every 5 seconds
             
         time.sleep(15) # Check every 15 seconds
 
