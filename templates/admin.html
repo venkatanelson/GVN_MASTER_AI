@@ -25,6 +25,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px;">
         <h1 style="margin: 0;">🚀 GVN Algo Master Admin Control</h1>
         <div>
+            <a href="/admin/global-kill-switch" class="btn btn-stop" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#ff0000; box-shadow: 0 4px 8px rgba(255,0,0,0.3);" onclick="return confirm('⚠️ WARNING: This will FORCE EXIT ALL TRADES for ALL USERS across all brokers. Proceed?');">🚨 GLOBAL KILL SWITCH 🚨</a>
             <a href="/ai-dashboard" class="btn btn-approve" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#6366f1; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🤖 AI Paper Trade Engine</a>
             <a href="/" class="btn btn-stop" style="font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🚪 Logout / Home</a>
         </div>
@@ -135,19 +136,22 @@
                                 <input type="hidden" name="user_id" value="{{ user.id }}">
                                 <input type="hidden" name="plan" value="{{ user.selected_plan or 'Basic' }}">
                                 <input type="hidden" name="months" value="1">
-                                <button type="submit" class="btn btn-approve">Approve (1M)</button>
+                                <button type="submit" class="btn btn-approve" style="padding: 4px 8px; font-size:11px;">Approve (1M)</button>
                             </form>
                         {% else %}
-                            <span style="color: green; font-weight: bold;">✅ Approved</span>
+                            <span style="color: green; font-weight: bold; font-size:12px;">✅ Approved</span>
                         {% endif %}
                     </td>
-                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 6px 10px; font-size:12px;">
+                    <td>
+                        <a href="/admin/force-square-off/{{ user.id }}" class="btn" style="padding: 6px 10px; font-size:11px; background-color:#000; color:#fff;" onclick="return confirm('Force Exit ALL BROKER POSITIONS for {{ user.username }}?');">🛑 FORCE EXIT</a>
+                        <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 6px 10px; font-size:11px; margin-left:2px;">
                             {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE' }}
                         </a>
-                        <a href="/block-user/{{ user.id }}" class="btn" style="background: #e67e22; padding: 6px 10px; font-size:12px; margin-left:5px;" onclick="return confirm('Toggle BLOCK for this user?');">
+                        <a href="/block-user/{{ user.id }}" class="btn" style="background: #e67e22; padding: 6px 10px; font-size:11px; margin-left:5px;" onclick="return confirm('Toggle BLOCK for this user?');">
                             {{ 'UNBLOCK' if user.is_blocked else '🚫 BLOCK' }}
                         </a>
-                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 6px 10px; font-size:12px; margin-left:5px;" onclick="return confirm('Are you sure you want to completely delete this REAL user?');">🗑️ Delete</a>
+                        <a href="/delete-user/{{ user.id }}" class="btn btn-stop" style="padding: 6px 10px; font-size:11px; margin-left:5px;" onclick="return confirm('Are you sure you want to completely delete this REAL user?');">🗑️ Delete</a>
+                    </td>
                     </td>
                 </tr>
                 {% endfor %}
@@ -201,6 +205,7 @@
                         <br>
                         <a href="/admin-extend-demo/{{ user.id }}" class="btn" style="background:#1a73e8; padding: 4px 8px; font-size:12px; margin-bottom:5px;" onclick="return confirm('Extend Demo for 1 Month?');">⏳ Extend 1 Month</a>
                         <br>
+                        <a href="/admin/force-square-off/{{ user.id }}" class="btn" style="padding: 4px 8px; font-size:12px; margin-bottom:5px; background-color:#000; color:#fff;" onclick="return confirm('Force Exit trades for Demo user: {{ user.username }}?');">🛑 FORCE EXIT</a>
                         <a href="/toggle-kill-switch/{{ user.id }}" class="btn {{ 'btn-stop' if not user.admin_kill_switch else 'btn-approve' }}" style="padding: 4px 8px; font-size:12px; margin-bottom:5px;">
                             {{ 'MASTER STOP' if not user.admin_kill_switch else 'ENABLE ALGO' }}
                         </a>
