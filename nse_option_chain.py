@@ -148,30 +148,45 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                         
                         # --- 🚀 ZERO TO HERO SCANNER (Delta 0.20 - 0.50) ---
                         if 0.20 <= delta <= 0.50:
-                            # 9:15 Candle Logic (Approx using high/low if real-time tracking missed it)
-                            # In a real app, we'd store the 9:15 LTP. Here we use an approximation or mock for levels.
-                            # For demo, we assume 9:15 High/Low is roughly +- 10% of opening price.
-                            # TO-DO: Integrate real 9:15 candle data from broker history
+                            # 9:15 Candle Logic (Approx)
                             h915 = ltp * 1.05 
                             l915 = ltp * 0.95
                             levels = calculate_gvn_levels(h915, l915)
                             
-                            # Determine Current Zone
+                            # GVN AI Intelligence (G-Score Calculation)
+                            score = 0
                             zone = "NORMAL"
-                            if ltp <= levels["Level_1"]: zone = "🚀 LEVEL 1 REJECTION (BUY ZONE)"
-                            elif ltp <= levels["Level_7"]: zone = "⚡ LEVEL 7 SUPPORT (ENTRY ZONE)"
-                            elif ltp >= levels["Level_5"]: zone = "🎯 TARGET 0.5 REACHED"
                             
-                            # Potential Score (Volume + OI Build-up)
+                            # Zone Logic: Rejection points carry the most weight
+                            if ltp <= levels["Level_1"]: 
+                                zone = "🚀 BUY ZONE (L1 REJECTION)"
+                                score += 50
+                            elif ltp <= levels["Level_7"]: 
+                                zone = "⚡ ENTRY ZONE (L7 SUPPORT)"
+                                score += 35
+                            elif ltp >= levels["Level_5"]:
+                                zone = "🎯 TARGET 0.5 REACHED"
+                                score += 10
+                            
+                            # Momentum Factors (Volume & OI)
+                            if vol > 50000: score += 20
+                            if oi_chg > 0: score += 15
+                            if vol > 100000: score += 10 # Extra bonus for high liquidity
+                            
+                            # Normalize score to max 100
+                            final_score = min(100, score)
+                            
+                            # Potential Labeling
                             potential = "MODERATE"
-                            if vol > 50000 and oi_chg > 0: potential = "HIGH 🔥"
-                            elif vol > 100000: potential = "VERY HIGH 💎"
+                            if final_score >= 80: potential = "VERY HIGH 💎"
+                            elif final_score >= 50: potential = "HIGH 🔥"
 
                             strikes_pool.append({
                                 "strike": f"{int(strike)} {opt_type}",
                                 "ltp": ltp,
                                 "delta": round(delta, 2),
                                 "zone": zone,
+                                "score": final_score,
                                 "potential": potential,
                                 "levels": levels
                             })
