@@ -5,12 +5,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GVN Algo - User Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.5);
+            --bg-dark: #0f172a;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.1) 0px, transparent 50%);
+            color: #f8fafc;
             margin: 0;
             padding: 20px;
+            min-height: 100vh;
         }
 
         .container {
@@ -157,18 +171,33 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
-        /* 🚫 SCREENSHOT PROTECTION (CSS) */
-        @media print {
-            body { display: none !important; }
+        /* 🟢 LIVE HEARTBEAT INDICATOR */
+        .heartbeat-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.6);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
         }
-        {% if not user.is_admin %}
-        body {
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
         }
-        {% endif %}
+        .dot-green { background: #10b981; box-shadow: 0 0 10px #10b981; animation: blink-green 1.5s infinite; }
+        .dot-red { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        
+        @keyframes blink-green {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 
@@ -197,7 +226,7 @@
             </p>
         </div>
 
-        <div class="header" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #00c853; background: #f0fff4;{% else %}border-top: 5px solid #1a73e8;{% endif %}">
+        <div class="header glass-panel" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #10b981; background: rgba(16, 185, 129, 0.05);{% else %}border-top: 5px solid var(--primary);{% endif %}">
             <div>
                 {% if user.user_type == 'DEMO' %}
                 <span class="demo-badge">DEMO ACCOUNT (Testing)</span>
@@ -281,7 +310,7 @@
             .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
         </style>
 
-        <div class="card" style="margin-top: 30px; border-top: 6px solid #6366f1; background: linear-gradient(to bottom, #ffffff, #f8f9ff); position: relative; overflow: hidden;">
+        <div class="card glass-panel" style="margin-top: 30px; border-top: 6px solid var(--primary); background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(99,102,241,0.05)); position: relative; overflow: hidden;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin: 0; color: #4f46e5; font-size: 1.4rem;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
                 <div style="display: flex; gap: 5px; background: #f3f4f6; padding: 4px; border-radius: 10px;">
@@ -290,7 +319,11 @@
                     <button class="index-tab" onclick="switchIndex('FINNIFTY')">FINNIFTY</button>
                     <button class="index-tab" onclick="switchIndex('SENSEX')">SENSEX</button>
                 </div>
-                <div style="text-align: right;">
+                <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                    <div id="nse-heartbeat" class="heartbeat-container">
+                        <span id="heartbeat-dot" class="dot dot-red"></span>
+                        <span id="heartbeat-text" style="color: #94a3b8;">NSE ENGINE OFFLINE</span>
+                    </div>
                     <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Updating Live...</span>
                 </div>
             </div>
@@ -391,7 +424,39 @@
                             `;
                         });
                         body.innerHTML = html;
-                        document.getElementById('scanner-timer').innerText = "Last Updated: " + result.data.last_updated;
+                        
+                        // --- LIVE HEARTBEAT LOGIC ---
+                        const lastUpdatedStr = result.data.last_updated;
+                        const heartbeatDot = document.getElementById('heartbeat-dot');
+                        const heartbeatText = document.getElementById('heartbeat-text');
+                        const timerSpan = document.getElementById('scanner-timer');
+
+                        if (lastUpdatedStr) {
+                            timerSpan.innerText = "Last Updated: " + lastUpdatedStr;
+                            
+                            // Check if "Last Updated" is within the last 60 seconds
+                            const now = new Date();
+                            const [h, m, s] = lastUpdatedStr.split(':').map(Number);
+                            const lastUpdDate = new Date();
+                            lastUpdDate.setHours(h, m, s);
+                            
+                            const diffSeconds = Math.abs((now - lastUpdDate) / 1000);
+                            
+                            if (diffSeconds < 60) {
+                                heartbeatDot.className = "dot dot-green";
+                                heartbeatText.innerText = "LIVE NSE FEED";
+                                heartbeatText.style.color = "#10b981";
+                            } else {
+                                heartbeatDot.className = "dot dot-red";
+                                heartbeatText.innerText = "DATA STALE (DELAY)";
+                                heartbeatText.style.color = "#f59e0b";
+                            }
+                        } else {
+                            heartbeatDot.className = "dot dot-red";
+                            heartbeatText.innerText = "NSE ENGINE OFFLINE";
+                            heartbeatText.style.color = "#ef4444";
+                            timerSpan.innerText = "Connecting to NSE...";
+                        }
                     });
             }
             setInterval(updateScanner, 10000);
@@ -399,7 +464,7 @@
         </script>
 
         <!-- History Section for Today -->
-        <div class="card" style="margin-top: 30px;">
+        <div class="card glass-panel" style="margin-top: 30px;">
             <h3>⚡ Today's Live Signals (Auto deletes tomorrow)</h3>
             <table style="width:100%; border-collapse: collapse; margin-top:15px; text-align: left;">
                 <tr style="background:#1a73e8; color:white;">
