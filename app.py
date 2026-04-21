@@ -838,20 +838,31 @@ def tv_webhook():
     # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
-    if "NIFTY" in symbol and "SPOT" in symbol.upper():
+    # Index detection (Indices are usually NIFTY, BANKNIFTY, FINNIFTY, SENSEX)
+    is_index = any(idx == symbol.upper() for idx in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "NIFTY50"]) or "SPOT" in symbol.upper()
+    
+    if is_index:
         
         # --- 🌟 LIVE DIRECT NSE DATA LOGIC ---
         # Get the mathematically verified Delta 60 Option from our background thread!
-        opt_type = "CE" if txn_type == "BUY" else "PE" # In reality based on GVN algo signal
-        live_strike = nse_option_chain.current_delta_60_strikes.get(opt_type)
+        opt_type = "CE" if txn_type == "BUY" else "PE" 
+        
+        # Determine base index name for lookup
+        lookup_symbol = "NIFTY"
+        if "BANK" in symbol.upper(): lookup_symbol = "BANKNIFTY"
+        elif "FIN" in symbol.upper(): lookup_symbol = "FINNIFTY"
+        elif "SENSEX" in symbol.upper(): lookup_symbol = "SENSEX"
+        
+        index_strikes = nse_option_chain.current_delta_60_strikes.get(lookup_symbol, {})
+        live_strike = index_strikes.get(opt_type)
         
         if live_strike:
-            simulated_strike = f"NIFTY {live_strike} {opt_type}"
-            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike}."
+            simulated_strike = f"{lookup_symbol} {live_strike} {opt_type}"
+            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike} for {lookup_symbol}."
         else:
             # Fallback just in case background thread hasn't finished first run
-            simulated_strike = f"NIFTY {int(price//100 * 100)} {opt_type}"
-            reason_msg = "Fallback: Direct Delta 60 NSE calculation still booting..."
+            simulated_strike = f"{lookup_symbol} {int(price//100 * 100)} {opt_type}"
+            reason_msg = f"Fallback: Direct Delta 60 NSE calculation for {lookup_symbol} still booting..."
         
         # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
         active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
