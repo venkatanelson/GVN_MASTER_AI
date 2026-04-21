@@ -21,7 +21,7 @@
             background-image: 
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
                 radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.1) 0px, transparent 50%);
-            color: #f8fafc;
+            color: #ffffff; /* 🌟 Brightened Text */
             margin: 0;
             padding: 20px;
             min-height: 100vh;
@@ -256,7 +256,12 @@
                         {{ '🟢 ' + user.algo_status + ' (Click to Pause)' if user.algo_status == "ON" else '🔴 ' + user.algo_status + ' (Click to Start)' }}
                     </button>
                 </a>
-                <p style="margin: 5px 0 0 0; font-size: 11px; color: #666;">(Stops execution & Closes positions)</p>
+                <p style="margin: 5px 0 0 0; font-size: 11px; color: #94a3b8;">(Stops execution & Closes positions)</p>
+                {% if user.is_admin %}
+                <div style="margin-top: 10px;">
+                    <a href="/admin/refresh-data-feed" style="text-decoration: none; padding: 4px 10px; background: #6366f1; color: white; border-radius: 5px; font-size: 10px; font-weight: bold; text-transform: uppercase;">⚡ Refresh Data Feed</a>
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -343,17 +348,17 @@
                 {% endif %}
                 
                 <div class="{% if user.is_locked %}locked-blur{% endif %}" style="overflow-x: auto; margin-top: 20px;">
-                    <table id="gvn-scanner-table" style="width:100%; border-collapse: separate; border-spacing: 0 8px; text-align: left; font-size: 13.5px;">
+                    <table id="gvn-scanner-table" style="width:100%; border-collapse: separate; border-spacing: 0 8px; text-align: left; font-size: 14px;">
                         <thead>
-                            <tr style="color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">
-                                <th style="padding:10px 15px;">Option Strike</th>
-                                <th style="padding:10px 15px;">LTP & Delta</th>
-                                <th style="padding:10px 15px;">GVN Master Alpha Grid</th>
-                                <th style="padding:10px 15px;">Potential Score</th>
+                            <tr style="color: #cbd5e1; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; border-bottom: 2px solid rgba(255,255,255,0.1);">
+                                <th style="padding:12px 15px;">Option Strike</th>
+                                <th style="padding:12px 15px;">LTP & Delta</th>
+                                <th style="padding:12px 15px;">GVN Alpha Grid</th>
+                                <th style="padding:12px 15px;">Potential Score</th>
                             </tr>
                         </thead>
                         <tbody id="scanner-body">
-                            <tr><td colspan="4" style="text-align:center; padding:30px; color:#9ca3af; font-style: italic;">Synchronizing with NSE Data Engine...</td></tr>
+                            <tr><td colspan="4" style="text-align:center; padding:40px; color:#94a3b8; font-weight: 600;">📡 Connecting to GVN Cloud Engine...</td></tr>
                         </tbody>
                     </table>
                 </div>
