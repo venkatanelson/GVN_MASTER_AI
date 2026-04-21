@@ -36,10 +36,14 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #fff;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            border-bottom: 3px solid var(--primary);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
         .pnl-dashboard {
