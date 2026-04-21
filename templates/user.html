@@ -10,8 +10,8 @@
         :root {
             --primary: #6366f1;
             --primary-glow: rgba(99, 102, 241, 0.5);
-            --bg-dark: #0f172a;
-            --card-bg: rgba(255, 255, 255, 0.03);
+            --bg-dark: #020617;
+            --card-bg: rgba(30, 41, 59, 0.7);
             --glass-border: rgba(255, 255, 255, 0.1);
         }
 
@@ -79,23 +79,23 @@
 
         .card {
             background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             padding: 25px;
             border-radius: 16px;
             border: 1px solid var(--glass-border);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
             margin-bottom: 25px;
         }
 
         h1, h2, h3, h4 {
-            color: #ffffff;
+            color: #ffffff !important;
             margin-top: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        p, label {
-            color: #cbd5e1;
-            line-height: 1.6;
+        p, label, span, div {
+            color: #e2e8f0;
         }
 
         input[type="text"],
@@ -103,12 +103,13 @@
         input[type="number"],
         select {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             margin: 10px 0;
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid var(--glass-border);
-            border-radius: 8px;
-            color: #fff;
+            background: rgba(15, 23, 42, 0.9) !important;
+            border: 1px solid rgba(99, 102, 241, 0.3) !important;
+            border-radius: 10px;
+            color: #ffffff !important;
+            font-size: 14px;
             font-family: 'Outfit', sans-serif;
             box-sizing: border-box;
         }
@@ -466,47 +467,47 @@
         <div class="card glass-panel" style="margin-top: 30px;">
             <h3>⚡ Today's Live Signals (Auto deletes tomorrow)</h3>
             <table style="width:100%; border-collapse: collapse; margin-top:15px; text-align: left;">
-                <tr style="background:#1a73e8; color:white;">
-                    <th style="padding:10px;">Time</th>
-                    <th style="padding:10px;">Symbol</th>
-                    <th style="padding:10px;">Status</th>
-                    <th style="padding:10px;">Entry</th>
-                    <th style="padding:10px;">Exit</th>
-                    <th style="padding:10px;">P&L (₹)</th>
-                    <th style="padding:10px;">Action</th>
+                <tr style="background: linear-gradient(90deg, #4f46e5, #6366f1); color: white;">
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Time</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Symbol</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Status</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Entry</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Exit</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">P&L (₹)</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Action</th>
                 </tr>
                 {% for t in parsed_trades %}
-                <tr style="border-bottom:1px solid #ddd; background: {% if t.status == 'Running' %}#fffde7{% else %}#fff{% endif %};">
-                    <td style="padding:10px;">{{ t.time }}</td>
-                    <td style="padding:10px;">
+                <tr style="background: rgba(15, 23, 42, 0.6); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding:15px; color: #fff;">{{ t.time }}</td>
+                    <td style="padding:15px;">
                         {% if user.is_locked %}
                             <span class="locked-data">NIFTY OPTIONS (Hidden)</span> 🔒
                         {% else %}
-                            <b>{{ t.symbol }}</b> ({{ t.type }})
+                            <b style="color: #6366f1;">{{ t.symbol }}</b> <span style="color: #94a3b8;">({{ t.type }})</span>
                         {% endif %}
                     </td>
-                    <td style="padding:10px;">
+                    <td style="padding:15px;">
                         {% if t.status == 'Running' %}
-                            <span style="background:orange; color:white; padding: 4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">Running</span>
+                            <span style="background: #f59e0b; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase;">Running</span>
                         {% else %}
-                            <span style="background:green; color:white; padding: 4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">Completed</span>
+                            <span style="background: #10b981; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase;">Completed</span>
                         {% endif %}
                     </td>
-                    <td style="padding:10px;">
+                    <td style="padding:15px; font-weight: 800; color: #fff;">
                         {% if user.is_locked %}
                             <span class="locked-data">₹ ***.**</span>
                         {% else %}
-                            {{ t.entry_price }}
+                            ₹ {{ t.entry_price }}
                         {% endif %}
                     </td>
-                    <td style="padding:10px;">
-                        {% if t.status == 'Running' %} - {% else %} {{ t.exit_price }} {% endif %}
+                    <td style="padding:15px; color: #cbd5e1;">
+                        {% if t.status == 'Running' %} - {% else %} ₹ {{ t.exit_price }} {% endif %}
                     </td>
-                    <td style="padding:10px;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
+                    <td style="padding:15px; font-weight: 800;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
                         {% if t.status == 'Running' %}
                             -
                         {% else %}
-                            {% if t.pnl > 0 %}+{% endif %}{{ "%.2f"|format(t.pnl) }}
+                            {% if t.pnl > 0 %}+{% endif %}₹ {{ "%.2f"|format(t.pnl) }}
                         {% endif %}
                     </td>
                     <td style="padding:10px;">
@@ -519,7 +520,9 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="padding:20px; text-align:center; color: #dc3545">Waiting for today's market signals...</td>
+                    <td colspan="7" style="padding:40px; text-align:center; color: #f59e0b; font-weight: 800; font-size: 16px;">
+                        📡 Waiting for today's market signals...
+                    </td>
                 </tr>
                 {% endfor %}
             </table>
