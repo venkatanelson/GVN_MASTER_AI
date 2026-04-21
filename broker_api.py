@@ -7,6 +7,11 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
     Places an order via Dhan's TradingView Webhook Bridge.
     """
     try:
+        # 🌟 SMART: If secret_key is missing, try to extract it from the URL
+        if not secret_key and '/' in webhook_url:
+            secret_key = webhook_url.split('/')[-1]
+            print(f"[DHAN DEBUG] Extracted Secret Key from URL: {secret_key}")
+
         is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
         t_type = "B" if transaction_type.upper() == "BUY" else "S"
         
@@ -23,12 +28,16 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             "price": "0"
         }
         
-        resp = requests.post(webhook_url, json=payload, timeout=5)
-        print(f"[DHAN WEBHOOK] Symbol: {symbol} | Status: {resp.status_code} | Resp: {resp.text}")
+        resp = requests.post(webhook_url, json=payload, timeout=8)
+        print(f"[DHAN WEBHOOK] URL: {webhook_url[:40]}... | Status: {resp.status_code} | Resp: {resp.text}")
+        
+        if resp.status_code != 200:
+            print(f"❌ [DHAN REJECTION] Broker returned status {resp.status_code}. Check your URL or Secret Key.")
+            
         return resp.status_code == 200
         
     except Exception as e:
-        print(f"[DHAN WEBHOOK ERROR] Exception: {str(e)}")
+        print(f"❌ [DHAN WEBHOOK CRITICAL ERROR] {str(e)}")
         return False
 
 def place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity, price=0.0):
@@ -77,6 +86,8 @@ def place_dhan_official_api_order(client_id, access_token, symbol, txn_type, qty
         print(f"[DHAN API RESP] {order}")
         return order.get('status') == 'success' or order.get('remarks') == 'Order Created'
     except Exception as e:
+        if "DH-905" in str(e) or "Invalid IP" in str(e):
+            print("⚠️ [DHAN API ALERT] Your API Key is restricted by IP. Please go to Dhan Developer Portal and set 'Access IP' to 'Any' (0.0.0.0/0).")
         print(f"[DHAN API ERROR] {e}")
         return False
 
