@@ -71,6 +71,13 @@ def calculate_delta(S, K, T, r, sigma, option_type):
     else:
         return norm_cdf(d1) - 1.0
 
+# Global memory for Dhan Master Token (Updated by app.py)
+dhan_master_config = {
+    "client_id": None,
+    "access_token": None,
+    "active": False
+}
+
 # --- NSE Data Fetching ---
 # Global session to maintain cookies
 nse_session = requests.Session()
@@ -93,14 +100,46 @@ def fetch_nse_option_chain(symbol="NIFTY"):
         response = nse_session.get(url, headers=nse_headers, timeout=10)
         if response.status_code == 200:
             return response.json()
+        elif response.status_code == 403 or response.status_code == 401:
+            # Try Dhan Fallback if NSE is blocked
+            return fetch_from_dhan_fallback(symbol)
         else:
             with open("nse_status.log", "a") as f:
                 f.write(f"{datetime.now()}: [ERROR] {symbol} Fetch Failed. Status: {response.status_code}\n")
-            return None
+            return fetch_from_dhan_fallback(symbol)
+    except Exception as e:
+        return fetch_from_dhan_fallback(symbol)
+
+def fetch_from_dhan_fallback(symbol):
+    """Fallback to Dhan API if NSE website is blocked."""
+    if not dhan_master_config["active"] or not dhan_master_config["access_token"]:
+        return None
+        
+    from dhanhq import dhanhq
+    try:
+        dhan = dhanhq(dhan_master_config["client_id"], dhan_master_config["access_token"])
+        
+        # Security IDs for Indices in Dhan
+        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27"}
+        sid = sec_ids.get(symbol)
+        if not sid: return None
+        
+        quote = dhan.get_quote(sid)
+        if quote.get('status') == 'success':
+            lp = quote['data'].get('lastPrice', 0)
+            # Create a mock NSE-style response for basic spot tracking
+            return {
+                "records": {
+                    "underlyingValue": lp,
+                    "expiryDates": [], # Fallback doesn't have full chain yet
+                    "data": []
+                },
+                "source": "DHAN_API"
+            }
     except Exception as e:
         with open("nse_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [EXCEPTION] {symbol}: {str(e)}\n")
-        return None
+            f.write(f"{datetime.now()}: [DHAN FALLBACK ERROR] {str(e)}\n")
+    return None
 
 def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     global current_delta_60_strikes, gvn_scanner_data
@@ -198,7 +237,10 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     # Sort & Truncate
     gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
-    gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S")
+    
+    # Mark source
+    source = data.get("source", "NSE_WEB")
+    gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S") + f" ({source})"
 
 def nse_background_worker():
     print("🚀 [NSE Worker] Thread Started Successfully.")
