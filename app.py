@@ -21,31 +21,6 @@ from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
 
 app = Flask(__name__)
 
-# Start the NSE Option Chain Background Tracker
-nse_option_chain.start_nse_worker()
-
-def sync_admin_dhan_to_worker():
-    """Finds the admin's Dhan API key and shares it with the NSE background worker."""
-    with app.app_context():
-        try:
-            admin = User.query.filter_by(email='nelsonp143@gmail.com').first()
-            if admin:
-                conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
-                if conf and conf.client_id and conf.encrypted_access_token:
-                    token = cipher.decrypt(conf.encrypted_access_token).decode()
-                    nse_option_chain.dhan_master_config.update({
-                        "client_id": conf.client_id,
-                        "access_token": token,
-                        "active": True
-                    })
-                    print(f"✅ [DHAN SYNC] Master Data Feed linked to Admin: {admin.username}")
-        except Exception as e:
-            print(f"❌ [DHAN SYNC ERROR] {e}")
-
-# Initial Sync
-sync_admin_dhan_to_worker()
-
-
 # Basic app config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31) # 🌟 NEW: Auto-login lasts 1 month
@@ -986,13 +961,13 @@ def tv_webhook():
                                 )
                         except Exception as e:
                             pass
-
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
                 new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=user_execution_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
                 db.session.add(new_trade)
                 trade_executed = True
+
         
         elif txn_type == "SELL":
             active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
@@ -1501,5 +1476,31 @@ threading.Thread(target=auto_square_off_task, daemon=True).start()
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    port = int(os.environ.get("PORT", 5000))
+def sync_admin_dhan_to_worker():
+    """Finds the admin's Dhan API key and shares it with the NSE background worker."""
+    with app.app_context():
+        try:
+            admin = User.query.filter_by(email='nelsonp143@gmail.com').first()
+            if admin:
+                conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
+                if conf and conf.client_id and conf.encrypted_access_token:
+                    token = cipher.decrypt(conf.encrypted_access_token).decode()
+                    nse_option_chain.dhan_master_config.update({
+                        "client_id": conf.client_id,
+                        "access_token": token,
+                        "active": True
+                    })
+                    print(f"✅ [DHAN SYNC] Master Data Feed linked to Admin: {admin.username}")
+        except Exception as e:
+            print(f"❌ [DHAN SYNC ERROR] {e}")
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        # Start workers
+        nse_option_chain.start_nse_worker()
+        sync_admin_dhan_to_worker()
+        
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
