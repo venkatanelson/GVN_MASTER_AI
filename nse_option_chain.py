@@ -229,6 +229,10 @@ def nse_background_worker():
         time.sleep(10)
 
 def start_nse_worker():
+    # Immediate log to verify thread start
+    with open("nse_status.log", "w") as f:
+        f.write(f"{datetime.now()}: [INIT] NSE AI Engine Thread Initialized.\n")
+        
     thread = threading.Thread(target=nse_background_worker, daemon=True)
     thread.start()
     print("[NSE AI Engine] Started Live Fibonacci Polling...")
