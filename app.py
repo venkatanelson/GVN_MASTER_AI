@@ -976,7 +976,25 @@ def tv_webhook():
             
             user_execution_qty = 0 # Default if no trades found
             for at in active_trades:
-                exit_val = price if price > 0.0 else at.entry_price
+                live_price = 0.0
+                symbol_key = at.symbol.upper()
+                
+                # 🌟 NEW: Check NSE Engine first, then Dhan API Fallback
+                for idx, strikes in nse_option_chain.all_live_data.items():
+                    if symbol_key in strikes:
+                        live_price = strikes[symbol_key].get('ltp', 0.0)
+                        break
+                
+                # If still 0, try a direct fetch from Dhan for this specific symbol
+                if live_price == 0 and nse_option_chain.dhan_master_config.get('active'):
+                    try:
+                        # Minimal fetch from Dhan for the specific symbol
+                        live_price = nse_option_chain.fetch_from_dhan_fallback(symbol_key)
+                        print(f"[DHAN LIVE SYNC] Fetched manual exit price for {symbol_key}: {live_price}")
+                    except:
+                        pass
+
+                exit_val = price if price > 0.0 else (live_price if live_price > 0 else at.entry_price)
                 at.exit_price = exit_val
                 at.pnl = (exit_val - at.entry_price) * at.quantity
                 at.status = "Closed"
