@@ -109,9 +109,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     T = days_to_expiry / 365.0  
     r = 0.07 
 
-    strikes_pool = []
+    # Reset scanner data for this symbol
+    gvn_scanner_data[symbol] = []
     
-    # Delta 60 logic remains for main execution
     best_ce_60 = None
     best_pe_60 = None
     closest_ce_diff = 1.0
@@ -126,93 +126,63 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                     opt = item[opt_type]
                     ltp = opt.get("lastPrice", 0)
                     iv = opt.get("impliedVolatility", 0)
-                    vol = opt.get("totalTradedVolume", 0)
-                    oi_chg = opt.get("changeinOpenInterest", 0)
                     
                     key = f"{int(strike)}_{opt_type}"
                     live_option_ltps[key] = ltp
                     
-                    # History for Balloon Pressure
-                    if key not in option_ltp_history: option_ltp_history[key] = []
-                    option_ltp_history[key].append(ltp)
-                    if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
+                    # Calculate Delta with Fallback
+                    effective_iv = iv if iv > 0 else 18.0
+                    delta = 0
+                    try:
+                        delta = abs(calculate_delta(underlying_value, strike, T, r, effective_iv/100.0, opt_type))
+                    except:
+                        delta = 0
 
-                    if iv > 0:
-                        sigma = iv / 100.0
-                        delta = abs(calculate_delta(underlying_value, strike, T, r, sigma, opt_type))
+                    # --- 🌟 DELTA 60 SELECTION ---
+                    if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
+                        if opt_type == "CE":
+                            closest_ce_diff = abs(delta - 0.60)
+                            best_ce_60 = strike
+                        else:
+                            closest_pe_diff = abs(delta - 0.60)
+                            best_pe_60 = strike
+                    
+                    # --- 🚀 ZERO TO HERO SCANNER ---
+                    if 0.15 <= delta <= 0.55: 
+                        h915 = ltp * 1.05 
+                        l915 = ltp * 0.95
+                        levels = calculate_gvn_levels(h915, l915)
+                        score = 0
+                        zone = "NORMAL"
                         
-                        # --- 🌟 DELTA 60 SELECTION ---
-                        if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
-                            if opt_type == "CE":
-                                closest_ce_diff = abs(delta - 0.60)
-                                best_ce_60 = strike
-                            else:
-                                closest_pe_diff = abs(delta - 0.60)
-                                best_pe_60 = strike
+                        if delta >= 0.45: 
+                            if ltp <= levels["Level_7"]: zone, score = "🔥 ITM/ATM SUPPORT (L7)", 55
+                            elif ltp <= levels["Level_6"]: zone, score = "⚡ MOMENTUM ZONE (L6)", 35
+                        else:
+                            if ltp <= levels["Level_1"]: zone, score = "🚀 OTM BUY ZONE (L1)", 65
+                            elif ltp <= levels["Level_7"]: zone, score = "📡 RADAR ZONE (L7)", 25
                         
-                        # --- 🚀 ZERO TO HERO SCANNER (Delta 0.20 - 0.50) ---
-                        # --- 🚀 ZERO TO HERO SCANNER (Expanded Multi-Index) ---
-                        if 0.15 <= delta <= 0.55: # Slightly wider range for better ITM/OTM coverage
-                            h915 = ltp * 1.05 
-                            l915 = ltp * 0.95
-                            levels = calculate_gvn_levels(h915, l915)
-                            
-                            score = 0
-                            zone = "NORMAL"
-                            
-                            # ITM/ATM Logic: Level 7 or Level 6
-                            if delta >= 0.45: 
-                                if ltp <= levels["Level_7"]:
-                                    zone = "🔥 ITM/ATM SUPPORT (L7)"
-                                    score += 55
-                                elif ltp <= levels["Level_6"]:
-                                    zone = "⚡ MOMENTUM ZONE (L6)"
-                                    score += 40
-                            # OTM Logic: Level 1 Rejection
-                            else:
-                                if ltp <= levels["Level_1"]: 
-                                    zone = "🚀 OTM BUY ZONE (L1)"
-                                    score += 60
-                                elif ltp <= levels["Level_7"]:
-                                    zone = "⚡ OTM ENTRY (L7)"
-                                    score += 30
-                            
-                            if vol > 50000: score += 15
-                            if oi_chg > 0: score += 10
-                            
-                            final_score = min(100, score)
-                            potential = "MODERATE"
-                            if final_score >= 80: potential = "VERY HIGH 💎"
-                            elif final_score >= 50: potential = "HIGH 🔥"
-
-                            strikes_pool.append({
+                        if score > 0:
+                            gvn_scanner_data[symbol].append({
                                 "strike": f"{int(strike)} {opt_type}",
                                 "ltp": ltp,
                                 "delta": round(delta, 2),
+                                "score": score,
                                 "zone": zone,
-                                "score": final_score,
-                                "potential": potential,
+                                "potential": "HIGH" if score >= 60 else "MODERATE",
                                 "levels": levels
                             })
 
-    # Update Global Memory for this specific symbol
+    # Update Global Strikes
     if best_ce_60 and best_pe_60:
-        if symbol not in current_delta_60_strikes:
-            current_delta_60_strikes[symbol] = {}
-        current_delta_60_strikes[symbol]["CE"] = int(best_ce_60)
-        current_delta_60_strikes[symbol]["PE"] = int(best_pe_60)
+        current_delta_60_strikes[symbol] = {"CE": int(best_ce_60), "PE": int(best_pe_60)}
         current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
-    # Sort and take top 5 CE and 5 PE for scanner
-    ce_strikes = sorted([s for s in strikes_pool if "CE" in s["strike"]], key=lambda x: x["delta"], reverse=True)[:5]
-    pe_strikes = sorted([s for s in strikes_pool if "PE" in s["strike"]], key=lambda x: x["delta"], reverse=True)[:5]
+    # Sort & Truncate Scanner
+    gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
+    gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S")
     
-    gvn_scanner_data[symbol] = ce_strikes + pe_strikes
-    gvn_scanner_data["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    print(f"[NSE SCANNER] {symbol} Updated | Strikes Monitored: {len(gvn_scanner_data[symbol])}")
-    with open("nse_status.log", "a") as f:
-        f.write(f"{datetime.now()}: {symbol} Updated | Strikes: {len(gvn_scanner_data[symbol])}\n")
+    print(f"📡 [NSE Worker] {symbol} Data Synced | Delta 60: CE={best_ce_60}, PE={best_pe_60}")
 
 def nse_background_worker():
     while True:
