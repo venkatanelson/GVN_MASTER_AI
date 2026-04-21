@@ -72,33 +72,46 @@ def calculate_delta(S, K, T, r, sigma, option_type):
         return norm_cdf(d1) - 1.0
 
 # --- NSE Data Fetching ---
+# Global session to maintain cookies
+nse_session = requests.Session()
+nse_headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br"
+}
+
 def fetch_nse_option_chain(symbol="NIFTY"):
+    # For SENSEX, we should use a different logic or skip if NSE-only
+    if symbol == "SENSEX": return None 
+    
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br"
-    }
     try:
-        session = requests.Session()
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        response = session.get(url, headers=headers, timeout=10)
+        # First hit the home page to get fresh cookies if needed
+        if not nse_session.cookies:
+            nse_session.get("https://www.nseindia.com", headers=nse_headers, timeout=10)
+        
+        response = nse_session.get(url, headers=nse_headers, timeout=10)
         if response.status_code == 200:
             return response.json()
-        return None
+        else:
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [ERROR] {symbol} Fetch Failed. Status: {response.status_code}\n")
+            return None
     except Exception as e:
-        print(f"[NSE API] Exception: {e}")
+        with open("nse_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [EXCEPTION] {symbol}: {str(e)}\n")
         return None
 
 def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     global current_delta_60_strikes, gvn_scanner_data
     
     data = fetch_nse_option_chain(symbol)
-    if not data or "records" not in data: return
+    if not data or "records" not in data: 
+        return
         
     records = data["records"]
-    underlying_value = records["underlyingValue"]
-    expiry_dates = records["expiryDates"]
+    underlying_value = records.get("underlyingValue", 0)
+    expiry_dates = records.get("expiryDates", [])
     if not expiry_dates: return
     nearest_expiry = expiry_dates[0]
     
@@ -117,9 +130,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     closest_ce_diff = 1.0
     closest_pe_diff = 1.0
 
-    for item in records["data"]:
-        if item["expiryDate"] == nearest_expiry:
-            strike = item["strikePrice"]
+    for item in records.get("data", []):
+        if item.get("expiryDate") == nearest_expiry:
+            strike = item.get("strikePrice")
             
             for opt_type in ["CE", "PE"]:
                 if opt_type in item:
@@ -130,7 +143,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                     key = f"{int(strike)}_{opt_type}"
                     live_option_ltps[key] = ltp
                     
-                    # Calculate Delta with Fallback
+                    # Update History for Balloon Pressure
+                    if key not in option_ltp_history: option_ltp_history[key] = []
+                    option_ltp_history[key].append(ltp)
+                    if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
+
+                    # Calculate Delta
                     effective_iv = iv if iv > 0 else 18.0
                     delta = 0
                     try:
@@ -138,7 +156,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                     except:
                         delta = 0
 
-                    # --- 🌟 DELTA 60 SELECTION ---
+                    # 🌟 DELTA 60 SELECTION
                     if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
                         if opt_type == "CE":
                             closest_ce_diff = abs(delta - 0.60)
@@ -147,7 +165,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                             closest_pe_diff = abs(delta - 0.60)
                             best_pe_60 = strike
                     
-                    # --- 🚀 ZERO TO HERO SCANNER ---
+                    # 🚀 ZERO TO HERO SCANNER
                     if 0.15 <= delta <= 0.55: 
                         h915 = ltp * 1.05 
                         l915 = ltp * 0.95
@@ -178,31 +196,38 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         current_delta_60_strikes[symbol] = {"CE": int(best_ce_60), "PE": int(best_pe_60)}
         current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
-    # Sort & Truncate Scanner
+    # Sort & Truncate
     gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
     gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S")
-    
-    print(f"📡 [NSE Worker] {symbol} Data Synced | Delta 60: CE={best_ce_60}, PE={best_pe_60}")
 
 def nse_background_worker():
+    print("🚀 [NSE Worker] Thread Started Successfully.")
     while True:
         try:
             with open("nse_status.log", "a") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse...\n")
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
+            
+            # Note: SENSEX is removed as it's not an NSE index
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
                 analyze_and_update_gvn_scanner(symbol)
-                time.sleep(2) 
+                time.sleep(3) # Respect NSE rate limits
+                
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
             with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: ERROR: {str(e)}\n")
-        time.sleep(10)
+                f.write(f"{datetime.now()}: FATAL ERROR: {str(e)}\n")
+        
+        time.sleep(15)
 
 def start_nse_worker():
-    # Immediate log to verify thread start
+    # Force reset session to clear stale cookies
+    global nse_session
+    nse_session = requests.Session()
+    
     with open("nse_status.log", "w") as f:
         f.write(f"{datetime.now()}: [INIT] NSE AI Engine Thread Initialized.\n")
         
     thread = threading.Thread(target=nse_background_worker, daemon=True)
     thread.start()
     print("[NSE AI Engine] Started Live Fibonacci Polling...")
+
