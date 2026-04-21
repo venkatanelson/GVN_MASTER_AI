@@ -22,10 +22,8 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             "orderType": "MKT",
             "quantity": str(quantity),
             "exchange": "NFO" if is_nfo else "NSE",
-            "symbol": symbol,
-            "instrument": "OPTIDX" if is_nfo else "EQ",
-            "productType": "M",
-            "price": "0"
+            "symbol": symbol.upper(),
+            "productType": "M"
         }
         
         resp = requests.post(webhook_url, json=payload, timeout=8)
