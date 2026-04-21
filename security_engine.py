@@ -95,7 +95,7 @@ class SecurityShield:
         # 5 requests per minute for login/webhook routes
         limit = 60
         if request.path in ['/login', '/tv-webhook', '/demo-register']:
-            limit = 10
+            limit = 30 # Increased to prevent blocking multiple concurrent strategy alerts
             
         # If Attack Mode is ON (AI Fever), reduce limits by 50%
         if self.attack_mode:
