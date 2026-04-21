@@ -88,13 +88,16 @@ def execute_broker_order_async(broker_name, webhook_url, secret_key, symbol, tra
         print(f"🚀 Executing Trade for {user_name} -> Broker: {broker_name} | {transaction_type} {quantity} {symbol}")
         
         success = False
-        if broker_name.lower() == 'dhan' and client_id and access_token:
-            success = place_dhan_official_api_order(client_id, access_token, symbol, transaction_type, quantity)
-            if not success:
-                print("[DHAN] API failed, falling back to Webhook Bridge...")
+        if broker_name.lower() == 'dhan':
+            # Priority: Try Webhook Bridge first for text symbols (highly reliable for Dhan)
+            if webhook_url and secret_key:
+                print(f"[DHAN] Using Webhook Bridge for {symbol}...")
                 success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
-        elif broker_name.lower() == 'dhan':
-            success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
+            
+            # Fallback to API if Webhook fails or URL is missing
+            if not success and client_id and access_token:
+                print(f"[DHAN] Falling back to Official API for {symbol}...")
+                success = place_dhan_official_api_order(client_id, access_token, symbol, transaction_type, quantity)
         else:
             success = place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
             
