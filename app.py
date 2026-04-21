@@ -650,9 +650,47 @@ def admin_refresh_data_feed():
 def square_off_user_trades(user, reason, manual_price=None):
     active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
     if not active_trades: return
+    
+    # 🌟 NEW: Try to get fresh prices from Dhan if NSE is blocked
+    dhan_prices = {}
+    if not manual_price and user.user_type == 'REAL' and user.is_approved:
+        try:
+            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                from dhanhq import dhanhq
+                dhan = dhanhq(broker_conf.client_id, access_token)
+                pos_resp = dhan.get_positions()
+                if pos_resp.get('status') == 'success':
+                    for p in pos_resp.get('data', []):
+                        # Map Dhan symbol to our format if possible, or use securityId
+                        dhan_prices[p.get('tradingSymbol')] = float(p.get('lastTradedPrice', 0))
+        except Exception as e:
+            print(f"[DHAN P&L FALLBACK ERROR] {e}")
+
     for t in active_trades:
         t.status = 'Closed'
-        t.exit_price = float(manual_price) if manual_price else t.entry_price
+        
+        # Determine exit price: Manual > Dhan positions > NSE memory > Entry (break-even)
+        exit_p = float(manual_price) if manual_price else 0.0
+        if exit_p == 0.0:
+            # Try Dhan Positions match (Note: Dhan symbols might vary, this is a best-effort match)
+            exit_p = dhan_prices.get(t.symbol, 0.0)
+            
+        if exit_p == 0.0:
+            # Try NSE memory from nse_option_chain
+            import re
+            strike_match = re.search(r'(\d+)', t.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
+                key = f"{strike}_{opt_type}"
+                exit_p = nse_option_chain.live_option_ltps.get(key, 0.0)
+        
+        if exit_p == 0.0:
+            exit_p = t.entry_price # Final fallback to break-even
+            
+        t.exit_price = exit_p
         t.pnl = (t.exit_price - t.entry_price) * t.quantity
         
         if user.user_type == 'REAL' and user.is_approved:
@@ -703,12 +741,44 @@ def force_close_trade(trade_id):
         return "Unauthorized", 403
     
     if trade.status == 'Running':
+        user = User.query.get(user_id)
+        
+        # 🌟 NEW: Fetch real-time price for accurate P&L on Force Close
+        exit_p = 0.0
+        
+        # 1. Try Dhan positions if REAL user
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+                if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                    access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                    from dhanhq import dhanhq
+                    dhan = dhanhq(broker_conf.client_id, access_token)
+                    pos_resp = dhan.get_positions()
+                    if pos_resp.get('status') == 'success':
+                        for p in pos_resp.get('data', []):
+                            if p.get('tradingSymbol') == trade.symbol:
+                                exit_p = float(p.get('lastTradedPrice', 0))
+                                break
+            except: pass
+            
+        # 2. Try NSE Memory if price not found yet
+        if exit_p == 0.0:
+            import re
+            strike_match = re.search(r'(\d+)', trade.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+                exit_p = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+        
+        # 3. Final fallback to entry
+        if exit_p == 0.0: exit_p = trade.entry_price
+
         trade.status = 'Closed'
-        trade.exit_price = trade.entry_price # Marking as break-even on manual close or close at last known
-        trade.pnl = 0.0 # Or calculate based on dummy price if available
+        trade.exit_price = exit_p
+        trade.pnl = (trade.exit_price - trade.entry_price) * trade.quantity
         
         # 🌟 Forward SELL to Broker if REAL
-        user = User.query.get(user_id)
         if user.user_type == 'REAL' and user.is_approved:
             try:
                 broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
@@ -1491,10 +1561,6 @@ def auto_square_off_task():
 # Start background thread
 threading.Thread(target=auto_square_off_task, daemon=True).start()
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    port = int(os.environ.get("PORT", 5000))
 def sync_admin_dhan_to_worker():
     """Finds the admin's Dhan API key and shares it with the NSE background worker."""
     with app.app_context():
@@ -1520,5 +1586,5 @@ if __name__ == '__main__':
         nse_option_chain.start_nse_worker()
         sync_admin_dhan_to_worker()
         
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5005))
     app.run(host='0.0.0.0', port=port, debug=True)
