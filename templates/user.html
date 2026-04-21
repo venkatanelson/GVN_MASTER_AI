@@ -78,59 +78,58 @@
         }
 
         .card {
-            background: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 25px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #ffffff;
+            margin-top: 0;
+        }
+
+        p, label {
+            color: #cbd5e1;
+            line-height: 1.6;
         }
 
         input[type="text"],
         input[type="password"],
-        input[type="number"] {
-            width: 90%;
-            padding: 10px;
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 12px;
             margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+            box-sizing: border-box;
         }
 
         .btn-buy {
-            background: #007bff;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            padding: 12px 24px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 800;
             text-decoration: none;
-        }
-
-        .status-btn {
-            padding: 10px 30px;
-            border-radius: 25px;
-            border: none;
-            font-weight: bold;
-        }
-
-        .on {
-            background: #28a745;
-            color: white;
-        }
-
-        .off {
-            background: #dc3545;
-            color: white;
-        }
-
-        .demo-badge {
-            background: #ff9800;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 15px;
             display: inline-block;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .btn-buy:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px var(--primary-glow);
         }
 
         /* 🔒 NEW: Blur for Locked Signals */
@@ -138,7 +137,7 @@
             filter: blur(5px);
             user-select: none;
             pointer-events: none;
-            color: #888;
+            color: #64748b;
         }
         
         .unlock-banner {
@@ -226,34 +225,29 @@
             </p>
         </div>
 
-        <div class="header glass-panel" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #10b981; background: rgba(16, 185, 129, 0.05);{% else %}border-top: 5px solid var(--primary);{% endif %}">
-            <div>
+        <div class="header card" style="{% if user.user_type == 'REAL' %}border-top: 5px solid #10b981; background: rgba(16, 185, 129, 0.05);{% else %}border-top: 5px solid var(--primary);{% endif %}">
+            <div style="flex: 1;">
                 {% if user.user_type == 'DEMO' %}
-                <span class="demo-badge">DEMO ACCOUNT (Testing)</span>
+                <span class="demo-badge" style="background: #f59e0b; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800;">DEMO ACCOUNT</span>
                 {% else %}
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                    <span class="demo-badge" style="background: #00c853;">LIVE REAL ACCOUNT</span>
+                    <span class="demo-badge" style="background: #10b981; color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800;">LIVE REAL ACCOUNT</span>
                     {% if broker_config %}
-                    <span style="color: #00c853; font-weight: bold; font-size: 13px;">● Dhan Broker Connected ✅</span>
+                    <span style="color: #10b981; font-weight: bold; font-size: 13px;">● Dhan Connected</span>
                     {% endif %}
                 </div>
                 {% endif %}
-                <h1 style="margin: 5px 0;">Welcome, {{ user.username }}</h1>
-                <p style="margin: 0; color: #555;">Email: {{ user.email }} | <b>Subscription: {{ remaining_days }} Days Left</b></p>
-                {% if user.user_type == 'DEMO' %}
-                <div style="display:flex; align-items:center; gap: 15px; margin-top: 5px;">
-                    <p style="margin: 0;"><b>Your Virtual Capital:</b> ₹ {{ user.demo_capital }}</p>
-                </div>
-                {% endif %}
+                <h1 style="margin: 10px 0; font-size: 1.8rem; font-weight: 800; color: #ffffff;">Welcome, {{ user.username }}</h1>
+                <p style="margin: 0; font-size: 14px; color: #cbd5e1;">Email: {{ user.email }} | <b style="color: var(--primary);">Subscription: {{ remaining_days }} Days Left</b></p>
             </div>
             <div style="text-align: right;">
-                <div style="margin-bottom: 20px;">
-                    <a href="/logout" style="text-decoration: none; padding: 6px 15px; background: #dc3545; color: white; border-radius: 20px; font-weight: bold; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">🚪 Logout</a>
+                <div style="margin-bottom: 15px;">
+                    <a href="/logout" style="text-decoration: none; padding: 6px 15px; background: #ef4444; color: white; border-radius: 20px; font-weight: bold; font-size: 12px;">🚪 Logout</a>
                 </div>
-                <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: bold; color: #333;">Master Algo Force Control</p>
+                <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Algo Force Control</p>
                 <a href="#" onclick="confirmToggle('{{ user.algo_status }}', '/toggle-algo/{{ user.id }}')" style="text-decoration: none;">
-                    <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}" style="box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%;">
-                        {{ '🟢 ' + user.algo_status + ' (Click to Pause)' if user.algo_status == "ON" else '🔴 ' + user.algo_status + ' (Click to Start)' }}
+                    <button class="btn-buy {{ 'on' if user.algo_status == 'ON' else 'off' }}" style="width: 100%; background: {{ '#10b981' if user.algo_status == 'ON' else '#ef4444' }};">
+                        {{ '🟢 ' + user.algo_status if user.algo_status == "ON" else '🔴 ' + user.algo_status }}
                     </button>
                 </a>
                 <p style="margin: 5px 0 0 0; font-size: 11px; color: #94a3b8;">(Stops execution & Closes positions)</p>
@@ -277,16 +271,16 @@
         <h2 style="margin-top: 30px;">📊 My 30-Day Performance Analyst</h2>
         <div style="position: relative;">
             <div class="pnl-dashboard" style="display:flex; flex-wrap: nowrap; overflow-x: auto; gap:15px; margin-top:20px; padding-bottom: 15px; scroll-behavior: smooth;">
-                <div class="pnl-card" style="flex: 0 0 auto; min-width: 150px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #ff9800; background-color: #fff8e1;">
-                    <h4 style="margin-top: 0; font-size: 15px; color: #ff9800;">TOTAL P&L (30 Days)</h4>
-                    <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px;">
+                <div class="pnl-card card" style="flex: 0 0 auto; min-width: 180px; border-top: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05);">
+                    <h4 style="margin-top: 0; font-size: 13px; color: #f59e0b; text-transform: uppercase;">TOTAL P&L (30 Days)</h4>
+                    <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px; font-weight: 800;">
                         ₹ {{ "%.2f"|format(pnl_total_30d) }}
                     </div>
                 </div>
                 {% for day in daily_history %}
-                <div class="pnl-card" style="flex: 0 0 auto; min-width: 120px; background: #fff; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-top: 4px solid #1a73e8;">
-                    <h4 style="margin-top: 0; font-size: 14px;">{{ day.date }}</h4>
-                    <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}">
+                <div class="pnl-card card" style="flex: 0 0 auto; min-width: 140px; border-top: 4px solid #6366f1;">
+                    <h4 style="margin-top: 0; font-size: 13px; color: #94a3b8;">{{ day.date }}</h4>
+                    <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 18px; font-weight: 700;">
                         ₹ {{ "%.2f"|format(day.pnl) }}
                     </div>
                 </div>
@@ -405,24 +399,24 @@
                             } catch(e) {}
 
                             html += `
-                                <tr style="background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-radius: 8px;">
-                                    <td style="padding:15px; border-radius: 8px 0 0 8px; font-weight: 800; color: #1f2937; border-left: 4px solid ${potColor};">
+                                <tr style="background: rgba(255,255,255,0.02); border-radius: 8px;">
+                                    <td style="padding:15px; border-radius: 8px 0 0 8px; font-weight: 800; color: #fff; border-left: 4px solid ${potColor};">
                                         ${item.strike}
                                     </td>
                                     <td style="padding:15px;">
-                                        <span style="font-size: 15px; font-weight: 700;">₹ ${item.ltp}</span><br>
-                                        <small style="color: #9ca3af; font-weight: 500;">Δ ${item.delta}</small>
+                                        <span style="font-size: 15px; font-weight: 800; color: #fff;">₹ ${item.ltp}</span><br>
+                                        <small style="color: #94a3b8; font-weight: 600;">Δ ${item.delta}</small>
                                     </td>
                                     <td style="padding:15px;">
                                         <span class="${isPulse ? 'pulse-buy' : ''}" style="background: ${zoneBg}; color: ${zoneColor}; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 11px; white-space: nowrap;">
                                             ${item.zone}
                                         </span>
-                                        <div class="progress-bar"><div class="progress-fill" style="width: ${progress}%; background: ${potColor};"></div></div>
+                                        <div class="progress-bar" style="background: rgba(255,255,255,0.1);"><div class="progress-fill" style="width: ${progress}%; background: ${potColor};"></div></div>
                                     </td>
                                     <td style="padding:15px; border-radius: 0 8px 8px 0;">
                                         <div style="display:flex; align-items:center; gap: 10px;">
-                                            <span style="font-weight: 900; color: ${potColor}; font-size: 14px;">${item.score}%</span>
-                                            <small style="color: #6b7280; font-weight: 600;">${item.potential}</small>
+                                            <span style="font-weight: 900; color: ${potColor}; font-size: 16px;">${item.score}%</span>
+                                            <small style="color: #94a3b8; font-weight: 700;">${item.potential}</small>
                                         </div>
                                     </td>
                                 </tr>
@@ -535,8 +529,8 @@
             {% if user.user_type == 'REAL' %}
             <div class="card">
                 <h3>🔢 Trade Quantity (Lot Size)</h3>
-                <div style="background: #fff8e1; padding: 12px; border-left: 4px solid #ff9800; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
-                    <p style="margin: 0;"><b>Select Quantity Multiplier:</b> Adjust this to trade with 1 Lot, 2 Lots, 3 Lots, etc. The default signal quantity will be multiplied by this number.</p>
+                <div style="background: rgba(245, 158, 11, 0.1); padding: 15px; border-left: 4px solid #f59e0b; font-size: 14px; margin-bottom: 20px; border-radius: 8px;">
+                    <p style="margin: 0; color: #fde68a;"><b>Quantity Multiplier:</b> Adjust this to trade with 1 Lot, 2 Lots, etc. The master signal will be multiplied by this factor.</p>
                 </div>
                 <form action="/update-lots" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
@@ -554,9 +548,9 @@
 
             <div class="card">
                 <h3>🔑 API Settings (Connect Broker)</h3>
-                <div style="background: #e8f0fe; padding: 12px; border-left: 4px solid #1a73e8; font-size: 13.5px; margin-bottom: 15px; border-radius: 4px; line-height: 1.6;">
-                    <p style="margin: 0 0 8px 0;"><b>💡 How to setup?</b></p>
-                    <p style="margin: 0; color: #444;">Select your broker and paste your Webhook URL & Secret Key correctly.</p>
+                <div style="background: rgba(99, 102, 241, 0.1); padding: 15px; border-left: 4px solid #6366f1; font-size: 14px; margin-bottom: 20px; border-radius: 8px;">
+                    <p style="margin: 0 0 8px 0; color: #c7d2fe;"><b>💡 How to setup?</b></p>
+                    <p style="margin: 0; color: #94a3b8;">Select your broker and securely enter your API credentials below.</p>
                 </div>
                 <form action="/save_api_settings" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
