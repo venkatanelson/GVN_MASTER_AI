@@ -663,6 +663,14 @@ def nse_log_api():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
+@app.route('/admin/refresh-data-feed')
+def admin_refresh_data_feed():
+    """Manually triggers the Dhan credential sync for the background worker."""
+    sync_admin_dhan_to_worker()
+    flash("⚡ GVN Master Data Feed has been manually refreshed with your latest Dhan keys!")
+    return redirect(url_for('user_dashboard', user_id=session.get('user_id')))
+
+
 
 def square_off_user_trades(user, reason, manual_price=None):
     active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
