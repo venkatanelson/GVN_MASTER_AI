@@ -4,10 +4,12 @@ import time
 from datetime import datetime
 import threading
 
-# Global memory to store the latest Delta 60 strikes
+# Global memory to store the latest Delta 60 strikes per index
 current_delta_60_strikes = {
-    "CE": None,
-    "PE": None,
+    "NIFTY": {"CE": None, "PE": None},
+    "BANKNIFTY": {"CE": None, "PE": None},
+    "FINNIFTY": {"CE": None, "PE": None},
+    "SENSEX": {"CE": None, "PE": None},
     "last_updated": None
 }
 
@@ -193,10 +195,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                                 "levels": levels
                             })
 
-    # Update Global Memory
+    # Update Global Memory for this specific symbol
     if best_ce_60 and best_pe_60:
-        current_delta_60_strikes["CE"] = int(best_ce_60)
-        current_delta_60_strikes["PE"] = int(best_pe_60)
+        if symbol not in current_delta_60_strikes:
+            current_delta_60_strikes[symbol] = {}
+        current_delta_60_strikes[symbol]["CE"] = int(best_ce_60)
+        current_delta_60_strikes[symbol]["PE"] = int(best_pe_60)
         current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
     # Sort and take top 5 CE and 5 PE for scanner
@@ -207,15 +211,21 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     gvn_scanner_data["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     print(f"[NSE SCANNER] {symbol} Updated | Strikes Monitored: {len(gvn_scanner_data[symbol])}")
+    with open("nse_status.log", "a") as f:
+        f.write(f"{datetime.now()}: {symbol} Updated | Strikes: {len(gvn_scanner_data[symbol])}\n")
 
 def nse_background_worker():
     while True:
         try:
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: NSE Worker Pulse...\n")
             for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                 analyze_and_update_gvn_scanner(symbol)
                 time.sleep(2) 
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: ERROR: {str(e)}\n")
         time.sleep(10)
 
 def start_nse_worker():
