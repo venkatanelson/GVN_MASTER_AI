@@ -629,6 +629,19 @@ def gvn_scanner_api():
         "delta_60": nse_option_chain.current_delta_60_strikes
     })
 
+@app.route('/api/nse-log')
+def nse_log_api():
+    """Returns the content of nse_status.log for debugging."""
+    try:
+        if os.path.exists('nse_status.log'):
+            with open('nse_status.log', 'r') as f:
+                lines = f.readlines()
+            return jsonify({"status": "success", "log": lines[-50:]}) # Last 50 lines
+        return jsonify({"status": "error", "message": "Log file not found."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
 def square_off_user_trades(user, reason, manual_price=None):
     active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
     if not active_trades: return
