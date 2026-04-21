@@ -54,12 +54,14 @@
 
         .pnl-card {
             flex: 1;
-            background: #fff;
-            border-radius: 10px;
-            padding: 15px;
+            background: var(--card-bg); /* 🌟 Darkened P&L Cards */
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
             text-align: center;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #1a73e8;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            border-top: 4px solid var(--primary);
         }
 
         .profit {
@@ -202,6 +204,12 @@
             50% { opacity: 0.4; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
         }
+        .dot-blue { background: #3b82f6; box-shadow: 0 0 10px #3b82f6; animation: blink-blue 1.5s infinite; }
+        @keyframes blink-blue {
+            0% { opacity: 1; transform: scale(1); box-shadow: 0 0 5px #3b82f6; }
+            50% { opacity: 0.4; transform: scale(1.3); box-shadow: 0 0 20px #3b82f6; }
+            100% { opacity: 1; transform: scale(1); box-shadow: 0 0 5px #3b82f6; }
+        }
     </style>
 </head>
 
@@ -326,11 +334,11 @@
                     <button class="index-tab" onclick="switchIndex('SENSEX')">SENSEX</button>
                 </div>
                 <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-                    <div id="nse-heartbeat" class="heartbeat-container">
-                        <span id="heartbeat-dot" class="dot dot-red"></span>
-                        <span id="heartbeat-text" style="color: #94a3b8;">NSE ENGINE OFFLINE</span>
+                    <div id="dhan-heartbeat" class="heartbeat-container">
+                        <span id="heartbeat-dot" class="dot dot-blue"></span>
+                        <span id="heartbeat-text" style="color: #3b82f6;">DHAN LIVE FEED</span>
                     </div>
-                    <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Updating Live...</span>
+                    <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Syncing via Dhan...</span>
                 </div>
             </div>
 
@@ -440,7 +448,6 @@
                         if (lastUpdatedStr) {
                             timerSpan.innerText = "Last Updated: " + lastUpdatedStr;
                             
-                            // Check if "Last Updated" is within the last 60 seconds
                             const now = new Date();
                             const [h, m, s] = lastUpdatedStr.split(':').map(Number);
                             const lastUpdDate = new Date();
@@ -449,19 +456,19 @@
                             const diffSeconds = Math.abs((now - lastUpdDate) / 1000);
                             
                             if (diffSeconds < 60) {
-                                heartbeatDot.className = "dot dot-green";
-                                heartbeatText.innerText = "LIVE NSE FEED";
-                                heartbeatText.style.color = "#10b981";
+                                heartbeatDot.className = "dot dot-blue";
+                                heartbeatText.innerText = "DHAN DATA ACTIVE";
+                                heartbeatText.style.color = "#3b82f6";
                             } else {
                                 heartbeatDot.className = "dot dot-red";
-                                heartbeatText.innerText = "DATA STALE (DELAY)";
+                                heartbeatText.innerText = "DATA DELAYED";
                                 heartbeatText.style.color = "#f59e0b";
                             }
                         } else {
                             heartbeatDot.className = "dot dot-red";
-                            heartbeatText.innerText = "NSE ENGINE OFFLINE";
+                            heartbeatText.innerText = "CONNECTING DHAN...";
                             heartbeatText.style.color = "#ef4444";
-                            timerSpan.innerText = "Connecting to NSE...";
+                            timerSpan.innerText = "Establishing Link...";
                         }
                     });
             }
