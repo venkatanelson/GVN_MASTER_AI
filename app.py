@@ -1586,5 +1586,5 @@ if __name__ == '__main__':
         nse_option_chain.start_nse_worker()
         sync_admin_dhan_to_worker()
         
-    port = int(os.environ.get("PORT", 5005))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=True)
