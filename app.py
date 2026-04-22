@@ -330,7 +330,7 @@ def auto_stop_loss_worker():
                         loss = trade.entry_price - ltp
                         
                         # --- BALLOON PRESSURE LOGIC ---
-                        if trade.trade_type == "BUY" and loss >= 15.0:
+                        if trade.trade_type == "BUY" and loss >= 12.0:
                             # Check if price is showing a bounce or stabilization in the last 3-4 ticks
                             is_bouncing = False
                             if len(ltp_history) >= 3:
@@ -623,7 +623,8 @@ def gvn_scanner_api():
     return jsonify({
         "status": "success",
         "data": nse_option_chain.gvn_scanner_data,
-        "delta_60": nse_option_chain.current_delta_60_strikes
+        "delta_60": nse_option_chain.current_delta_60_strikes,
+        "summary": nse_option_chain.live_option_chain_summary
     })
 
 @app.route('/api/nse-log')
