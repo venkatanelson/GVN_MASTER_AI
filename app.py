@@ -1668,7 +1668,10 @@ def ai_chat():
         model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Get live data context from the background worker
-        live_data = nse_option_chain.gvn_master_chain_data
+        live_data = {
+            "summary": nse_option_chain.live_option_chain_summary,
+            "scanner": nse_option_chain.gvn_scanner_data
+        }
         context = f"Live Market Data Context:\n{live_data}\n\n"
         
         system_prompt = """You are GVN Algo AI, an expert hedge fund quantitative analyst. 
