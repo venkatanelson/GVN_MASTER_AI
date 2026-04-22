@@ -98,15 +98,15 @@ def execute_broker_order_async(broker_name, webhook_url, secret_key, symbol, tra
         
         success = False
         if broker_name.lower() == 'dhan':
-            # Priority: Try Webhook Bridge first for text symbols (highly reliable for Dhan)
-            if webhook_url and secret_key:
-                print(f"[DHAN] Using Webhook Bridge for {symbol}...")
-                success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
-            
-            # Fallback to API if Webhook fails or URL is missing
-            if not success and client_id and access_token:
-                print(f"[DHAN] Falling back to Official API for {symbol}...")
+            # Priority 1: Official Dhan API (Gives instant Pass/Fail & Rejection reasons)
+            if client_id and access_token:
+                print(f"[DHAN] Using Official API for {symbol}...")
                 success = place_dhan_official_api_order(client_id, access_token, symbol, transaction_type, quantity)
+            
+            # Priority 2: Fallback to Webhook Bridge if API fails or credentials are missing
+            if not success and webhook_url and secret_key:
+                print(f"[DHAN] Falling back to Webhook Bridge for {symbol}...")
+                success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
         else:
             success = place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
             
@@ -158,3 +158,21 @@ def force_square_off_all_positions(client_id, access_token):
     except Exception as e:
         print(f"❌ [FORCE SQUARE OFF ERROR] {e}")
         return False
+
+def get_dhan_ltp(client_id, access_token, security_id, exchange_segment="NSE_FNO"):
+    """
+    Fetches real-time LTP from Dhan HQ for a specific security ID.
+    Note: security_id must be numeric.
+    """
+    try:
+        dhan = dhanhq(client_id, access_token)
+        # exchange_segment mapping
+        seg = dhan.FNO if "FNO" in exchange_segment.upper() else dhan.NSE
+        
+        quote = dhan.get_quote(security_id, seg)
+        if quote.get('status') == 'success':
+            return float(quote.get('data', {}).get('lastTradedPrice', 0.0))
+        return 0.0
+    except Exception as e:
+        print(f"❌ [DHAN LTP ERROR] {e}")
+        return 0.0
