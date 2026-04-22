@@ -64,6 +64,12 @@ def place_dhan_official_api_order(client_id, access_token, symbol, txn_type, qty
     """
     try:
         dhan = dhanhq(client_id, access_token)
+        # Security IDs for Indices in Dhan
+        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27", "SENSEX": "14"}
+        sid = sec_ids.get(symbol)
+        if not sid:
+            print("⚠️ [DHAN API WARNING] Symbol not found in mapped index IDs. Only numeric Security IDs or predefined index keys are supported.")
+        
         is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
         
         # NOTE: Dhan API place_order requires security_id.
@@ -82,6 +88,10 @@ def place_dhan_official_api_order(client_id, access_token, symbol, txn_type, qty
             price=0
         )
         print(f"[DHAN API RESP] {order}")
+        if order.get('status') == 'failure':
+            print(f"❌ [DHAN API REJECTION] Reason: {order.get('remarks')}")
+            if "security_id" in str(order.get('remarks', '')).lower():
+                print("💡 TIP: The Dhan Official API requires a numeric Security ID (e.g., '12345'). It cannot process string symbols like 'NIFTY 25 APR 19500 CE' directly.")
         return order.get('status') == 'success' or order.get('remarks') == 'Order Created'
     except Exception as e:
         if "DH-905" in str(e) or "Invalid IP" in str(e):
