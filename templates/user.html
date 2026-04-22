@@ -707,11 +707,11 @@
             position: fixed;
             bottom: 20px;
             right: 20px;
-            width: 60px;
-            height: 60px;
+            width: 70px;
+            height: 70px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+            background: linear-gradient(135deg, #1e3a8a, #0f172a);
+            box-shadow: 0 0 20px rgba(255, 0, 128, 0.5), 0 0 10px rgba(59, 130, 246, 0.5);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -719,12 +719,46 @@
             z-index: 1000;
             transition: transform 0.3s;
             animation: float-bot 3s ease-in-out infinite;
+            border: 2px solid #3b82f6;
         }
         .ai-bot-btn:hover { transform: scale(1.1); }
         @keyframes float-bot {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+            0% { transform: translateY(0px); box-shadow: 0 0 20px rgba(255, 0, 128, 0.5); }
+            50% { transform: translateY(-10px); box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+            100% { transform: translateY(0px); box-shadow: 0 0 20px rgba(255, 0, 128, 0.5); }
+        }
+        
+        .gvn-ai-logo {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .gvn-ai-logo .gvn-circle {
+            background: linear-gradient(135deg, #38bdf8, #3b82f6);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 900;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.3);
+        }
+        .gvn-ai-logo .ai-text {
+            color: #ff007f;
+            font-weight: 900;
+            font-size: 22px;
+            font-style: italic;
+            position: absolute;
+            bottom: -12px;
+            right: -8px;
+            text-shadow: 2px 2px 0px #0f172a, 0 0 10px #ff007f;
+            transform: skewX(-10deg);
         }
         
         .ai-chat-window {
@@ -810,7 +844,10 @@
     </style>
 
     <div class="ai-bot-btn" onclick="toggleAIChat()">
-        <span style="font-size: 30px;">🤖</span>
+        <div class="gvn-ai-logo">
+            <div class="gvn-circle">GVN</div>
+            <div class="ai-text">AI</div>
+        </div>
     </div>
 
     <div class="ai-chat-window" id="aiChatWindow">
