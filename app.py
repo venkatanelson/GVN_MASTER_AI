@@ -923,6 +923,13 @@ def tv_webhook():
         price = 0.0
         qty = 1
 
+    # 🌟 SMART DETECT: If TradingView forgot to send "SELL", but we already have it running, auto-convert it!
+    if txn_type == "BUY":
+        existing_any = AlgoTrade.query.filter_by(symbol=symbol, status='Running').first()
+        if existing_any:
+            print(f"🤖 [SMART DETECT] Alert received for {symbol} without SELL tag, but it's already running. Assuming EXIT/SL Alert!")
+            txn_type = "SELL"
+
     # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
