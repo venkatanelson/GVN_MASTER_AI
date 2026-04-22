@@ -21,6 +21,14 @@ gvn_scanner_data = {
     "SENSEX": [],
     "last_updated": None
 }
+# Global memory for Option Chain Summary (ATM & Delta 60)
+live_option_chain_summary = {
+    "NIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
+    "BANKNIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
+    "FINNIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
+    "SENSEX": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
+    "last_updated": None
+}
 
 # Global memory to store live option LTPs for Auto-Square-Off
 live_option_ltps = {}
@@ -88,9 +96,8 @@ nse_headers = {
 }
 
 def fetch_nse_option_chain(symbol="NIFTY"):
-    # For SENSEX, we should use a different logic or skip if NSE-only
-    if symbol == "SENSEX": return None 
-    
+    # NSE provides NIFTY, BANKNIFTY, FINNIFTY. SENSEX is BSE.
+    if symbol == "SENSEX": return fetch_from_dhan_fallback("SENSEX")    
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
     try:
         # First hit the home page to get fresh cookies if needed
@@ -127,11 +134,12 @@ def fetch_from_dhan_fallback(symbol):
         quote = dhan.get_quote(sid)
         if quote.get('status') == 'success':
             lp = quote['data'].get('lastPrice', 0)
-            # Create a mock NSE-style response for basic spot tracking
+            # For SENSEX, Dhan uses "SENSEX" or security ID 1.
+            # We return a mock structure that analyze_and_update_gvn_scanner can partially use
             return {
                 "records": {
                     "underlyingValue": lp,
-                    "expiryDates": [], # Fallback doesn't have full chain yet
+                    "expiryDates": ["STILL_BOOTING"], 
                     "data": []
                 },
                 "source": "DHAN_API"
@@ -238,6 +246,17 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
             "PE": int(best_pe_60),
             "expiry": formatted_expiry
         }
+        
+        # Update Summary
+        live_option_chain_summary[symbol] = {
+            "spot": underlying_value,
+            "atm": int(round(underlying_value / (100 if symbol != "BANKNIFTY" else 100)) * (100 if symbol != "BANKNIFTY" else 100)),
+            "ce_60": int(best_ce_60),
+            "pe_60": int(best_pe_60),
+            "expiry": formatted_expiry
+        }
+        live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        
         current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
     # Sort & Truncate
