@@ -17,6 +17,16 @@
         .btn-call { background: #ff9800; }
         .btn-approve { background: #28a745; }
         .btn-stop { background: #dc3545; }
+        
+        /* 🌟 NEW: Option Chain Pulse Style */
+        .live-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .strike-pill { background: #e8f0fe; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; color: #1a73e8; }
+        .delta-pill { background: #fef7e0; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 12px; color: #ea8600; }
     </style>
 </head>
 <body>
@@ -71,8 +81,65 @@
         </p>
     </div>
 
+    <!-- 🌟 NEW: DHAN OPTION CHAIN LIVE FEED -->
+    <div class="card" style="border-top: 5px solid #6366f1; background: #f8f9ff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="color: #6366f1; margin: 0;">📊 Dhan Option Chain Live Feed (Alpha Engine)</h2>
+            <div style="font-size: 12px; color: #666; font-weight: bold;">
+                <span class="live-pulse" style="color: #28a745;">●</span> LIVE UPDATING: <span id="oc-last-updated">--:--:--</span>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
+            <!-- NIFTY -->
+            <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #1a73e8;">
+                <h4 style="margin: 0 0 10px 0; color: #1a73e8;">NIFTY 50</h4>
+                <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;" id="nifty-spot">₹0.00</div>
+                <div style="font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between;"><span>ATM Strike:</span> <span class="strike-pill" id="nifty-atm">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 CE:</span> <span class="delta-pill" id="nifty-ce">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 PE:</span> <span class="delta-pill" id="nifty-pe">0</span></div>
+                </div>
+            </div>
+            
+            <!-- BANKNIFTY -->
+            <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #9c27b0;">
+                <h4 style="margin: 0 0 10px 0; color: #9c27b0;">BANKNIFTY</h4>
+                <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;" id="banknifty-spot">₹0.00</div>
+                <div style="font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between;"><span>ATM Strike:</span> <span class="strike-pill" id="banknifty-atm">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 CE:</span> <span class="delta-pill" id="banknifty-ce">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 PE:</span> <span class="delta-pill" id="banknifty-pe">0</span></div>
+                </div>
+            </div>
+            
+            <!-- FINNIFTY -->
+            <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #009688;">
+                <h4 style="margin: 0 0 10px 0; color: #009688;">FINNIFTY</h4>
+                <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;" id="finnifty-spot">₹0.00</div>
+                <div style="font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between;"><span>ATM Strike:</span> <span class="strike-pill" id="finnifty-atm">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 CE:</span> <span class="delta-pill" id="finnifty-ce">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 PE:</span> <span class="delta-pill" id="finnifty-pe">0</span></div>
+                </div>
+            </div>
+            
+            <!-- SENSEX -->
+            <div style="background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #ff5722;">
+                <h4 style="margin: 0 0 10px 0; color: #ff5722;">SENSEX</h4>
+                <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;" id="sensex-spot">₹0.00</div>
+                <div style="font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between;"><span>ATM Strike:</span> <span class="strike-pill" id="sensex-atm">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 CE:</span> <span class="delta-pill" id="sensex-ce">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Delta 60 PE:</span> <span class="delta-pill" id="sensex-pe">0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     function updateSecurityStatus() {
+        // 🛡️ Update Security
         fetch('/admin/security-status')
             .then(res => res.json())
             .then(data => {
@@ -84,6 +151,40 @@
                 } else {
                     badge.innerText = "🟢 SYSTEM SECURE";
                     badge.style.background = "#28a745";
+                }
+            });
+            
+        // 📊 Update Option Chain Summary
+        fetch('/api/gvn-scanner')
+            .then(res => res.json())
+            .then(data => {
+                if (data.summary) {
+                    const s = data.summary;
+                    document.getElementById('oc-last-updated').innerText = s.last_updated || "--:--:--";
+                    
+                    // NIFTY
+                    document.getElementById('nifty-spot').innerText = "₹" + (s.NIFTY.spot || 0).toLocaleString();
+                    document.getElementById('nifty-atm').innerText = s.NIFTY.atm || 0;
+                    document.getElementById('nifty-ce').innerText = s.NIFTY.ce_60 || 0;
+                    document.getElementById('nifty-pe').innerText = s.NIFTY.pe_60 || 0;
+                    
+                    // BANKNIFTY
+                    document.getElementById('banknifty-spot').innerText = "₹" + (s.BANKNIFTY.spot || 0).toLocaleString();
+                    document.getElementById('banknifty-atm').innerText = s.BANKNIFTY.atm || 0;
+                    document.getElementById('banknifty-ce').innerText = s.BANKNIFTY.ce_60 || 0;
+                    document.getElementById('banknifty-pe').innerText = s.BANKNIFTY.pe_60 || 0;
+                    
+                    // FINNIFTY
+                    document.getElementById('finnifty-spot').innerText = "₹" + (s.FINNIFTY.spot || 0).toLocaleString();
+                    document.getElementById('finnifty-atm').innerText = s.FINNIFTY.atm || 0;
+                    document.getElementById('finnifty-ce').innerText = s.FINNIFTY.ce_60 || 0;
+                    document.getElementById('finnifty-pe').innerText = s.FINNIFTY.pe_60 || 0;
+                    
+                    // SENSEX
+                    document.getElementById('sensex-spot').innerText = "₹" + (s.SENSEX.spot || 0).toLocaleString();
+                    document.getElementById('sensex-atm').innerText = s.SENSEX.atm || 0;
+                    document.getElementById('sensex-ce').innerText = s.SENSEX.ce_60 || 0;
+                    document.getElementById('sensex-pe').innerText = s.SENSEX.pe_60 || 0;
                 }
             });
     }
