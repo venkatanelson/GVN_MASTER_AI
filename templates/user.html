@@ -583,13 +583,6 @@
                     <input type="text" name="client_id" placeholder="Enter Dhan Client ID (e.g. 1103172877)"
                         value="{{ broker_config.client_id if broker_config else '' }}">
 
-                    <label style="font-weight:bold; color: #1a73e8;">Client Secret (For Auto-Refresh):</label>
-                    <input type="password" name="client_secret" placeholder="Enter Client Secret"
-                        value="{{ '********' if (broker_config and broker_config.encrypted_client_secret) else '' }}">
-
-                    <label style="font-weight:bold; color: #1a73e8;">TOTP Key (Google Auth Key):</label>
-                    <input type="password" name="totp_key" placeholder="Enter TOTP Secret Key"
-                        value="{{ '********' if (broker_config and broker_config.encrypted_totp_key) else '' }}">
                         
                     <label style="font-weight:bold;">Current Access Token (Manual):</label>
                     <input type="password" name="access_token" placeholder="Enter Access Token"
