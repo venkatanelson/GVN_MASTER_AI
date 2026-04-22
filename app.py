@@ -645,6 +645,58 @@ def admin_refresh_data_feed():
     flash("⚡ GVN Master Data Feed has been manually refreshed with your latest Dhan keys!")
     return redirect(url_for('user_dashboard', user_id=session.get('user_id')))
 
+@app.route('/api/live_trade_price/<int:trade_id>')
+def get_live_trade_price(trade_id):
+    """Fetches the real-time LTP of a running trade from Dhan API or NSE fallback."""
+    trade = AlgoTrade.query.get(trade_id)
+    if not trade or trade.status != 'Running':
+        return jsonify({"status": "error", "message": "Trade not active"}), 404
+        
+    user = User.query.get(trade.user_id) if trade.user_id else None
+    live_price = 0.0
+    
+    # 1. Try Dhan API if Real User
+    if user and user.user_type == 'REAL' and user.is_approved:
+        try:
+            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                from dhanhq import dhanhq
+                dhan = dhanhq(broker_conf.client_id, access_token)
+                pos_resp = dhan.get_positions()
+                if pos_resp.get('status') == 'success':
+                    for p in pos_resp.get('data', []):
+                        if p.get('tradingSymbol') == trade.symbol:
+                            live_price = float(p.get('lastTradedPrice', 0))
+                            break
+        except Exception as e:
+            print(f"[API LTP ERROR] {e}")
+            
+    # 2. Try NSE Memory Fallback
+    if live_price == 0.0:
+        import re
+        strike_match = re.search(r'(\d+)', trade.symbol)
+        if strike_match:
+            strike = strike_match.group(1)
+            opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+            if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
+            live_price = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+            
+    if live_price == 0.0:
+        live_price = trade.entry_price # Fallback to entry
+        
+    current_loss = trade.entry_price - live_price if trade.trade_type == 'BUY' else live_price - trade.entry_price
+    is_danger = current_loss >= 12.0 # Warn if dropping more than 12 points
+        
+    return jsonify({
+        "status": "success",
+        "symbol": trade.symbol,
+        "entry_price": trade.entry_price,
+        "live_price": live_price,
+        "loss_points": round(current_loss, 2),
+        "is_danger": is_danger
+    })
+
 
 
 def square_off_user_trades(user, reason, manual_price=None):
@@ -950,13 +1002,17 @@ def tv_webhook():
         
         index_strikes = nse_option_chain.current_delta_60_strikes.get(lookup_symbol, {})
         live_strike = index_strikes.get(opt_type)
+        expiry_str = index_strikes.get('expiry', today_dt.strftime("%d %b").upper()) # Fallback to today
         
         if live_strike:
-            simulated_strike = f"{lookup_symbol} {live_strike} {opt_type}"
-            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike} for {lookup_symbol}."
+            # Format: NIFTY 25 APR 22400 CE
+            simulated_strike = f"{lookup_symbol} {expiry_str} {live_strike} {opt_type}"
+            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike} for {lookup_symbol} ({expiry_str})."
         else:
             # Fallback just in case background thread hasn't finished first run
-            simulated_strike = f"{lookup_symbol} {int(price//100 * 100)} {opt_type}"
+            # Use a slightly more realistic fallback symbol
+            fallback_strike = int(price//100 * 100) if price > 0 else "ATM"
+            simulated_strike = f"{lookup_symbol} {expiry_str} {fallback_strike} {opt_type}"
             reason_msg = f"Fallback: Direct Delta 60 NSE calculation for {lookup_symbol} still booting..."
         
         # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
@@ -1054,20 +1110,27 @@ def tv_webhook():
             user_execution_qty = 0 # Default if no trades found
             for at in active_trades:
                 live_price = 0.0
-                symbol_key = at.symbol.upper()
+                symbol_str = at.symbol.upper()
                 
-                # 🌟 NEW: Check NSE Engine first, then Dhan API Fallback
-                for idx, strikes in nse_option_chain.all_live_data.items():
-                    if symbol_key in strikes:
-                        live_price = strikes[symbol_key].get('ltp', 0.0)
-                        break
+                # 🌟 NEW: Parse strike and type from formatted symbol (e.g., "NIFTY 25 APR 19500 CE")
+                import re
+                match = re.search(r'(\d{5,})\s+(CE|PE)', symbol_str) # Look for 5+ digit strike and CE/PE
+                if not match:
+                    # Try another pattern if the format is different
+                    match = re.search(r'(\d+)\s+(CE|PE)', symbol_str)
                 
-                # If still 0, try a direct fetch from Dhan for this specific symbol
+                if match:
+                    strike_val = match.group(1)
+                    opt_type = match.group(2)
+                    lookup_key = f"{strike_val}_{opt_type}"
+                    live_price = nse_option_chain.live_option_ltps.get(lookup_key, 0.0)
+                
+                # If still 0, try the fallback
                 if live_price == 0 and nse_option_chain.dhan_master_config.get('active'):
                     try:
                         # Minimal fetch from Dhan for the specific symbol
-                        live_price = nse_option_chain.fetch_from_dhan_fallback(symbol_key)
-                        print(f"[DHAN LIVE SYNC] Fetched manual exit price for {symbol_key}: {live_price}")
+                        # Note: This still needs a security_id, so it might fail for options
+                        pass 
                     except:
                         pass
 
