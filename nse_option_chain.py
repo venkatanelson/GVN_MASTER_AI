@@ -6,10 +6,10 @@ import threading
 
 # Global memory to store the latest Delta 60 strikes per index
 current_delta_60_strikes = {
-    "NIFTY": {"CE": None, "PE": None},
-    "BANKNIFTY": {"CE": None, "PE": None},
-    "FINNIFTY": {"CE": None, "PE": None},
-    "SENSEX": {"CE": None, "PE": None},
+    "NIFTY": {"CE": None, "PE": None, "expiry": None},
+    "BANKNIFTY": {"CE": None, "PE": None, "expiry": None},
+    "FINNIFTY": {"CE": None, "PE": None, "expiry": None},
+    "SENSEX": {"CE": None, "PE": None, "expiry": None},
     "last_updated": None
 }
 
@@ -120,7 +120,7 @@ def fetch_from_dhan_fallback(symbol):
         dhan = dhanhq(dhan_master_config["client_id"], dhan_master_config["access_token"])
         
         # Security IDs for Indices in Dhan
-        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27"}
+        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27", "SENSEX": "1"}
         sid = sec_ids.get(symbol)
         if not sid: return None
         
@@ -232,7 +232,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     # Update Global Strikes
     if best_ce_60 and best_pe_60:
-        current_delta_60_strikes[symbol] = {"CE": int(best_ce_60), "PE": int(best_pe_60)}
+        formatted_expiry = expiry_dt.strftime("%d %b").upper() # e.g. "25 APR"
+        current_delta_60_strikes[symbol] = {
+            "CE": int(best_ce_60), 
+            "PE": int(best_pe_60),
+            "expiry": formatted_expiry
+        }
         current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
     # Sort & Truncate
@@ -250,7 +255,8 @@ def nse_background_worker():
                 f.write(f"{datetime.now()}: NSE Worker Pulse...\n")
             
             # Note: SENSEX is removed as it's not an NSE index
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+            # NIFTY, BANKNIFTY, FINNIFTY are NSE. SENSEX is BSE but we try fallback or dummy.
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                 analyze_and_update_gvn_scanner(symbol)
                 time.sleep(3) # Respect NSE rate limits
                 
