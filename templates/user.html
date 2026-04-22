@@ -701,6 +701,182 @@
             }
         }
     </script>
-</body>
+    <!-- 🤖 GVN AI ASSISTANT WIDGET -->
+    <style>
+        .ai-bot-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.3s;
+            animation: float-bot 3s ease-in-out infinite;
+        }
+        .ai-bot-btn:hover { transform: scale(1.1); }
+        @keyframes float-bot {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        .ai-chat-window {
+            display: none;
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            width: 350px;
+            max-width: 90vw;
+            height: 450px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            z-index: 1000;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'Outfit', sans-serif;
+        }
+        .ai-chat-header {
+            background: linear-gradient(90deg, #1e3a8a, #312e81);
+            padding: 15px;
+            color: white;
+            font-weight: 800;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #3b82f6;
+        }
+        .ai-chat-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .ai-msg, .user-msg {
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13.5px;
+            line-height: 1.4;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+        .ai-msg { background: rgba(59, 130, 246, 0.15); color: #e2e8f0; align-self: flex-start; border-left: 3px solid #3b82f6; }
+        .user-msg { background: rgba(16, 185, 129, 0.15); color: #e2e8f0; align-self: flex-end; border-right: 3px solid #10b981; }
+        
+        .ai-chat-input-area {
+            display: flex;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .ai-input {
+            flex: 1;
+            background: rgba(255,255,255,0.05) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            color: white !important;
+            padding: 10px !important;
+            margin: 0 !important;
+            border-radius: 20px 0 0 20px !important;
+            outline: none;
+        }
+        .ai-send-btn {
+            background: #3b82f6;
+            border: none;
+            color: white;
+            padding: 0 15px;
+            border-radius: 0 20px 20px 0;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .ai-quick-prompts { display: flex; gap: 5px; padding: 10px; overflow-x: auto; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .ai-quick-prompts::-webkit-scrollbar { height: 4px; }
+        .ai-quick-prompts::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.5); border-radius: 4px; }
+        .ai-quick-prompts button {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: #cbd5e1; padding: 5px 10px; border-radius: 15px; font-size: 11px; cursor: pointer; white-space: nowrap;
+        }
+        .ai-quick-prompts button:hover { background: rgba(59, 130, 246, 0.3); color: white; }
+    </style>
 
+    <div class="ai-bot-btn" onclick="toggleAIChat()">
+        <span style="font-size: 30px;">🤖</span>
+    </div>
+
+    <div class="ai-chat-window" id="aiChatWindow">
+        <div class="ai-chat-header">
+            <span>GVN AI Double Engine ⚡</span>
+            <span style="cursor:pointer; font-size: 18px;" onclick="toggleAIChat()">✖</span>
+        </div>
+        <div class="ai-chat-body" id="aiChatBody">
+            <div class="ai-msg">Hello {{ session.username }}! I am reading live Option Chain data from Dhan. Ask me about Nifty or BankNifty trends!</div>
+        </div>
+        <div class="ai-quick-prompts">
+            <button onclick="sendAIPrompt('Analyze Nifty Trend based on Option Chain')">📊 Nifty Trend</button>
+            <button onclick="sendAIPrompt('Is it safe to buy CE now?')">🟢 CE Safe?</button>
+            <button onclick="sendAIPrompt('What is the sentiment? Tell me in Telugu')">🗣️ Telugu</button>
+        </div>
+        <div class="ai-chat-input-area">
+            <input type="text" id="aiChatInput" class="ai-input" placeholder="Ask AI..." onkeypress="if(event.key === 'Enter') sendAIPrompt()">
+            <button class="ai-send-btn" onclick="sendAIPrompt()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        function toggleAIChat() {
+            const chat = document.getElementById('aiChatWindow');
+            chat.style.display = chat.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        async function sendAIPrompt(text = null) {
+            const input = document.getElementById('aiChatInput');
+            const msg = text || input.value.trim();
+            if (!msg) return;
+
+            input.value = '';
+            const chatBody = document.getElementById('aiChatBody');
+            
+            // Add user message
+            chatBody.innerHTML += `<div class="user-msg">${msg}</div>`;
+            chatBody.scrollTop = chatBody.scrollHeight;
+
+            // Add typing indicator
+            const typingId = 'typing-' + Date.now();
+            chatBody.innerHTML += `<div class="ai-msg" id="${typingId}">Thinking... ⏳</div>`;
+            chatBody.scrollTop = chatBody.scrollHeight;
+
+            try {
+                const response = await fetch('/api/ai-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await response.json();
+                
+                document.getElementById(typingId).remove();
+                
+                // Format simple markdown bold
+                let formattedReply = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                // Replace newlines with <br>
+                formattedReply = formattedReply.replace(/\n/g, '<br>');
+                
+                chatBody.innerHTML += `<div class="ai-msg">${formattedReply}</div>`;
+            } catch (err) {
+                document.getElementById(typingId).remove();
+                chatBody.innerHTML += `<div class="ai-msg" style="color:#ef4444;">Error connecting to AI.</div>`;
+            }
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+    </script>
+</body>
 </html>
