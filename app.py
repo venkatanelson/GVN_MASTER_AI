@@ -1650,6 +1650,38 @@ def sync_admin_dhan_to_worker():
         except Exception as e:
             print(f"❌ [DHAN SYNC ERROR] {e}")
 
+# ==========================================
+# 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
+# ==========================================
+import google.generativeai as genai
+
+@app.route('/api/ai-chat', methods=['POST'])
+def ai_chat():
+    user_msg = request.json.get('message', '')
+    api_key = os.environ.get('GEMINI_API_KEY')
+    
+    if not api_key or api_key == 'YOUR_GEMINI_API_KEY_HERE':
+        return jsonify({"reply": "⚠️ **GEMINI_API_KEY** is not set! Please add your free API key from Google AI Studio to the system environment variables to activate the Double Engine."})
+    
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # Get live data context from the background worker
+        live_data = nse_option_chain.gvn_master_chain_data
+        context = f"Live Market Data Context:\n{live_data}\n\n"
+        
+        system_prompt = """You are GVN Algo AI, an expert hedge fund quantitative analyst. 
+You act as a 'Double Engine' verifying trades based on live Option Chain data. 
+Be concise, highly professional, and use trading terminology (Call Writing, Put Unwinding, Delta, Momentum). 
+Respond in English (or Telugu if specifically asked) with clear actionable insights."""
+
+        response = model.generate_content(f"{system_prompt}\n\n{context}\nUser: {user_msg}")
+        return jsonify({"reply": response.text})
+        
+    except Exception as e:
+        return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
