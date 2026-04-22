@@ -1665,7 +1665,7 @@ def ai_chat():
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Get live data context from the background worker
         live_data = {
@@ -1683,6 +1683,8 @@ Respond in English (or Telugu if specifically asked) with clear actionable insig
         return jsonify({"reply": response.text})
         
     except Exception as e:
+        if "429" in str(e):
+            return jsonify({"reply": "⚠️ మీ ఉచిత API లిమిట్ (Quota) దాటిపోయింది. దయచేసి ఒక నిమిషం ఆగి మళ్లీ ప్రయత్నించండి. (API Rate Limit Exceeded)"})
         return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
 
 if __name__ == '__main__':
