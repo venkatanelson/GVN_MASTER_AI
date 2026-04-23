@@ -1703,29 +1703,24 @@ def ai_chat():
     api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
     
     if not api_key:
-        return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set! Please add your free API key to activate the Double Engine."})
+        return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set!"})
     
     if 'user_id' not in session:
-        return jsonify({"reply": "⚠️ Please login to use the AI Engine."})
+        return jsonify({"reply": "⚠️ Please login first."})
     
     user = User.query.get(session['user_id'])
     if user and user.is_locked:
-        return jsonify({"reply": "🔒 Your AI Engine is Locked. Please upload payment screenshot to unlock!"})
+        return jsonify({"reply": "🔒 Your AI Engine is Locked."})
         
     try:
         # Get live data context from the background worker
-        live_data = {
-            "summary": nse_option_chain.live_option_chain_summary,
-            "scanner": nse_option_chain.gvn_scanner_data
-        }
-        context = f"Live Market Data Context:\n{live_data}\n\n"
+        nifty = nse_option_chain.live_option_chain_summary.get("NIFTY", {})
+        banknifty = nse_option_chain.live_option_chain_summary.get("BANKNIFTY", {})
         
-        system_prompt = """You are GVN Algo AI, an expert hedge fund quantitative analyst. 
-You act as a 'Double Engine' verifying trades based on live Option Chain data. 
-Be concise, highly professional, and use trading terminology (Call Writing, Put Unwinding, Delta, Momentum). 
-Respond in English (or Telugu if specifically asked) with clear actionable insights."""
-
-        # Use requests directly to avoid Render httpx connection errors
+        context = f"LIVE DATA: NIFTY Spot={nifty.get('spot', 0)}, BANKNIFTY Spot={banknifty.get('banknifty_spot', 0)}, NIFTY CE60={nifty.get('ce_60', 0)}, NIFTY PE60={nifty.get('pe_60', 0)}"
+        
+        system_prompt = "You are GVN Algo AI Analyst. Analyze the signal against live data context provided. Be brief, professional, and actionable."
+        
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -1737,24 +1732,16 @@ Respond in English (or Telugu if specifically asked) with clear actionable insig
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"{context}\nUser: {user_msg}"}
             ],
-            "temperature": 0.3,
-            "max_tokens": 500
+            "temperature": 0.4
         }
         
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15
-        )
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=15)
         
         if response.status_code == 200:
             data = response.json()
             return jsonify({"reply": data['choices'][0]['message']['content']})
-        elif response.status_code == 429:
-            return jsonify({"reply": "⚠️ Groq Rate limit exceeded. Please wait a moment."})
         else:
-            return jsonify({"reply": f"❌ AI Engine Error: HTTP {response.status_code} - {response.text}"})
+            return jsonify({"reply": f"❌ AI Engine Error: HTTP {response.status_code}"})
             
     except Exception as e:
         return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
