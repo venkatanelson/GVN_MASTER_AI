@@ -904,42 +904,42 @@
             const msg = text || input.value.trim();
             if (!msg) return;
 
-            // 🌟 THINK BIG: Get current Nifty price from the scanner UI
+            // 🌟 GET PRICE FROM UI
             let currentNifty = "0";
             try {
-                const niftyRow = Array.from(document.querySelectorAll('tr')).find(tr => tr.innerText.includes('NIFTY'));
-                if (niftyRow) {
-                    currentNifty = niftyRow.querySelectorAll('td')[1].innerText;
+                const rows = document.querySelectorAll('tr');
+                for (let tr of rows) {
+                    if (tr.innerText.includes('NIFTY')) {
+                        currentNifty = tr.querySelectorAll('td')[1].innerText;
+                        break;
+                    }
                 }
             } catch(e) {}
 
             input.value = '';
             const chatBody = document.getElementById('aiChatBody');
             
-            // Add user message
             chatBody.innerHTML += `<div class="user-msg">${msg}</div>`;
             chatBody.scrollTop = chatBody.scrollHeight;
 
-            // Add typing indicator
             const typingId = 'typing-' + Date.now();
-            chatBody.innerHTML += `<div class="ai-msg" id="${typingId}">Thinking... ⏳</div>`;
+            chatBody.innerHTML += `<div class="ai-msg" id="${typingId}">Analyzing Market (${currentNifty})... ⏳</div>`;
             chatBody.scrollTop = chatBody.scrollHeight;
 
             try {
                 const response = await fetch('/api/ai-chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg })
+                    body: JSON.stringify({ 
+                        message: msg,
+                        nifty_price: currentNifty
+                    })
                 });
                 const data = await response.json();
-                
                 document.getElementById(typingId).remove();
                 
-                // Format simple markdown bold
                 let formattedReply = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                // Replace newlines with <br>
                 formattedReply = formattedReply.replace(/\n/g, '<br>');
-                
                 chatBody.innerHTML += `<div class="ai-msg">${formattedReply}</div>`;
             } catch (err) {
                 document.getElementById(typingId).remove();
