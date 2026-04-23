@@ -12,6 +12,9 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             secret_key = webhook_url.split('/')[-1]
             print(f"[DHAN DEBUG] Extracted Secret Key from URL: {secret_key}")
 
+        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
+        t_type = "B" if transaction_type.upper() == "BUY" else "S"
+
         # 🌟 SMART: For NFO Options, Dhan Webhook Bridge often prefers no spaces (e.g., NIFTY25APR22400CE)
         if is_nfo:
             # Try to create a condensed symbol for the bridge
