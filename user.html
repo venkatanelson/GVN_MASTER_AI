@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GVN Algo - User Dashboard</title>
+    <title>GVN MASTER ALGO V2.2 PREMIUM 🚀</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -56,21 +56,6 @@
             position: relative;
             overflow: hidden;
         }
-        
-        .premium-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
-            transition: 0.5s;
-        }
-        
-        .premium-card:hover::before {
-            left: 100%;
-        }
 
         .header-card {
             border-top: 4px solid var(--primary);
@@ -102,45 +87,39 @@
             box-shadow: 0 10px 20px -5px var(--primary-glow);
         }
 
-        .btn-auto-trade {
+        .btn-go {
             background: linear-gradient(135deg, #10b981, #059669);
             padding: 14px 32px;
             border-radius: 50px;
             font-weight: 900;
-            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+            color: white;
+            border: none;
+            cursor: pointer;
+            animation: pulse-green 2s infinite;
         }
         
-        .btn-auto-trade.off {
-            background: linear-gradient(135deg, #475569, #334155);
-            box-shadow: none;
+        .btn-stop {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            animation: pulse-red 2s infinite;
         }
 
-        /* --- GAUGE ANIMATIONS --- */
-        @keyframes rotate-ring {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
 
-        .gauge-ring-bg {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 240px;
-            height: 240px;
-            border-radius: 50%;
-            border: 2px dashed rgba(99, 102, 241, 0.2);
-            animation: rotate-ring 20s linear infinite;
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
 
-        /* --- P&L CARDS --- */
         .pnl-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
+            display: flex;
             overflow-x: auto;
-            padding-bottom: 10px;
+            gap: 15px;
+            padding-bottom: 15px;
         }
 
         .pnl-item {
@@ -155,7 +134,6 @@
         .profit { color: var(--secondary); font-weight: 800; }
         .loss { color: var(--danger); font-weight: 800; }
 
-        /* --- TABS --- */
         .tab-container {
             display: flex;
             gap: 8px;
@@ -180,10 +158,8 @@
         .tab-btn.active {
             background: white;
             color: var(--bg-dark);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
-        /* --- HEARTBEAT --- */
         .heartbeat {
             display: flex;
             align-items: center;
@@ -219,50 +195,13 @@
             100% { transform: scale(2.5); opacity: 0; }
         }
 
-        .dot-blue { background: #3b82f6; box-shadow: 0 0 10px #3b82f6; }
+        .dot-blue { background: #3b82f6; }
         .dot-blue::after { background: #3b82f6; }
-        .dot-green { background: #10b981; box-shadow: 0 0 10px #10b981; }
-        .dot-green::after { background: #10b981; }
-        .dot-red { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
-        .dot-red::after { background: #ef4444; }
-
-        /* --- INPUTS --- */
-        input, select {
-            background: rgba(15, 23, 42, 0.8) !important;
-            border: 1px solid var(--glass-border) !important;
-            color: white !important;
-            padding: 12px 16px !important;
-            border-radius: 12px !important;
-            width: 100%;
-            margin-bottom: 15px;
-            font-family: inherit;
-        }
-
-        input:focus {
-            border-color: var(--primary) !important;
-            outline: none;
-            box-shadow: 0 0 0 3px var(--primary-glow);
-        }
     </style>
-
 </head>
 
 <body>
-
     <div class="container">
-        <!-- FLASH MESSAGES -->
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div style="background: white; padding: 15px; border-radius: 8px; border-left: 5px solid #1a73e8; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); color: #333; font-weight: bold;">
-                🔔 {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-
-
         <!-- HEADER SECTION -->
         <div class="premium-card header-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
             <div style="flex: 1; min-width: 300px;">
@@ -271,11 +210,6 @@
                     <span style="background: var(--warning); color: #000; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">DEMO ACCOUNT</span>
                     {% else %}
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
-                    {% if broker_config and broker_config.client_id %}
-                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ DHAN LINKED</span>
-                    {% else %}
-                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ NO BROKER</span>
-                    {% endif %}
                     {% endif %}
                 </div>
                 <h1 style="margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Welcome back, {{ user.username }}</h1>
@@ -285,392 +219,105 @@
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
                 <div style="text-align: right;">
-                    <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Algo Master Switch</p>
-                    <a href="#" onclick="confirmToggle('{{ user.algo_status }}', '/toggle-algo/{{ user.id }}')" style="text-decoration: none;">
-                        <button class="btn-premium" style="background: {{ 'var(--secondary)' if user.algo_status == 'ON' else 'var(--danger)' }}; min-width: 120px;">
-                            {{ '🟢 ' + user.algo_status if user.algo_status == "ON" else '🔴 ' + user.algo_status }}
-                        </button>
-                    </a>
+                    <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
+                    <button class="btn-premium" onclick="confirmToggle('{{ user.algo_status }}', '/toggle-algo/{{ user.id }}')" style="background: {{ 'var(--secondary)' if user.algo_status == 'ON' else 'var(--danger)' }}; min-width: 120px;">
+                        {{ '🟢 ' + user.algo_status if user.algo_status == "ON" else '🔴 ' + user.algo_status }}
+                    </button>
                 </div>
-                <a href="/logout" class="btn-premium" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 12px 16px;">🚪</a>
             </div>
         </div>
 
         <!-- ⚡ GVN FULL-AUTO COMMAND CENTER -->
-        <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2); background: linear-gradient(135deg, rgba(6, 78, 59, 0.1), rgba(2, 6, 23, 0.8));">
-            <div class="command-center">
-                <div class="status-badge">
-                    <div class="pulse-dot" style="background: {{ 'var(--secondary)' if user.algo_status == 'ON' else 'var(--danger)' }}; box-shadow: 0 0 15px {{ 'var(--secondary-glow)' if user.algo_status == 'ON' else 'rgba(239, 68, 68, 0.5)' }};"></div>
-                    <div>
-                        <h1 style="font-size: 18px; font-weight: 900; letter-spacing: -0.5px;">GVN FULL-AUTO ALGO</h1>
-                        <p style="font-size: 11px; color: var(--text-dim); font-weight: 600;">AI is scanning Alpha Grid for automatic entries...</p>
-                    </div>
+        <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px; font-weight: 900;">GVN FULL-AUTO ALGO</h2>
+                    <p style="font-size: 12px; color: var(--text-dim);">AI is scanning Alpha Grid for automatic entries...</p>
                 </div>
-                
                 <button class="btn-go {{ 'btn-stop' if user.algo_status == 'ON' else '' }}" onclick="confirmToggle('{{ user.algo_status }}', '/toggle-algo/{{ user.id }}')">
                     {{ 'STOP (MANUAL)' if user.algo_status == 'ON' else 'GO (AUTO-TRADE)' }}
                 </button>
             </div>
-            
-            <div style="margin-top: 20px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 10px 20px; border-radius: 50px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                <span style="font-size: 14px;">🔥</span>
-                <span style="font-size: 11px; font-weight: 900; color: #10b981; letter-spacing: 0.5px;">GLOBAL APPRECIATION OFFER! You are eligible for a 10% DISCOUNT on all plans today. Inform Admin now!</span>
-            </div>
         </div>
 
-        <!-- P&L Dashboard Section -->
+        <!-- PERFORMANCE ANALYST -->
         <h2 style="margin-top: 30px;">📊 My 30-Day Performance Analyst</h2>
-        <div style="position: relative;">
-            <div class="pnl-dashboard" style="display:flex; flex-wrap: nowrap; overflow-x: auto; gap:15px; margin-top:20px; padding-bottom: 15px; scroll-behavior: smooth;">
-                <div class="pnl-card card" style="flex: 0 0 auto; min-width: 180px; border-top: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05);">
-                    <h4 style="margin-top: 0; font-size: 13px; color: #f59e0b; text-transform: uppercase;">TOTAL P&L (30 Days)</h4>
-                    <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 26px; font-weight: 800;">
-                        ₹ {{ "%.2f"|format(pnl_total_30d) }}
-                    </div>
+        <div class="pnl-grid">
+            <div class="pnl-item" style="border-top: 4px solid var(--warning);">
+                <small style="color: var(--text-dim); text-transform: uppercase;">TOTAL P&L (30 DAYS)</small>
+                <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 24px;">
+                    ₹ {{ "%.2f"|format(pnl_total_30d) }}
                 </div>
-                {% for day in daily_history %}
-                <div class="pnl-card card" style="flex: 0 0 auto; min-width: 140px; border-top: 4px solid #6366f1;">
-                    <h4 style="margin-top: 0; font-size: 13px; color: #94a3b8;">{{ day.date }}</h4>
-                    <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 18px; font-weight: 700;">
-                        ₹ {{ "%.2f"|format(day.pnl) }}
-                    </div>
-                </div>
-                {% endfor %}
             </div>
-            <p style="text-align: right; margin-top: -10px; font-size: 12px; color: #888;"><i>&rarr; Swipe or scroll right for previous days</i></p>
+            {% for day in daily_history %}
+            <div class="pnl-item">
+                <small style="color: var(--text-dim);">{{ day.date }}</small>
+                <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 18px;">
+                    ₹ {{ "%.2f"|format(day.pnl) }}
+                </div>
+            </div>
+            {% endfor %}
         </div>
 
-        <div style="text-align: center; margin-top: 20px;">
-            <a href="/history" class="btn-buy" style="background:#28a745; display: inline-block;">📄 Download Full P&L
-                Statement (PDF)</a>
-        </div>
-        <!-- 🚀 GVN ZERO-TO-HERO PREMIUM SCANNER -->
-        <style>
-            .pulse-buy { animation: pulse-red 1.5s infinite; }
-            @keyframes pulse-red { 
-                0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-                70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-                100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-            }
-            .progress-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-            .progress-fill { height: 100%; transition: width 0.5s ease; }
-            .index-tab { border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 12px; transition: 0.3s; background: transparent; color: #6b7280; }
-            .index-tab.active { background: white; color: #4f46e5; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .locked-blur { filter: blur(8px); pointer-events: none; user-select: none; }
-            .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
-        </style>
-
-        <!-- 🤖 GVN AI MASTER PULSE (ADVANCED TERMINAL GAUGE) -->
-        <div class="premium-card" style="border-top: 6px solid var(--primary); padding-top: 30px;">
-            <div class="gauge-ring-bg"></div>
+        <!-- MARKET PULSE -->
+        <div class="premium-card" style="margin-top: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h3 style="margin: 0; font-weight: 900;">⚡ GVN AI Market Pulse</h3>
+                <div class="tab-container">
+                    <button onclick="switchIndex('NIFTY')" id="tab-NIFTY" class="tab-btn active">NIFTY</button>
+                    <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
+                </div>
+            </div>
             
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; position: relative; z-index: 2;">
-                <div>
-                    <h3 style="margin: 0; font-size: 22px; font-weight: 900; display: flex; align-items: center; gap: 10px;">
-                        <span style="color: var(--primary);">⚡</span> GVN AI Market Pulse
-                    </h3>
-                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
-                        <span class="dot dot-blue"></span>
-                        <span style="font-size: 10px; font-weight: 900; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;">Ultra-Low Latency AI Engine</span>
+            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: center;">
+                <div style="text-align: center;">
+                    <div style="width: 200px; height: 100px; margin: auto; overflow: hidden; position: relative;">
+                        <div id="pulse-gauge" style="width: 200px; height: 200px; border-radius: 50%; background: conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg); transform: rotate(-90deg);"></div>
+                        <div style="position: absolute; bottom: 0; left: 25px; width: 150px; height: 75px; background: var(--bg-dark); border-radius: 75px 75px 0 0;"></div>
+                        <div id="gauge-needle" style="position: absolute; bottom: 0; left: 50%; width: 4px; height: 80px; background: white; transform-origin: bottom center; transform: rotate(-90deg); transition: 1s;"></div>
                     </div>
+                    <h2 id="pulse-sentiment" style="margin-top: 15px; font-weight: 900;">NEUTRAL</h2>
+                    <small id="pulse-score" style="color: var(--text-dim);">AI SCORE: 50.0</small>
                 </div>
-                <div class="tab-container">
-                    <button onclick="switchIndex('NIFTY')" id="pulse-tab-NIFTY" class="tab-btn active">NIFTY</button>
-                    <button onclick="switchIndex('BANKNIFTY')" id="pulse-tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 50px; align-items: center; position: relative; z-index: 2;">
-                <!-- GAUGE SECTION -->
-                <div style="text-align: center; position: relative;">
-                    <div style="width: 220px; height: 110px; margin: 0 auto; overflow: hidden; position: relative;">
-                        <!-- Gauge Arc -->
-                        <div id="pulse-gauge" style="position: absolute; top: 0; left: 0; width: 100%; height: 200%; border-radius: 50%; background: conic-gradient(from 180deg at 50% 50%, #ff4d4d 0deg, #ffcc00 90deg, #10b981 180deg); transform: rotate(-90deg); transition: transform 2s cubic-bezier(0.34, 1.56, 0.64, 1);"></div>
-                        <!-- Inner Cover -->
-                        <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 180px; height: 90px; background: #020617; border-radius: 90px 90px 0 0; z-index: 2; box-shadow: inset 0 5px 20px rgba(0,0,0,0.8);"></div>
-                        <!-- Needle -->
-                        <div id="gauge-needle" style="position: absolute; bottom: -5px; left: calc(50% - 2px); width: 4px; height: 100px; background: linear-gradient(to top, #fff, var(--primary)); transform-origin: bottom center; transform: rotate(-90deg); z-index: 3; transition: transform 2s cubic-bezier(0.34, 1.56, 0.64, 1); border-radius: 4px; box-shadow: 0 0 15px var(--primary);"></div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="pnl-item" style="text-align: left;">
+                        <small style="color: var(--text-dim); display: block;">Trend</small>
+                        <span id="pulse-trend" style="font-weight: 800;">SIDEWAYS</span>
                     </div>
-                    <div style="margin-top: 30px;">
-                        <h2 id="pulse-sentiment" style="margin: 0; font-size: 36px; font-weight: 900; letter-spacing: -1px;">NEUTRAL</h2>
-                        <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 6px 16px; border-radius: 50px; margin-top: 12px; border: 1px solid var(--glass-border);">
-                            <small id="pulse-score" style="color: var(--text-dim); font-weight: 800; font-size: 11px;">AI SCORE: 50.0</small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- METRICS GRID -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 8px;">📉 Current Trend</small>
-                        <span id="pulse-trend" style="font-size: 18px; font-weight: 900; color: var(--warning);">SIDEWAYS</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 8px;">🏦 Inst. Activity</small>
-                        <span id="pulse-inst" style="font-size: 18px; font-weight: 900; color: #fff;">QUIET</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 8px;">📊 Vol. Strength</small>
-                        <span id="pulse-vol" style="font-size: 18px; font-weight: 900; color: #fff;">NORMAL</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 8px;">🕒 Update Time</small>
-                        <span id="pulse-time" style="font-size: 18px; font-weight: 900; color: var(--primary); font-family: monospace;">--:--:--</span>
+                    <div class="pnl-item" style="text-align: left;">
+                        <small style="color: var(--text-dim); display: block;">Institutional</small>
+                        <span id="pulse-inst" style="font-weight: 800;">QUIET</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 🚀 GVN ZERO-TO-HERO PREMIUM SCANNER -->
-        <div class="premium-card" style="border-top: 6px solid var(--secondary);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px;">
-                <h3 style="margin: 0; font-size: 20px; font-weight: 900; color: var(--secondary);">🎯 GVN AI Zero-to-Hero Scanner</h3>
-                <div class="tab-container">
-                    <button id="scanner-tab-NIFTY" class="tab-btn active" onclick="switchIndex('NIFTY')">NIFTY</button>
-                    <button id="scanner-tab-BANKNIFTY" class="tab-btn" onclick="switchIndex('BANKNIFTY')">BANKNIFTY</button>
-                    <button id="scanner-tab-FINNIFTY" class="tab-btn" onclick="switchIndex('FINNIFTY')">FINNIFTY</button>
-                    <button id="scanner-tab-SENSEX" class="tab-btn" onclick="switchIndex('SENSEX')">SENSEX</button>
-                </div>
-                <div class="heartbeat">
-                    <span id="heartbeat-dot" class="dot dot-blue"></span>
-                    <span id="heartbeat-text" style="color: #3b82f6;">DHAN LIVE FEED</span>
-                    <span style="border-left: 1px solid var(--glass-border); padding-left: 12px; font-weight: 900; color: #fff;">NIFTY: <span id="ui-nifty-price">0.00</span></span>
-                </div>
-            </div>
-
-            <div id="scanner-container" style="position: relative;">
-                {% if user.is_locked %}
-                <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(8px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 16px;">
-                    <div style="text-align: center; background: #fff; padding: 30px; border-radius: 20px; max-width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
-                        <span style="font-size: 40px;">🔒</span>
-                        <h4 style="margin: 15px 0 10px 0; color: #000; font-size: 18px;">Scanner Data Locked</h4>
-                        <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">Unlock Premium signals to view live Alpha Grid levels and potential AI scores.</p>
-                        <a href="#payment-section" class="btn-premium" style="width: 100%;">Unlock Now</a>
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="{% if user.is_locked %}locked-blur{% endif %}" style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: separate; border-spacing: 0 12px;">
-                        <thead>
-                            <tr style="text-align: left; color: var(--text-dim); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">
-                                <th style="padding: 0 15px;">Option Strike</th>
-                                <th style="padding: 0 15px;">LTP & Delta</th>
-                                <th style="padding: 0 15px;">GVN Alpha Grid</th>
-                                <th style="padding: 0 15px;">AI Pressure</th>
-                                <th style="padding: 0 15px;">Score %</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scanner-body">
-                            <tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-dim);">📡 Connecting to GVN Cloud Engine...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- TODAY'S SIGNALS -->
-        <div class="premium-card">
+        <!-- SCANNER SECTION -->
+        <div class="premium-card" style="margin-top: 30px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0; font-size: 18px; font-weight: 900; color: #fff;">⚡ Today's Live Signals</h3>
-                {% if user.is_admin %}
-                <a href="/admin/clear-today-trades" class="btn-premium" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); padding: 6px 12px; font-size: 10px;">Clear History</a>
-                {% endif %}
+                <h3 style="margin: 0; font-weight: 900; color: var(--secondary);">🎯 GVN AI Zero-to-Hero Scanner</h3>
+                <div class="heartbeat">
+                    <span class="dot dot-blue"></span>
+                    <span style="color: #3b82f6;">NIFTY: <span id="ui-nifty-price">0.00</span></span>
+                </div>
             </div>
             
             <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <table style="width: 100%; border-collapse: separate; border-spacing: 0 10px;">
                     <thead>
-                        <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Time</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Symbol</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Status</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Entry</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Exit</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">P&L (₹)</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Action</th>
+                        <tr style="text-align: left; color: var(--text-dim); font-size: 11px;">
+                            <th>STRIKE</th>
+                            <th>LTP & DELTA</th>
+                            <th>ZONE</th>
+                            <th>AI SIGNAL</th>
+                            <th>SCORE</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for t in parsed_trades %}
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
-                            <td style="padding: 15px; color: #fff; font-size: 13px;">{{ t.time }}</td>
-                            <td style="padding: 15px;">
-                                <div style="display: flex; flex-direction: column;">
-                                    <span style="font-weight: 800; color: var(--primary);">{{ t.symbol }}</span>
-                                    <small style="color: var(--text-dim); font-size: 10px;">{{ t.type }}</small>
-                                </div>
-                            </td>
-                            <td style="padding: 15px;">
-                                <span style="background: {{ 'rgba(245, 158, 11, 0.15)' if t.status == 'Running' else 'rgba(16, 185, 129, 0.15)' }}; color: {{ 'var(--warning)' if t.status == 'Running' else 'var(--secondary)' }}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">{{ t.status.upper() }}</span>
-                            </td>
-                            <td style="padding: 15px; font-weight: 800; color: #fff;">₹ {{ t.entry_price }}</td>
-                            <td style="padding: 15px; color: var(--text-dim);">{{ '₹ ' + (t.exit_price|string) if t.status == 'Closed' else '-' }}</td>
-                            <td style="padding: 15px; font-weight: 900;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
-                                <span class="{{ 'live-pnl' if t.status == 'Running' else '' }}" data-trade-id="{{ t.id }}">
-                                    {{ '+' if t.pnl > 0 else '' }}₹ {{ "%.2f"|format(t.pnl) }}
-                                </span>
-                            </td>
-                            <td style="padding: 15px;">
-                                {% if t.status == 'Running' %}
-                                <a href="/force-close-trade/{{ t.id }}" class="btn-premium" style="background: var(--danger); padding: 6px 12px; font-size: 10px;">Square Off</a>
-                                {% else %}-{% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="7" style="padding: 60px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for market signals...</td></tr>
-                        {% endfor %}
+                    <tbody id="scanner-body">
+                        <tr><td colspan="5" style="text-align: center; padding: 30px;">Connecting...</td></tr>
                     </tbody>
                 </table>
             </div>
-        </div>
-
-        <div class="settings-section">
-            {% if user.user_type == 'REAL' %}
-            <div class="premium-card">
-                <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 900;">🔢 Trade Quantity</h3>
-                <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 15px;">Adjust your multiplier for automated entries.</p>
-                <form action="/update-lots" method="POST">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <select name="trade_lots" onchange="this.form.submit()" style="background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border); padding: 10px; border-radius: 12px; width: 100%;">
-                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1x (Standard)</option>
-                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2x (Double)</option>
-                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5x (Aggressive)</option>
-                        <option value="10" {% if user.trade_lots == 10 %}selected{% endif %}>10x (Institution)</option>
-                    </select>
-                </form>
-            </div>
-
-            <div class="premium-card">
-                <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 900;">🔑 API Settings</h3>
-                <form action="/save_api_settings" method="POST">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <input type="text" name="client_id" placeholder="Dhan Client ID" value="{{ broker_config.client_id if broker_config else '' }}" style="background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; width: 100%; margin-bottom: 10px;">
-                    <input type="password" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if (broker_config and broker_config.encrypted_access_token) else '' }}" style="background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; width: 100%; margin-bottom: 15px;">
-                    <button type="submit" class="btn-premium" style="width: 100%;">Connect Broker</button>
-                </form>
-            </div>
-            {% else %}
-            <div class="premium-card" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(15, 23, 42, 0.9)); border: 1px solid var(--warning);">
-                <h3 style="color: var(--warning);">Simulation Mode</h3>
-                <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 15px;">You are using a Demo Account. Upgrade to Real for Dhan API integration.</p>
-                <a href="/plans" class="btn-premium" style="background: var(--warning); color: #000; width: 100%; text-align: center;">Upgrade Now</a>
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="premium-card">
-            <h3 style="margin: 0 0 20px 0; font-size: 18px; font-weight: 900;">💬 GVN Master Support</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <a href="https://wa.me/91{{ config.support_number_1 }}" target="_blank" class="btn-premium" style="background: rgba(16, 185, 129, 0.1); color: var(--secondary); border: 1px solid var(--secondary); text-align: center;">
-                    📱 TECH SUPPORT
-                </a>
-                <a href="https://wa.me/91{{ config.support_number_2 }}" target="_blank" class="btn-premium" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid #3b82f6; text-align: center;">
-                    📱 ADMIN ENQUIRY
-                </a>
-            </div>
-        </div>
-
-        <div style="text-align: center; margin: 40px 0; padding: 20px; border-top: 1px solid var(--glass-border);">
-            <p style="margin: 0; font-size: 11px; color: var(--text-dim); line-height: 1.6; max-width: 800px; margin: auto;">
-                ⚠️ <b>DISCLAIMER:</b> GVN Algo is an educational & simulation platform. It does not provide financial advice. Trading involves high risk, and GVN assumes no liability for any financial losses. ఈ సాఫ్ట్ వేర్ కేవలం డెమో పర్పస్ కోసం మాత్రమే. మీ ట్రేడింగ్ లాభనష్టాలకు అడ్మిన్ బాధ్యత వహించరు.
-            </p>
-        </div>
-    </div>
-
-    <!-- 💳 PAYMENT MODAL -->
-    <div id="paymentModal" class="modal">
-        <div class="modal-content" style="background: #0f172a; border: 1px solid var(--primary); color: white;">
-            <h2 style="margin-top: 0; color: var(--primary);">🔓 Unlock Premium Signals</h2>
-            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; margin-bottom: 20px; border: 1px solid var(--glass-border);">
-                <p style="font-size: 12px; color: var(--text-dim);">Pay via PhonePe/UPI to:</p>
-                <p style="font-size: 24px; color: #fff; font-weight: 900; margin: 8px 0;">93814 90610</p>
-                <p style="font-size: 11px; color: var(--text-dim);">(Name: VENKATA NELSON)</p>
-            </div>
-            
-            <form action="/upload-payment" method="POST" enctype="multipart/form-data">
-                <label style="font-weight:900; font-size: 12px; color: var(--text-dim);">1. Select Plan:</label>
-                <div style="display: flex; gap: 10px; margin: 10px 0;">
-                    <label style="flex: 1; padding: 15px; border: 2px solid var(--glass-border); border-radius: 16px; cursor: pointer; text-align: center; transition: 0.3s;">
-                        <input type="radio" name="plan_type" value="1-Day" checked style="display: none;">
-                        <b style="font-size: 18px;">₹ 300</b><br><small style="font-size: 10px; color: var(--text-dim);">1 Day</small>
-                    </label>
-                    <label style="flex: 1; padding: 15px; border: 2px solid var(--primary); border-radius: 16px; cursor: pointer; text-align: center; background: rgba(59, 130, 246, 0.1);">
-                        <input type="radio" name="plan_type" value="7-Day" style="display: none;">
-                        <b style="font-size: 18px;">₹ 1000</b><br><small style="font-size: 10px; color: var(--primary);">7 Days</small>
-                    </label>
-                </div>
-
-                <label style="font-weight:900; font-size: 12px; color: var(--text-dim); display: block; margin-top: 15px;">2. Transaction ID (UTR):</label>
-                <input type="text" name="utr_number" placeholder="12-digit UTR Number" required style="background: rgba(255,255,255,0.05); color: white; border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px; width: 100%; margin: 8px 0;">
-                
-                <label style="font-weight:900; font-size: 12px; color: var(--text-dim); display: block; margin-top: 10px;">3. Payment Screenshot:</label>
-                <input type="file" name="screenshot" accept="image/*" required style="margin: 10px 0; font-size: 12px; color: var(--text-dim);">
-                
-                <div style="display:flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" class="btn-premium" style="flex: 2;">🚀 Confirm Payment</button>
-                    <button type="button" onclick="document.getElementById('paymentModal').style.display='none'" class="btn-premium" style="flex: 1; background: rgba(255,255,255,0.1); box-shadow: none; border: 1px solid var(--glass-border);">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 🤖 GVN AI ASSISTANT WIDGET -->
-    <style>
-        .ai-bot-btn {
-            position: fixed; bottom: 30px; right: 30px; width: 75px; height: 75px; border-radius: 50%;
-            background: linear-gradient(135deg, #1e3a8a, #0f172a); border: 2px solid var(--primary);
-            box-shadow: 0 0 25px var(--primary-glow); display: flex; align-items: center; justify-content: center;
-            cursor: pointer; z-index: 1000; transition: transform 0.3s ease; animation: float-bot 3s ease-in-out infinite;
-        }
-        .ai-bot-btn:hover { transform: scale(1.1); }
-        @keyframes float-bot {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-        
-        .ai-chat-window {
-            display: none; position: fixed; bottom: 120px; right: 30px; width: 380px; max-width: 90vw; height: 500px;
-            background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(20px); border: 1px solid var(--primary);
-            border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); z-index: 1000; flex-direction: column; overflow: hidden;
-        }
-        .ai-chat-header {
-            background: linear-gradient(90deg, #1e3a8a, #0f172a); padding: 20px; color: white;
-            font-weight: 900; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border);
-        }
-        .ai-chat-body { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-        .ai-msg { background: rgba(59, 130, 246, 0.1); color: #e2e8f0; padding: 12px 16px; border-radius: 18px 18px 18px 4px; align-self: flex-start; font-size: 13px; border: 1px solid rgba(59, 130, 246, 0.2); }
-        .user-msg { background: rgba(16, 185, 129, 0.1); color: #fff; padding: 12px 16px; border-radius: 18px 18px 4px 18px; align-self: flex-end; font-size: 13px; border: 1px solid rgba(16, 185, 129, 0.2); }
-        
-        .ai-input-area { display: flex; padding: 15px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--glass-border); gap: 10px; }
-        .ai-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: white; padding: 12px 18px; border-radius: 50px; outline: none; font-size: 13px; }
-        .ai-send { background: var(--primary); border: none; color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-weight: bold; }
-        
-        .btn-deep-scan {
-            background: linear-gradient(45deg, #FF007A, #7A00FF); color: white; border: none; font-weight: 900;
-            padding: 8px 16px; border-radius: 10px; font-size: 11px; animation: pulse 2s infinite; cursor: pointer; margin: 10px;
-        }
-    </style>
-
-    <div class="ai-bot-btn" onclick="toggleAIChat()">
-        <div style="color: white; font-weight: 900; font-size: 18px;">GVN</div>
-    </div>
-
-    <div class="ai-chat-window" id="aiChatWindow">
-        <div class="ai-chat-header">
-            <span>⚡ GVN AI Double Engine</span>
-            <span style="cursor:pointer;" onclick="toggleAIChat()">✕</span>
-        </div>
-        <div class="ai-chat-body" id="aiChatBody">
-            <div class="ai-msg">Hello! I am GVN AI. I'm currently analyzing Nifty & BankNifty live data. Ask me anything!</div>
-        </div>
-        <div style="display: flex; gap: 5px; padding: 0 10px;">
-            <button class="btn-deep-scan" onclick="sendAIPrompt('Run GVN Deep Scan: Analyze Greeks (Gamma, Theta, IV), Operator Traps, and predict the next move.')">🔮 DEEP SCAN</button>
-            <button class="tab-btn" style="font-size: 10px; padding: 5px 10px; margin: 10px 0;" onclick="sendAIPrompt('Nifty Trend Analysis')">📊 NIFTY TREND</button>
-        </div>
-        <div class="ai-input-area">
-            <input type="text" id="aiChatInput" class="ai-input" placeholder="Ask about market..." onkeypress="if(event.key === 'Enter') sendAIPrompt()">
-            <button class="ai-send" onclick="sendAIPrompt()">➤</button>
         </div>
     </div>
 
@@ -679,7 +326,7 @@
 
         function confirmToggle(currentStatus, actionUrl) {
             if (currentStatus === 'ON') {
-                let exitPrice = prompt("You are turning OFF the Algo.\nThis will Force Close any running position!\n\nPlease enter the CURRENT EXIT PRICE (Leave blank for default):");
+                let exitPrice = prompt("Turning OFF Algo. Enter current exit price (or leave blank):");
                 if (exitPrice !== null) {
                     window.location.href = actionUrl + (exitPrice.trim() !== "" ? "?exit_price=" + encodeURIComponent(exitPrice) : "");
                 }
@@ -690,9 +337,8 @@
 
         function switchIndex(index) {
             currentActiveIndex = index;
-            // Update all tab buttons (Pulse and Scanner)
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                if(btn.id.includes('tab-' + index)) btn.classList.add('active');
+                if(btn.id.includes(index)) btn.classList.add('active');
                 else btn.classList.remove('active');
             });
             updateScanner();
@@ -700,148 +346,39 @@
 
         function updateScanner() {
             fetch('/api/gvn-scanner')
-                .then(response => response.json())
-                .then(result => {
-                    // Update Nifty Spot
-                    if (result.nifty_spot) {
-                        document.getElementById('ui-nifty-price').innerText = result.nifty_spot;
-                    }
-                    
+                .then(r => r.json())
+                .then(res => {
+                    if (res.nifty_spot) document.getElementById('ui-nifty-price').innerText = res.nifty_spot;
                     const body = document.getElementById('scanner-body');
-                    const data = result.data[currentActiveIndex] || [];
-                    const pulse = result.market_pulse ? result.market_pulse[currentActiveIndex] : null;
+                    const data = res.data[currentActiveIndex] || [];
+                    const pulse = res.market_pulse ? res.market_pulse[currentActiveIndex] : null;
 
-                    // Update Pulse UI
                     if (pulse) {
                         document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
                         document.getElementById('pulse-score').innerText = `AI SCORE: ${pulse.score}`;
                         document.getElementById('pulse-trend').innerText = pulse.trend;
                         document.getElementById('pulse-inst').innerText = pulse.inst_activity;
-                        document.getElementById('pulse-vol').innerText = pulse.volume;
-                        document.getElementById('pulse-time').innerText = result.market_pulse.last_updated;
-
-                        // Color logic
-                        const sColor = pulse.score > 55 ? '#10b981' : (pulse.score < 45 ? '#ef4444' : '#f59e0b');
-                        document.getElementById('pulse-sentiment').style.color = sColor;
-                        document.getElementById('pulse-trend').style.color = sColor;
-                        
-                        // Needle rotation (0% score = -90deg, 100% score = 90deg)
                         const angle = (pulse.score - 50) * 1.8;
                         document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
                     }
 
-                    if (!data || data.length === 0) {
-                        body.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px;">📡 Analysis Paused for ${currentActiveIndex}.</td></tr>`;
-                        return;
-                    }
-
                     let html = '';
                     data.forEach(item => {
-                        let potColor = item.score >= 80 ? "#ef4444" : (item.score >= 50 ? "#f59e0b" : "#6b7280");
                         html += `
                             <tr style="background: rgba(255,255,255,0.02);">
-                                <td style="padding:15px; border-radius: 12px 0 0 12px; font-weight: 800; color: #fff; border-left: 4px solid ${potColor};">
-                                    ${item.strike}
-                                </td>
-                                <td style="padding:15px;">
-                                    <span style="font-size: 15px; font-weight: 800; color: #fff;">₹ ${item.ltp}</span><br>
-                                    <small style="color: var(--text-dim); font-weight: 600;">Δ ${item.delta}</small>
-                                </td>
-                                <td style="padding:15px;">
-                                    <span style="background: rgba(255,255,255,0.05); color: #fff; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 11px;">
-                                        ${item.zone}
-                                    </span>
-                                    ${item.i_level !== 'NORMAL' ? `<br><small style="color:var(--primary); font-weight:900; font-size:10px;">${item.i_level}</small>` : ''}
-                                </td>
-                                <td style="padding:15px;">
-                                    <span style="color: ${item.ai_signal.includes('BUY') ? '#10b981' : (item.ai_signal.includes('WAIT') ? '#f59e0b' : '#ef4444')}; font-weight: 900; font-size: 13px;">
-                                        ${item.ai_signal}
-                                    </span><br>
-                                    <small style="color: var(--text-dim); font-size: 10px;">${item.pressure}</small>
-                                </td>
-                                <td style="padding:15px; border-radius: 0 12px 12px 0; font-weight: 900; color: ${potColor}; font-size: 16px;">
-                                    ${item.score}%
-                                </td>
+                                <td style="padding: 15px; font-weight: 800; border-radius: 12px 0 0 12px;">${item.strike}</td>
+                                <td style="padding: 15px;">₹ ${item.ltp}<br><small style="color:var(--text-dim);">Δ ${item.delta}</small></td>
+                                <td style="padding: 15px;">${item.zone}</td>
+                                <td style="padding: 15px; font-weight: 900; color: ${item.ai_signal.includes('BUY') ? '#10b981' : '#ef4444'}">${item.ai_signal}</td>
+                                <td style="padding: 15px; font-weight: 900; border-radius: 0 12px 12px 0;">${item.score}%</td>
                             </tr>
                         `;
                     });
-                    body.innerHTML = html;
+                    body.innerHTML = html || '<tr><td colspan="5" style="text-align: center;">No data.</td></tr>';
                 });
         }
         setInterval(updateScanner, 10000);
         updateScanner();
-
-        function toggleAIChat() {
-            const chat = document.getElementById('aiChatWindow');
-            chat.style.display = chat.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        async function sendAIPrompt(text = null) {
-            const input = document.getElementById('aiChatInput');
-            const msg = text || input.value.trim();
-            if (!msg) return;
-
-            // 🌟 GET PRICE FROM THE NEW UI ELEMENT
-            let currentNifty = document.getElementById('ui-nifty-price')?.innerText || "0";
-
-            input.value = '';
-            const chatBody = document.getElementById('aiChatBody');
-            
-            chatBody.innerHTML += `<div class="user-msg">${msg}</div>`;
-            chatBody.scrollTop = chatBody.scrollHeight;
-
-            const typingId = 'typing-' + Date.now();
-            chatBody.innerHTML += `<div class="ai-msg" id="${typingId}">Analyzing Market (${currentNifty})... ⏳</div>`;
-            chatBody.scrollTop = chatBody.scrollHeight;
-
-            try {
-                const response = await fetch('/api/ai-chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: msg,
-                        nifty_price: currentNifty
-                    })
-                });
-                const data = await response.json();
-                document.getElementById(typingId).remove();
-                
-                let formattedReply = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                formattedReply = formattedReply.replace(/\n/g, '<br>');
-                chatBody.innerHTML += `<div class="ai-msg">${formattedReply}</div>`;
-            } catch (err) {
-                document.getElementById(typingId).remove();
-                chatBody.innerHTML += `<div class="ai-msg" style="color:#ef4444;">Error connecting to AI.</div>`;
-            }
-            chatBody.scrollTop = chatBody.scrollHeight;
-        }
-
-        // 🌟 LIVE P&L POLLING SCRIPT
-        function updateLivePnL() {
-            const livePnLCells = document.querySelectorAll('.live-pnl');
-            livePnLCells.forEach(cell => {
-                const tradeId = cell.getAttribute('data-trade-id');
-                fetch(`/api/live_trade_price/${tradeId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            const pnl = data.loss_points * -1; // API returns loss_points as positive for loss
-                            cell.innerText = `₹ ${pnl.toFixed(2)}`;
-                            const parentTd = cell.parentElement;
-                            if (pnl > 0) {
-                                parentTd.className = 'profit';
-                                cell.innerText = `+₹ ${pnl.toFixed(2)}`;
-                            } else if (pnl < 0) {
-                                parentTd.className = 'loss';
-                            } else {
-                                parentTd.className = '';
-                            }
-                        }
-                    })
-                    .catch(err => console.error('Error fetching live P&L:', err));
-            });
-        }
-        setInterval(updateLivePnL, 3000); // Poll every 3 seconds
     </script>
 </body>
 </html>
