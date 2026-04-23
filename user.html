@@ -265,6 +265,23 @@
             </div>
         </div>
 
+        <!-- ⚡ GVN FULL-AUTO COMMAND CENTER -->
+        <div class="card glass-panel" style="margin-top: 20px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9)); border: 2px solid {{ '#10b981' if user.full_auto_mode else '#334155' }}; box-shadow: 0 0 20px {{ 'rgba(16, 185, 129, 0.2)' if user.full_auto_mode else 'rgba(0,0,0,0.1)' }};">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px;">
+                <div>
+                    <h4 style="margin: 0; color: #fff; font-size: 15px; letter-spacing: 1px; font-weight: 800;">🤖 GVN FULL-AUTO ALGO</h4>
+                    <p style="margin: 5px 0 0 0; font-size: 11px; color: #94a3b8;">
+                        {{ 'AI is scanning Alpha Grid for automatic entries...' if user.full_auto_mode else 'System is in Manual Confirmation mode.' }}
+                    </p>
+                </div>
+                <form action="/toggle-auto-mode/{{ user.id }}" method="POST">
+                    <button type="submit" class="btn-buy" style="background: {{ '#10b981' if user.full_auto_mode else '#475569' }}; border: none; padding: 10px 25px; border-radius: 30px; font-weight: 900; color: white; cursor: pointer; box-shadow: {{ '0 0 15px #10b981' if user.full_auto_mode else 'none' }}; transition: 0.3s;">
+                        {{ 'ON (AUTO-TRADE)' if user.full_auto_mode else 'OFF (MANUAL)' }}
+                    </button>
+                </form>
+            </div>
+        </div>
+
         {% if discount_percent > 0 %}
         <div
             style="background: #28a745; color: white; padding: 12px; border-radius: 5px; text-align: center; margin-top: 15px; font-weight: bold; border: 2px dashed #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
