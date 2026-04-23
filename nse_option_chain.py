@@ -131,19 +131,43 @@ def fetch_from_dhan_fallback(symbol):
         sid = sec_ids.get(symbol)
         if not sid: return None
         
-        quote = dhan.get_quote(sid)
-        if quote.get('status') == 'success':
-            lp = quote['data'].get('lastPrice', 0)
-            # For SENSEX, Dhan uses "SENSEX" or security ID 1.
-            # We return a mock structure that analyze_and_update_gvn_scanner can partially use
-            return {
-                "records": {
-                    "underlyingValue": lp,
-                    "expiryDates": ["STILL_BOOTING"], 
-                    "data": []
-                },
-                "source": "DHAN_API"
-            }
+        # Fetch full option chain from Dhan for better AI context
+        # instruments = {"EXCHANGE_SEGMENT": ["SECURITY_ID"]}
+        segment_name = "NSE_FNO" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
+        
+        # Get LTP first using v2.0.2 quote_data
+        instruments = {segment_name: [sid]}
+        lp_resp = dhan.quote_data(instruments)
+        lp = lp_resp.get('data', {}).get(sid, {}).get('lastPrice', 0)
+        
+        # Get Option Chain from Dhan
+        try:
+            chain_resp = dhan.option_chain(symbol, segment_name, "")
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} Option Chain Status: {chain_resp.get('status')}\n")
+            
+            if chain_resp.get('status') == 'success':
+                chain_data = chain_resp.get('data', [])
+                return {
+                    "records": {
+                        "underlyingValue": lp,
+                        "expiryDates": [datetime.now().strftime("%d-%b-%Y")], 
+                        "data": chain_data
+                    },
+                    "source": "DHAN_OPTION_CHAIN"
+                }
+        except Exception as e:
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [DHAN DEBUG ERROR] {symbol}: {str(e)}\n")
+
+        return {
+            "records": {
+                "underlyingValue": lp,
+                "expiryDates": [datetime.now().strftime("%d-%b-%Y")], 
+                "data": [] # Still return index price at least
+            },
+            "source": "DHAN_LTP_ONLY"
+        }
     except Exception as e:
         with open("nse_status.log", "a") as f:
             f.write(f"{datetime.now()}: [DHAN FALLBACK ERROR] {str(e)}\n")
@@ -177,66 +201,80 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     closest_ce_diff = 1.0
     closest_pe_diff = 1.0
 
+    options_count = len(records.get("data", []))
+    with open("nse_status.log", "a") as f:
+        f.write(f"{datetime.now()}: [NSE Worker] {symbol} data count: {options_count}\n")
+
     for item in records.get("data", []):
-        if item.get("expiryDate") == nearest_expiry:
-            strike = item.get("strikePrice")
+        # Handle both formats: Dhan (item is the option) and NSE (item contains CE/PE keys)
+        strike = item.get("strikePrice") or item.get("strike")
+        if not strike: continue
+        
+        # Determine if we are looking at a Dhan list item or an NSE record
+        options_to_process = []
+        if "CE" in item or "PE" in item:
+            # NSE Format
+            if "CE" in item: options_to_process.append(("CE", item["CE"]))
+            if "PE" in item: options_to_process.append(("PE", item["PE"]))
+        elif "type" in item:
+            # Dhan Format
+            opt_type = item.get("type") # "CE" or "PE"
+            options_to_process.append((opt_type, item))
             
-            for opt_type in ["CE", "PE"]:
-                if opt_type in item:
-                    opt = item[opt_type]
-                    ltp = opt.get("lastPrice", 0)
-                    iv = opt.get("impliedVolatility", 0)
-                    
-                    key = f"{int(strike)}_{opt_type}"
-                    live_option_ltps[key] = ltp
-                    
-                    # Update History for Balloon Pressure
-                    if key not in option_ltp_history: option_ltp_history[key] = []
-                    option_ltp_history[key].append(ltp)
-                    if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
+        for opt_type, opt in options_to_process:
+            ltp = opt.get("lastPrice") or opt.get("lastTradedPrice", 0)
+            iv = opt.get("impliedVolatility", 0)
+            
+            key = f"{int(strike)}_{opt_type}"
+            live_option_ltps[key] = ltp
+            
+            # Update History
+            if key not in option_ltp_history: option_ltp_history[key] = []
+            option_ltp_history[key].append(ltp)
+            if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
 
-                    # Calculate Delta
-                    effective_iv = iv if iv > 0 else 18.0
-                    delta = 0
-                    try:
-                        delta = abs(calculate_delta(underlying_value, strike, T, r, effective_iv/100.0, opt_type))
-                    except:
-                        delta = 0
+            # Calculate Delta
+            effective_iv = iv if iv > 0 else 18.0
+            delta = 0
+            try:
+                delta = abs(calculate_delta(underlying_value, strike, T, r, effective_iv/100.0, opt_type))
+            except:
+                delta = 0
 
-                    # 🌟 DELTA 60 SELECTION
-                    if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
-                        if opt_type == "CE":
-                            closest_ce_diff = abs(delta - 0.60)
-                            best_ce_60 = strike
-                        else:
-                            closest_pe_diff = abs(delta - 0.60)
-                            best_pe_60 = strike
-                    
-                    # 🚀 ZERO TO HERO SCANNER
-                    if 0.15 <= delta <= 0.55: 
-                        h915 = ltp * 1.05 
-                        l915 = ltp * 0.95
-                        levels = calculate_gvn_levels(h915, l915)
-                        score = 0
-                        zone = "NORMAL"
-                        
-                        if delta >= 0.45: 
-                            if ltp <= levels["Level_7"]: zone, score = "🔥 ITM/ATM SUPPORT (L7)", 55
-                            elif ltp <= levels["Level_6"]: zone, score = "⚡ MOMENTUM ZONE (L6)", 35
-                        else:
-                            if ltp <= levels["Level_1"]: zone, score = "🚀 OTM BUY ZONE (L1)", 65
-                            elif ltp <= levels["Level_7"]: zone, score = "📡 RADAR ZONE (L7)", 25
-                        
-                        if score > 0:
-                            gvn_scanner_data[symbol].append({
-                                "strike": f"{int(strike)} {opt_type}",
-                                "ltp": ltp,
-                                "delta": round(delta, 2),
-                                "score": score,
-                                "zone": zone,
-                                "potential": "HIGH" if score >= 60 else "MODERATE",
-                                "levels": levels
-                            })
+            # 🌟 DELTA 60 SELECTION
+            if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
+                if opt_type == "CE":
+                    closest_ce_diff = abs(delta - 0.60)
+                    best_ce_60 = strike
+                else:
+                    closest_pe_diff = abs(delta - 0.60)
+                    best_pe_60 = strike
+            
+            # 🚀 ZERO TO HERO SCANNER
+            if 0.15 <= delta <= 0.55: 
+                h915 = ltp * 1.05 
+                l915 = ltp * 0.95
+                levels = calculate_gvn_levels(h915, l915)
+                score = 0
+                zone = "NORMAL"
+                
+                if delta >= 0.45: 
+                    if ltp <= levels["Level_7"]: zone, score = "🔥 ITM/ATM SUPPORT (L7)", 55
+                    elif ltp >= levels["Level_3"]: zone, score = "🚀 BULLISH BREAKOUT (L3)", 45
+                elif delta <= 0.25:
+                    if ltp <= levels["Level_7"]: zone, score = "💀 OVER-SOLD (L7)", 25
+                    elif ltp >= levels["Level_3"]: zone, score = "📉 BEARISH TRAP (L3)", 15
+                
+                if score > 0:
+                    gvn_scanner_data[symbol].append({
+                        "strike": f"{int(strike)} {opt_type}",
+                        "ltp": ltp,
+                        "delta": round(delta, 2),
+                        "score": score,
+                        "zone": zone,
+                        "potential": "HIGH" if score >= 60 else "MODERATE",
+                        "levels": levels
+                    })
 
     # Update Global Strikes
     if best_ce_60 and best_pe_60:
@@ -257,7 +295,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         }
         live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
         
-        current_delta_60_strikes["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        # 🌟 ALWAYS PERSIST TO FILE (even if ce_60/pe_60 are 0)
+        try:
+            import json
+            with open("live_market_data.json", "w") as jf:
+                json.dump(live_option_chain_summary, jf)
+        except: pass
 
     # Sort & Truncate
     gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
@@ -270,14 +313,41 @@ def nse_background_worker():
     print("🚀 [NSE Worker] Thread Started Successfully.")
     while True:
         try:
+            # 🌟 NEW: Auto-Sync keys from DB if not already active
+            if not dhan_master_config.get('active'):
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+                    row = cursor.fetchone()
+                    if row and row[0] and row[1]:
+                        # 🌟 NEW: Decrypt token for worker
+                        from cryptography.fernet import Fernet
+                        cipher = Fernet(b'gvn_secure_key_for_encryption_26')
+                        token = cipher.decrypt(row[1]).decode()
+                        
+                        dhan_master_config.update({
+                            "client_id": row[0],
+                            "access_token": token,
+                            "active": True
+                        })
+                        with open("nse_status.log", "a") as f:
+                            f.write(f"{datetime.now()}: [AUTO-SYNC] Dhan Keys Loaded from DB.\n")
+                    conn.close()
+                except: pass
+
             with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: NSE Worker Pulse...\n")
+                f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
-            # Note: SENSEX is removed as it's not an NSE index
-            # NIFTY, BANKNIFTY, FINNIFTY are NSE. SENSEX is BSE but we try fallback or dummy.
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-                analyze_and_update_gvn_scanner(symbol)
-                time.sleep(3) # Respect NSE rate limits
+            if dhan_master_config.get('active'):
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+                    with open("nse_status.log", "a") as f:
+                        f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
+                    analyze_and_update_gvn_scanner(symbol)
+                    with open("nse_status.log", "a") as f:
+                        f.write(f"{datetime.now()}: ✨ SUCCESS: {symbol} Sync Complete\n")
+                    time.sleep(3)
                 
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
@@ -287,6 +357,10 @@ def nse_background_worker():
         time.sleep(15)
 
 def start_nse_worker():
+    print("\n" + "="*50)
+    print("🔥 GVN MASTER ALGO: DATA ENGINE V2.1 STARTING...")
+    print("="*50 + "\n")
+    
     # Force reset session to clear stale cookies
     global nse_session
     nse_session = requests.Session()
