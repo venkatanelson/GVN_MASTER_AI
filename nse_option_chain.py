@@ -332,26 +332,26 @@ def nse_background_worker():
                             "access_token": token,
                             "active": True
                         })
-                        with open("nse_status.log", "a") as f:
+                        with open("nse_status.log", "a", encoding="utf-8") as f:
                             f.write(f"{datetime.now()}: [AUTO-SYNC] Dhan Keys Loaded from DB.\n")
                     conn.close()
                 except: pass
 
-            with open("nse_status.log", "a") as f:
+            with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             if dhan_master_config.get('active'):
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
-                    with open("nse_status.log", "a") as f:
+                    with open("nse_status.log", "a", encoding="utf-8") as f:
                         f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                     analyze_and_update_gvn_scanner(symbol)
-                    with open("nse_status.log", "a") as f:
-                        f.write(f"{datetime.now()}: ✨ SUCCESS: {symbol} Sync Complete\n")
+                    with open("nse_status.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
                     time.sleep(3)
                 
         except Exception as e:
             print(f"[NSE Worker Error] {e}")
-            with open("nse_status.log", "a") as f:
+            with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: FATAL ERROR: {str(e)}\n")
         
         time.sleep(15)
