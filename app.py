@@ -169,6 +169,7 @@ class User(db.Model):
     
     # 🌟 NEW: Customized Quantity Size Selection
     trade_lots = db.Column(db.Integer, default=1)
+    full_auto_mode = db.Column(db.Boolean, default=False) # 🌟 NEW: Hands-free Trading Toggle
 
 class DailyPnL(db.Model):
     __tablename__ = 'daily_pnl_tracker'
@@ -462,6 +463,12 @@ with app.app_context():
     except Exception:
         db.session.rollback()
         
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN full_auto_mode BOOLEAN DEFAULT FALSE;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     try:
         db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN target_price FLOAT;'))
         db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN stop_loss FLOAT;'))
@@ -1542,6 +1549,15 @@ def toggle_kill_switch(user_id):
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/toggle-auto-mode/<int:user_id>', methods=['POST', 'GET'])
+def toggle_auto_mode(user_id):
+    user = User.query.get_or_404(user_id)
+    user.full_auto_mode = not user.full_auto_mode
+    db.session.commit()
+    status = "ENABLED" if user.full_auto_mode else "DISABLED"
+    flash(f"🤖 GVN Full-Auto Mode {status}!")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
 @app.route('/toggle-signal-lock/<int:user_id>')
 @requires_auth
 def toggle_signal_lock(user_id):
@@ -1765,7 +1781,10 @@ def ai_chat():
                     n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
             except: pass
 
-        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}. Analyze based on this price."
+        import json
+        live_pulse = nse_option_chain.market_pulse.get("NIFTY", {})
+        live_options = nse_option_chain.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
+        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
             "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
@@ -1854,12 +1873,14 @@ def debug_data():
         "nifty_spot": nse_option_chain.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # Start workers
+with app.app_context():
+    db.create_all()
+    # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
+    if not getattr(app, '_workers_started', False):
         nse_option_chain.start_nse_worker()
         sync_admin_dhan_to_worker()
-        
+        app._workers_started = True
+
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=True)
