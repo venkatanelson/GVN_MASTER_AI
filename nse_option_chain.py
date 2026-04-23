@@ -136,7 +136,8 @@ def fetch_from_dhan_fallback(symbol):
         segment_name = "NSE_FNO" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
         
         # Get LTP first using v2.0.2 quote_data
-        instruments = {segment_name: [sid]}
+        idx_segment = "IDX_I" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
+        instruments = {idx_segment: [sid]}
         lp_resp = dhan.quote_data(instruments)
         lp = lp_resp.get('data', {}).get(sid, {}).get('lastPrice', 0)
         
