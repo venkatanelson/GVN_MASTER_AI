@@ -1653,7 +1653,7 @@ def sync_admin_dhan_to_worker():
 # ==========================================
 # 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
 # ==========================================
-from groq import Groq
+import requests
 
 @app.route('/api/ai-chat', methods=['POST'])
 def ai_chat():
@@ -1665,9 +1665,14 @@ def ai_chat():
     if not api_key:
         return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set! Please add your free API key to activate the Double Engine."})
     
-    try:
-        client = Groq(api_key=api_key)
+    if 'user_id' not in session:
+        return jsonify({"reply": "⚠️ Please login to use the AI Engine."})
+    
+    user = User.query.get(session['user_id'])
+    if user and user.is_locked:
+        return jsonify({"reply": "🔒 Your AI Engine is Locked. Please upload payment screenshot to unlock!"})
         
+    try:
         # Get live data context from the background worker
         live_data = {
             "summary": nse_option_chain.live_option_chain_summary,
@@ -1680,27 +1685,38 @@ You act as a 'Double Engine' verifying trades based on live Option Chain data.
 Be concise, highly professional, and use trading terminology (Call Writing, Put Unwinding, Delta, Momentum). 
 Respond in English (or Telugu if specifically asked) with clear actionable insights."""
 
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": f"{context}\nUser: {user_msg}"
-                }
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.3,
-            max_tokens=500,
-        )
-
-        return jsonify({"reply": chat_completion.choices[0].message.content})
+        # Use requests directly to avoid Render httpx connection errors
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
         
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{context}\nUser: {user_msg}"}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 500
+        }
+        
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return jsonify({"reply": data['choices'][0]['message']['content']})
+        elif response.status_code == 429:
+            return jsonify({"reply": "⚠️ Groq Rate limit exceeded. Please wait a moment."})
+        else:
+            return jsonify({"reply": f"❌ AI Engine Error: HTTP {response.status_code} - {response.text}"})
+            
     except Exception as e:
-        if "429" in str(e):
-             return jsonify({"reply": "⚠️ Groq Rate limit exceeded. Please wait a moment."})
         return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
 
 if __name__ == '__main__':
