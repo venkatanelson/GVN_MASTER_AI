@@ -1742,7 +1742,13 @@ def ai_chat():
             except: pass
 
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}. Analyze based on this price."
-        system_prompt = "You are GVN AI Analyst. Analyze the NIFTY spot price and provide brief, professional trading insights."
+        system_prompt = (
+            "You are GVN Master AI, an elite algorithmic trading expert. "
+            "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
+            "Analyze the given Nifty spot price. Identify if the current supports/resistances are genuine or fake (traps). "
+            "Provide clear, logical predictions for Zero-to-Hero strike prices. "
+            "Always explain your reasoning and answer the user's question directly."
+        )
         
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {
