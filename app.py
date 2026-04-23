@@ -1758,6 +1758,18 @@ def ai_chat():
                 print(f"✨ [AI SYNC] NIFTY PRICE DETECTED: {n_spot}")
             else:
                 print("❌ [AI SYNC] NO CONFIG FOUND ANYWHERE!")
+            
+            # 🌟 DOUBLE SAFETY: Fallback to JSON if still 0
+            if n_spot == 0:
+                try:
+                    import json
+                    if os.path.exists('live_market_data.json'):
+                        with open('live_market_data.json', 'r') as f:
+                            js_data = json.load(f)
+                            n_spot = js_data.get('NIFTY', {}).get('last_price', 0)
+                            print(f"🔄 [AI FALLBACK] Using JSON Data: {n_spot}")
+                except: pass
+
             print("!"*40 + "\n")
         except Exception as de:
             print(f"❌ [AI SYNC ERROR] {de}")
