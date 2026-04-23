@@ -188,6 +188,7 @@ class AlgoTrade(db.Model):
     entry_price = db.Column(db.Float)
     exit_price = db.Column(db.Float, nullable=True)
     pnl = db.Column(db.Float, default=0.0)
+    ai_opinion = db.Column(db.String(500), nullable=True) # 🌟 NEW: Store AI's sentiment validation
 
 class UserBrokerConfig(db.Model):
     __tablename__ = 'user_broker_config'
@@ -455,6 +456,12 @@ with app.app_context():
 
     try:
         db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        
+    try:
+        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN ai_opinion VARCHAR(500);'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -881,16 +888,30 @@ def user_dashboard(user_id):
     parsed_trades = []
     
     for t in todays_trades:
+        # 🌟 NEW: Calculate current live P&L for running trades to show initial state
+        current_pnl = t.pnl
+        if t.status == 'Running':
+            # Try to get live price from NSE memory
+            import re
+            strike_match = re.search(r'(\d+)', t.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
+                live_price = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+                if live_price > 0:
+                    current_pnl = (live_price - t.entry_price) * t.quantity if t.trade_type == 'BUY' else (t.entry_price - live_price) * t.quantity
+
         parsed_trades.append({
             "id": t.id,
             "time": t.timestamp.strftime('%H:%M:%S'),
             "symbol": t.symbol,
             "type": t.trade_type,
             "result": "Target Hit/Sold" if t.status == "Closed" and t.trade_type == "BUY" else ("Running" if t.status == "Running" else "Closed"),
-            "pnl": t.pnl,
+            "pnl": current_pnl,
             "status": t.status,
             "entry_price": t.entry_price,
             "exit_price": t.exit_price,
+            "ai_opinion": getattr(t, 'ai_opinion', 'N/A') # 🌟 NEW
         })
         
     pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
@@ -1042,6 +1063,9 @@ def tv_webhook():
         # 🌟 VITAL: Forward this dynamically selected strike to REAL SUBSCRIBERS
         symbol = simulated_strike
 
+    # 🌟 NEW: Get AI Validation for the signal (One call per alert)
+    ai_opinion = get_ai_validation(symbol, txn_type, price)
+
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
@@ -1098,7 +1122,7 @@ def tv_webhook():
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
-                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=user_execution_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=user_execution_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt, ai_opinion=ai_opinion)
                 db.session.add(new_trade)
                 trade_executed = True
 
@@ -1193,6 +1217,7 @@ def tv_webhook():
                 f"💸 <b>Entry Price:</b> <code>₹{price}</code>\n"
                 f"✅ <b>Target:</b> <code>₹{target_val}</code>\n"
                 f"⛔ <b>Stop Loss:</b> <code>₹{sl_val}</code>\n"
+                f"🤖 <b>AI Opinion:</b> <i>{ai_opinion}</i>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ <i>Processed exactly as per GVN Settings</i>"
             )
@@ -1205,6 +1230,7 @@ def tv_webhook():
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
                 f"💸 <b>Exit Price:</b> <code>₹{price}</code>\n"
+                f"🤖 <b>AI Opinion:</b> <i>{ai_opinion}</i>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ <i>Trade Successfully Closed by System</i>"
             )
@@ -1718,6 +1744,45 @@ Respond in English (or Telugu if specifically asked) with clear actionable insig
             
     except Exception as e:
         return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
+
+def get_ai_validation(symbol, txn_type, price):
+    """
+    Calls Groq AI to validate a trade signal based on live market context.
+    Returns a short (10-15 word) opinion.
+    """
+    from dotenv import dotenv_values
+    env_config = dotenv_values(".env")
+    api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
+    
+    if not api_key:
+        return "AI Offline (Key Missing)"
+        
+    try:
+        live_data = {
+            "summary": nse_option_chain.live_option_chain_summary,
+            "scanner": nse_option_chain.gvn_scanner_data
+        }
+        
+        system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
+        user_prompt = f"Signal: {txn_type} {symbol} @ {price}. Market Context: {live_data}"
+        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.2,
+            "max_tokens": 50
+        }
+        
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=7)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content'].strip()
+    except:
+        pass
+    return "AI Validation Pending..."
 
 if __name__ == '__main__':
     with app.app_context():
