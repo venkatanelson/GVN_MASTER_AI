@@ -973,6 +973,28 @@ def user_dashboard(user_id):
                            parsed_trades=parsed_trades,
                            config=get_admin_config())
 
+@app.route('/admin/clear-today-trades')
+def clear_today_trades():
+    if not current_user.is_authenticated or not current_user.is_admin:
+        flash("Admin access required.", "danger")
+        return redirect(url_for('user_dashboard', user_id=current_user.id))
+    
+    try:
+        # Get IST today's date
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        today_date = now.date()
+        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
+        
+        # Delete all trades from today
+        AlgoTrade.query.filter(AlgoTrade.timestamp >= start_of_today).delete()
+        db.session.commit()
+        flash("Today's trade history cleared successfully.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error clearing history: {e}", "danger")
+    
+    return redirect(url_for('user_dashboard', user_id=current_user.id))
+
 @app.route('/update-lots', methods=['POST'])
 def update_lots():
     user_id = request.form.get('user_id')
