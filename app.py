@@ -1658,7 +1658,9 @@ import google.generativeai as genai
 @app.route('/api/ai-chat', methods=['POST'])
 def ai_chat():
     user_msg = request.json.get('message', '')
-    api_key = os.environ.get('GEMINI_API_KEY')
+    from dotenv import dotenv_values
+    env_config = dotenv_values(".env")
+    api_key = env_config.get('GEMINI_API_KEY') or os.environ.get('GEMINI_API_KEY')
     
     if not api_key or api_key == 'YOUR_GEMINI_API_KEY_HERE':
         return jsonify({"reply": "⚠️ **GEMINI_API_KEY** is not set! Please add your free API key from Google AI Studio to the system environment variables to activate the Double Engine."})
