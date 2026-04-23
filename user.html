@@ -315,14 +315,60 @@
             .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.4); z-index: 10; text-align: center; padding: 20px; }
         </style>
 
-        <div class="card glass-panel" style="margin-top: 30px; border-top: 6px solid var(--primary); background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(99,102,241,0.05)); position: relative; overflow: hidden;">
+        <!-- 🤖 GVN AI MARKET PULSE (TRADINGVIEW STYLE GAUGE) -->
+        <div class="card glass-panel" style="margin-top: 30px; margin-bottom: 25px; background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(255,255,255,0.05); border-top: 6px solid #6366f1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin:0; font-size: 18px; display: flex; align-items: center; gap: 10px; color: #fff;">
+                    <span style="background: #6366f1; padding: 6px; border-radius: 8px;">🤖</span> GVN AI Market Pulse
+                </h3>
+                <div style="display: flex; gap: 10px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 10px;">
+                    <button onclick="switchIndex('NIFTY')" id="pulse-tab-NIFTY" class="index-tab active" style="color: #fff;">NIFTY</button>
+                    <button onclick="switchIndex('BANKNIFTY')" id="pulse-tab-BANKNIFTY" class="index-tab" style="color: #fff;">BANKNIFTY</button>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px; align-items: center;">
+                <!-- 🌡️ Sentiment Gauge -->
+                <div style="text-align: center; position: relative;">
+                    <div style="width: 160px; height: 80px; margin: 0 auto; overflow: hidden; position: relative; border-radius: 80px 80px 0 0; background: rgba(255,255,255,0.05);">
+                        <div id="pulse-gauge" style="position: absolute; top: 0; left: 0; width: 100%; height: 200%; border-radius: 50%; background: conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg); transform: rotate(-90deg); transition: transform 1s cubic-bezier(0.175, 0.885, 0.32, 1.275);"></div>
+                        <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 130px; height: 65px; background: #0f172a; border-radius: 65px 65px 0 0; z-index: 2;"></div>
+                        <div id="gauge-needle" style="position: absolute; bottom: 0; left: 50%; width: 4px; height: 75px; background: #fff; transform-origin: bottom center; transform: rotate(-90deg); z-index: 3; transition: transform 1s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 0 10px rgba(255,255,255,0.5);"></div>
+                    </div>
+                    <h2 id="pulse-sentiment" style="margin: 15px 0 5px; font-size: 24px; font-weight: 900; color: #fff;">NEUTRAL</h2>
+                    <small id="pulse-score" style="color: #94a3b8; font-weight: 700;">Score: 50.0</small>
+                </div>
+
+                <!-- 📊 Detailed Metrics -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <small style="color: #94a3b8; display: block; margin-bottom: 5px; font-weight: 700; text-transform: uppercase; font-size: 10px;">Current Trend</small>
+                        <span id="pulse-trend" style="font-size: 16px; font-weight: 800; color: #f59e0b;">SIDEWAYS</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <small style="color: #94a3b8; display: block; margin-bottom: 5px; font-weight: 700; text-transform: uppercase; font-size: 10px;">Inst. Activity</small>
+                        <span id="pulse-inst" style="font-size: 16px; font-weight: 800; color: #fff;">QUIET</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <small style="color: #94a3b8; display: block; margin-bottom: 5px; font-weight: 700; text-transform: uppercase; font-size: 10px;">Volume Strength</small>
+                        <span id="pulse-vol" style="font-size: 16px; font-weight: 800; color: #fff;">NORMAL</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <small style="color: #94a3b8; display: block; margin-bottom: 5px; font-weight: 700; text-transform: uppercase; font-size: 10px;">Update Time</small>
+                        <span id="pulse-time" style="font-size: 16px; font-weight: 800; color: #6366f1;">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card glass-panel" style="margin-top: 30px; border-top: 6px solid #10b981; background: linear-gradient(to bottom, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.7)); position: relative; overflow: hidden;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <h3 style="margin: 0; color: #4f46e5; font-size: 1.4rem;">🚀 GVN AI Zero-to-Hero Live Scanner</h3>
-                <div style="display: flex; gap: 5px; background: #f3f4f6; padding: 4px; border-radius: 10px;">
-                    <button class="index-tab active" onclick="switchIndex('NIFTY')">NIFTY</button>
-                    <button class="index-tab" onclick="switchIndex('BANKNIFTY')">BANKNIFTY</button>
-                    <button class="index-tab" onclick="switchIndex('FINNIFTY')">FINNIFTY</button>
-                    <button class="index-tab" onclick="switchIndex('SENSEX')">SENSEX</button>
+                <h3 style="margin: 0; color: #10b981; font-size: 1.4rem;">🎯 GVN AI Zero-to-Hero Scanner</h3>
+                <div style="display: flex; gap: 5px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 10px;">
+                    <button id="scanner-tab-NIFTY" class="index-tab active" onclick="switchIndex('NIFTY')" style="color: #fff;">NIFTY</button>
+                    <button id="scanner-tab-BANKNIFTY" class="index-tab" onclick="switchIndex('BANKNIFTY')" style="color: #fff;">BANKNIFTY</button>
+                    <button id="scanner-tab-FINNIFTY" class="index-tab" onclick="switchIndex('FINNIFTY')" style="color: #fff;">FINNIFTY</button>
+                    <button id="scanner-tab-SENSEX" class="index-tab" onclick="switchIndex('SENSEX')" style="color: #fff;">SENSEX</button>
                 </div>
                 <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
                     <div id="dhan-heartbeat" class="heartbeat-container">
@@ -330,11 +376,11 @@
                         <span id="heartbeat-text" style="color: #3b82f6;">DHAN LIVE FEED</span>
                         <span style="margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2); color: #fff; font-weight: 800;">NIFTY: <span id="ui-nifty-price">0.00</span></span>
                     </div>
-                    <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Syncing via Dhan...</span>
+                    <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: rgba(99, 102, 241, 0.1); padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Syncing via Dhan...</span>
                 </div>
             </div>
 
-            <p style="font-size: 13px; color: #666; margin-top: 8px;">Monitoring high-frequency OTM and ITM reactions across the <b>GVN Master Alpha Grid</b>.</p>
+            <p style="font-size: 13px; color: #94a3b8; margin-top: 8px;">Monitoring high-frequency OTM and ITM reactions across the <b>GVN Master Alpha Grid</b>.</p>
             
             <div id="scanner-container" style="position: relative;">
                 {% if user.is_locked %}
@@ -354,8 +400,10 @@
                             <tr style="color: #cbd5e1; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; border-bottom: 2px solid rgba(255,255,255,0.1);">
                                 <th style="padding:12px 15px;">Option Strike</th>
                                 <th style="padding:12px 15px;">LTP & Delta</th>
+                                <th style="padding:12px 15px;">OI / Volume</th>
                                 <th style="padding:12px 15px;">GVN Alpha Grid</th>
-                                <th style="padding:12px 15px;">Potential Score</th>
+                                <th style="padding:12px 15px;">AI Pressure & Action</th>
+                                <th style="padding:12px 15px;">Score %</th>
                             </tr>
                         </thead>
                         <tbody id="scanner-body">
@@ -371,6 +419,7 @@
             
             function switchIndex(index) {
                 currentActiveIndex = index;
+                // Update all tab buttons (Pulse and Scanner)
                 document.querySelectorAll('.index-tab').forEach(btn => {
                     btn.classList.toggle('active', btn.innerText === index);
                 });
@@ -388,8 +437,29 @@
                         
                         const body = document.getElementById('scanner-body');
                         const data = result.data[currentActiveIndex] || [];
+                        const pulse = result.market_pulse ? result.market_pulse[currentActiveIndex] : null;
+
+                        // 🌟 Update Pulse UI
+                        if (pulse) {
+                            document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
+                            document.getElementById('pulse-score').innerText = `Score: ${pulse.score}`;
+                            document.getElementById('pulse-trend').innerText = pulse.trend;
+                            document.getElementById('pulse-inst').innerText = pulse.inst_activity;
+                            document.getElementById('pulse-vol').innerText = pulse.volume;
+                            document.getElementById('pulse-time').innerText = result.market_pulse.last_updated;
+
+                            // Color logic
+                            const sColor = pulse.score > 55 ? '#10b981' : (pulse.score < 45 ? '#ef4444' : '#f59e0b');
+                            document.getElementById('pulse-sentiment').style.color = sColor;
+                            document.getElementById('pulse-trend').style.color = sColor;
+                            
+                            // Needle rotation (0% score = -90deg, 100% score = 90deg)
+                            const angle = (pulse.score - 50) * 1.8;
+                            document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
+                        }
+
                         if (data.length === 0) {
-                            body.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px;">Analysis Paused for ${currentActiveIndex}.</td></tr>`;
+                            body.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px;">Analysis Paused for ${currentActiveIndex}.</td></tr>`;
                             return;
                         }
 
@@ -420,15 +490,27 @@
                                         <small style="color: #94a3b8; font-weight: 600;">Δ ${item.delta}</small>
                                     </td>
                                     <td style="padding:15px;">
-                                        <span class="${isPulse ? 'pulse-buy' : ''}" style="background: ${zoneBg}; color: ${zoneColor}; padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 11px; white-space: nowrap;">
+                                        <span style="color: ${item.oi_change >= 0 ? '#10b981' : '#ef4444'}; font-weight: 800; font-size: 11px;">
+                                            OI: ${item.oi_change >= 0 ? '+' : ''}${Math.round(item.oi_change / 1000)}k
+                                        </span><br>
+                                        <small style="color: #94a3b8; font-weight: 600;">Vol: ${(item.volume / 1000).toFixed(1)}k</small>
+                                    </td>
+                                    <td style="padding:15px;">
+                                        <span class="${isPulse ? 'pulse-buy' : ''}" style="background: ${zoneBg}; color: ${zoneColor}; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 10px; white-space: nowrap;">
                                             ${item.zone}
                                         </span>
                                         <div class="progress-bar" style="background: rgba(255,255,255,0.1);"><div class="progress-fill" style="width: ${progress}%; background: ${potColor};"></div></div>
                                     </td>
+                                    <td style="padding:15px;">
+                                        <span style="color: ${item.ai_signal.includes('BUY') ? '#10b981' : (item.ai_signal.includes('WAIT') ? '#f59e0b' : '#ef4444')}; font-weight: 900; font-size: 12px;">
+                                            ${item.ai_signal}
+                                        </span><br>
+                                        <small style="color: #94a3b8; font-size: 10px; font-weight: 600;">${item.pressure}</small>
+                                    </td>
                                     <td style="padding:15px; border-radius: 0 8px 8px 0;">
-                                        <div style="display:flex; align-items:center; gap: 10px;">
-                                            <span style="font-weight: 900; color: ${potColor}; font-size: 16px;">${item.score}%</span>
-                                            <small style="color: #94a3b8; font-weight: 700;">${item.potential}</small>
+                                        <div style="display:flex; align-items:center; gap: 8px;">
+                                            <span style="font-weight: 900; color: ${potColor}; font-size: 15px;">${item.score}%</span>
+                                            <small style="color: #94a3b8; font-weight: 700; font-size: 10px;">${item.potential}</small>
                                         </div>
                                     </td>
                                 </tr>
@@ -482,6 +564,7 @@
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Symbol</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Status</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Entry</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Target / SL</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Exit</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">AI Opinion</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">P&L (₹)</th>
@@ -510,6 +593,10 @@
                         {% else %}
                             ₹ {{ t.entry_price }}
                         {% endif %}
+                    </td>
+                    <td style="padding:15px; font-size: 11px;">
+                        <span style="color: #10b981; font-weight: 800;">T: {{ t.target }}</span><br>
+                        <span style="color: #ef4444; font-weight: 800;">S: {{ t.sl }}</span>
                     </td>
                     <td style="padding:15px; color: #cbd5e1;">
                         {% if t.status == 'Running' %} - {% else %} ₹ {{ t.exit_price }} {% endif %}
