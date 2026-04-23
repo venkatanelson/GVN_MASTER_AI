@@ -290,6 +290,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                         pressure = "🟢 MOMENTUM BUILDING"
                         ai_signal = "⚡ TREND BUY"
                     
+                    # 🌟 GVN MASTER ALGO: i-Level Identification
+                    i_level = "NORMAL"
+                    if abs(ltp - levels["Level_5"]) < 2: i_level = "i5 (Pivot)"
+                    elif abs(ltp - levels["Level_6"]) < 2: i_level = "i6 (Golden)"
+                    elif abs(ltp - levels["Level_7"]) < 2: i_level = "i7 (Inst)"
+                    elif abs(ltp - levels["Level_1"]) < 2: i_level = "i1 (Expiry)"
+                    
                     gvn_scanner_data[symbol].append({
                         "strike": f"{int(strike)} {opt_type}",
                         "ltp": ltp,
@@ -300,6 +307,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                         "zone": zone,
                         "pressure": pressure,
                         "ai_signal": ai_signal,
+                        "i_level": i_level,
                         "potential": "HIGH" if score >= 60 else "MODERATE",
                         "levels": levels
                     })
