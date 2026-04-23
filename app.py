@@ -1713,13 +1713,19 @@ def ai_chat():
         return jsonify({"reply": "🔒 Your AI Engine is Locked."})
         
     try:
-        # Get live data context from the background worker
+        # Get live data context
         nifty = nse_option_chain.live_option_chain_summary.get("NIFTY", {})
         banknifty = nse_option_chain.live_option_chain_summary.get("BANKNIFTY", {})
         
-        context = f"LIVE DATA: NIFTY Spot={nifty.get('spot', 0)}, BANKNIFTY Spot={banknifty.get('banknifty_spot', 0)}, NIFTY CE60={nifty.get('ce_60', 0)}, NIFTY PE60={nifty.get('pe_60', 0)}"
+        # 🌟 FORCE SYNC: Ensure we get the latest values
+        n_spot = nifty.get('spot', 0)
+        bn_spot = banknifty.get('spot', 0)
+        ce_60 = nifty.get('ce_60', 0)
+        pe_60 = nifty.get('pe_60', 0)
         
-        system_prompt = "You are GVN Algo AI Analyst. Analyze the signal against live data context provided. Be brief, professional, and actionable."
+        context = f"MARKET SNAPSHOT - NIFTY: {n_spot}, BANKNIFTY: {bn_spot}, DELTA 60 CE: {ce_60}, DELTA 60 PE: {pe_60}. Analyze this trend."
+        
+        system_prompt = "You are GVN AI Analyst. Analyze the provided NIFTY/BANKNIFTY snapshot. Provide professional insights on trend and safety. Be brief."
         
         headers = {
             "Authorization": f"Bearer {api_key}",
