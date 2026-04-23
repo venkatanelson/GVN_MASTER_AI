@@ -328,6 +328,7 @@
                     <div id="dhan-heartbeat" class="heartbeat-container">
                         <span id="heartbeat-dot" class="dot dot-blue"></span>
                         <span id="heartbeat-text" style="color: #3b82f6;">DHAN LIVE FEED</span>
+                        <span style="margin-left: 10px; padding-left: 10px; border-left: 1px solid rgba(255,255,255,0.2); color: #fff; font-weight: 800;">NIFTY: <span id="ui-nifty-price">0.00</span></span>
                     </div>
                     <span id="scanner-timer" style="font-size: 11px; font-weight: bold; color: #6366f1; background: #eef2ff; padding: 4px 10px; border-radius: 12px; border: 1px solid #c7d2fe;">Syncing via Dhan...</span>
                 </div>
@@ -380,6 +381,11 @@
                 fetch('/api/gvn-scanner')
                     .then(response => response.json())
                     .then(result => {
+                        // 🌟 UPDATE UI SPOT PRICE
+                        if (result.nifty_spot) {
+                            document.getElementById('ui-nifty-price').innerText = result.nifty_spot;
+                        }
+                        
                         const body = document.getElementById('scanner-body');
                         const data = result.data[currentActiveIndex] || [];
                         if (data.length === 0) {
@@ -904,17 +910,8 @@
             const msg = text || input.value.trim();
             if (!msg) return;
 
-            // 🌟 GET PRICE FROM UI
-            let currentNifty = "0";
-            try {
-                const rows = document.querySelectorAll('tr');
-                for (let tr of rows) {
-                    if (tr.innerText.includes('NIFTY')) {
-                        currentNifty = tr.querySelectorAll('td')[1].innerText;
-                        break;
-                    }
-                }
-            } catch(e) {}
+            // 🌟 GET PRICE FROM THE NEW UI ELEMENT
+            let currentNifty = document.getElementById('ui-nifty-price')?.innerText || "0";
 
             input.value = '';
             const chatBody = document.getElementById('aiChatBody');
