@@ -1716,24 +1716,33 @@ def ai_chat():
         # 🌟 DIRECT SYNC WITH DHAN FOR AI CONTEXT
         n_spot = 0
         try:
+            print("\n" + "!"*40)
+            print("🚀 AI CHAT SYNC STARTING...")
             import sqlite3
             from cryptography.fernet import Fernet
             from dhanhq import dhanhq
             
             conn = sqlite3.connect('instance/gvn_algo_pro.db')
             cursor = conn.cursor()
-            cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+            uid = session.get('user_id')
+            cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = ? LIMIT 1", (uid,))
             row = cursor.fetchone()
+            
+            if not row:
+                print(f"⚠️ [AI SYNC] NO CONFIG FOR USER {uid}, TRYING FIRST...")
+                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+                row = cursor.fetchone()
+            
             conn.close()
             
             if row:
+                print("✅ [AI SYNC] FOUND CONFIG. CONNECTING DHAN...")
                 cipher = Fernet(b'gvn_secure_key_for_encryption_26')
                 token = cipher.decrypt(row[1]).decode()
                 d_client = dhanhq(row[0], token)
-                
-                # Get NIFTY Spot with robust detection
                 lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
                 raw_data = lp_resp.get('data', {})
+                
                 if '13' in raw_data:
                     n_spot = raw_data['13'].get('lastPrice', 0)
                 else:
@@ -1741,7 +1750,10 @@ def ai_chat():
                         if isinstance(v, dict) and 'lastPrice' in v:
                             n_spot = v['lastPrice']
                             break
-                print(f"🔥 [AI SYNC] NIFTY PRICE: {n_spot}")
+                print(f"✨ [AI SYNC] NIFTY PRICE DETECTED: {n_spot}")
+            else:
+                print("❌ [AI SYNC] NO CONFIG FOUND ANYWHERE!")
+            print("!"*40 + "\n")
         except Exception as de:
             print(f"❌ [AI SYNC ERROR] {de}")
 
