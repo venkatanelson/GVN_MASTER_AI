@@ -1803,12 +1803,24 @@ def get_ai_validation(symbol, txn_type, price):
         pass
     return "AI Validation Pending..."
 
+@app.route('/api/gvn-scanner')
+def gvn_scanner():
+    # 🌟 Get the latest NIFTY price from global summary
+    n_price = nse_option_chain.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    return jsonify({
+        "status": "success",
+        "data": nse_option_chain.gvn_scanner_data,
+        "summary": nse_option_chain.live_option_chain_summary,
+        "nifty_spot": n_price
+    })
+
 @app.route('/api/debug-data')
 def debug_data():
     return jsonify({
         "summary": nse_option_chain.live_option_chain_summary,
         "scanner": nse_option_chain.gvn_scanner_data,
-        "config": nse_option_chain.dhan_master_config.get('active')
+        "config": nse_option_chain.dhan_master_config.get('active'),
+        "nifty_spot": nse_option_chain.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
 
 if __name__ == '__main__':
