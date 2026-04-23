@@ -469,18 +469,20 @@ with app.app_context():
     except Exception:
         db.session.rollback()
 
+    # 🌟 Ensure algo_trades_v3 columns exist (Migration Fix)
     try:
-        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN target_price FLOAT;'))
-        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN stop_loss FLOAT;'))
+        res = db.session.execute(db.text('PRAGMA table_info(algo_trades_v3);')).fetchall()
+        columns = [row[1] for row in res]
+        if 'target_price' not in columns:
+            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN target_price FLOAT;'))
+        if 'stop_loss' not in columns:
+            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN stop_loss FLOAT;'))
+        if 'ai_opinion' not in columns:
+            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN ai_opinion VARCHAR(500);'))
         db.session.commit()
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        
-    try:
-        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN ai_opinion VARCHAR(500);'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+        print(f"Migration Error on algo_trades_v3: {e}")
         
     try:
         db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN trade_lots INTEGER DEFAULT 1;'))
