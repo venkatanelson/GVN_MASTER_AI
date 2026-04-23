@@ -1730,9 +1730,20 @@ def ai_chat():
                 cipher = Fernet(b'gvn_secure_key_for_encryption_26')
                 token = cipher.decrypt(row[1]).decode()
                 d_client = dhanhq(row[0], token)
+                
+                # Get NIFTY Spot with robust detection
                 lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
-                n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
-        except: pass
+                raw_data = lp_resp.get('data', {})
+                if '13' in raw_data:
+                    n_spot = raw_data['13'].get('lastPrice', 0)
+                else:
+                    for k, v in raw_data.items():
+                        if isinstance(v, dict) and 'lastPrice' in v:
+                            n_spot = v['lastPrice']
+                            break
+                print(f"🔥 [AI SYNC] NIFTY PRICE: {n_spot}")
+        except Exception as de:
+            print(f"❌ [AI SYNC ERROR] {de}")
 
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}. Analyze based on this price."
         system_prompt = "You are GVN AI Analyst. Analyze the NIFTY spot price and provide brief, professional trading insights."
