@@ -1713,25 +1713,31 @@ def ai_chat():
         return jsonify({"reply": "🔒 Your AI Engine is Locked."})
         
     try:
-        # Get live data context
-        nifty = nse_option_chain.live_option_chain_summary.get("NIFTY", {})
-        banknifty = nse_option_chain.live_option_chain_summary.get("BANKNIFTY", {})
+        # 🌟 DIRECT SYNC WITH DHAN FOR AI CONTEXT
+        n_spot = 0
+        try:
+            import sqlite3
+            from cryptography.fernet import Fernet
+            from dhanhq import dhanhq
+            
+            conn = sqlite3.connect('instance/gvn_algo_pro.db')
+            cursor = conn.cursor()
+            cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                cipher = Fernet(b'gvn_secure_key_for_encryption_26')
+                token = cipher.decrypt(row[1]).decode()
+                d_client = dhanhq(row[0], token)
+                lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
+                n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
+        except: pass
+
+        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}. Analyze based on this price."
+        system_prompt = "You are GVN AI Analyst. Analyze the NIFTY spot price and provide brief, professional trading insights."
         
-        # 🌟 FORCE SYNC: Ensure we get the latest values
-        n_spot = nifty.get('spot', 0)
-        bn_spot = banknifty.get('spot', 0)
-        ce_60 = nifty.get('ce_60', 0)
-        pe_60 = nifty.get('pe_60', 0)
-        
-        context = f"MARKET SNAPSHOT - NIFTY: {n_spot}, BANKNIFTY: {bn_spot}, DELTA 60 CE: {ce_60}, DELTA 60 PE: {pe_60}. Analyze this trend."
-        
-        system_prompt = "You are GVN AI Analyst. Analyze the provided NIFTY/BANKNIFTY snapshot. Provide professional insights on trend and safety. Be brief."
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {
             "model": "llama-3.3-70b-versatile",
             "messages": [
@@ -1742,15 +1748,13 @@ def ai_chat():
         }
         
         response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=15)
-        
         if response.status_code == 200:
-            data = response.json()
-            return jsonify({"reply": data['choices'][0]['message']['content']})
+            return jsonify({"reply": response.json()['choices'][0]['message']['content']})
         else:
-            return jsonify({"reply": f"❌ AI Engine Error: HTTP {response.status_code}"})
+            return jsonify({"reply": f"AI Error: HTTP {response.status_code}"})
             
     except Exception as e:
-        return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
+        return jsonify({"reply": f"Error: {str(e)}"})
 
 def get_ai_validation(symbol, txn_type, price):
     """
@@ -1790,6 +1794,14 @@ def get_ai_validation(symbol, txn_type, price):
     except:
         pass
     return "AI Validation Pending..."
+
+@app.route('/api/debug-data')
+def debug_data():
+    return jsonify({
+        "summary": nse_option_chain.live_option_chain_summary,
+        "scanner": nse_option_chain.gvn_scanner_data,
+        "config": nse_option_chain.dhan_master_config.get('active')
+    })
 
 if __name__ == '__main__':
     with app.app_context():
