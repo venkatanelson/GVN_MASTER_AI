@@ -276,24 +276,25 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                         "levels": levels
                     })
 
-    # Update Global Strikes
+    # 🌟 ALWAYS Update Summary with Spot Price if available
+    if underlying_value > 0:
+        live_option_chain_summary[symbol]["spot"] = underlying_value
+        live_option_chain_summary[symbol]["atm"] = int(round(underlying_value / (100 if symbol != "BANKNIFTY" else 100)) * (100 if symbol != "BANKNIFTY" else 100))
+        live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
+
+    # Update Global Strikes separately
     if best_ce_60 and best_pe_60:
-        formatted_expiry = expiry_dt.strftime("%d %b").upper() # e.g. "25 APR"
+        formatted_expiry = expiry_dt.strftime("%d %b").upper()
         current_delta_60_strikes[symbol] = {
             "CE": int(best_ce_60), 
             "PE": int(best_pe_60),
             "expiry": formatted_expiry
         }
-        
-        # Update Summary
-        live_option_chain_summary[symbol] = {
-            "spot": underlying_value,
-            "atm": int(round(underlying_value / (100 if symbol != "BANKNIFTY" else 100)) * (100 if symbol != "BANKNIFTY" else 100)),
+        live_option_chain_summary[symbol].update({
             "ce_60": int(best_ce_60),
             "pe_60": int(best_pe_60),
             "expiry": formatted_expiry
-        }
-        live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        })
         
         # 🌟 ALWAYS PERSIST TO FILE (even if ce_60/pe_60 are 0)
         try:
