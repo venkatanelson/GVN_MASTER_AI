@@ -29,6 +29,12 @@ live_option_chain_summary = {
     "SENSEX": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
     "last_updated": None
 }
+# Global memory for Market Pulse (Technicals Gauge)
+market_pulse = {
+    "NIFTY": {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"},
+    "BANKNIFTY": {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"},
+    "last_updated": None
+}
 
 # Global memory to store live option LTPs for Auto-Square-Off
 live_option_ltps = {}
@@ -225,6 +231,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         for opt_type, opt in options_to_process:
             ltp = opt.get("lastPrice") or opt.get("lastTradedPrice", 0)
             iv = opt.get("impliedVolatility", 0)
+            oi_change = opt.get("changeinOpenInterest") or opt.get("oiChange", 0)
+            volume = opt.get("totalTradedVolume") or opt.get("volume", 0)
             
             key = f"{int(strike)}_{opt_type}"
             live_option_ltps[key] = ltp
@@ -267,12 +275,31 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                     elif ltp >= levels["Level_3"]: zone, score = "📉 BEARISH TRAP (L3)", 15
                 
                 if score > 0:
+                    # 🌟 NEW: Calculate Buy/Sell Pressure & AI Signal
+                    # Pressure is a factor of how close price is to L7 (Support) or L3 (Breakout)
+                    pressure = "NEUTRAL"
+                    ai_signal = "WAIT"
+                    
+                    if ltp <= levels["Level_7"]:
+                        pressure = "🔥 HIGH BUY PRESSURE"
+                        ai_signal = "🚀 SCALPING BUY"
+                    elif ltp >= levels["Level_3"]:
+                        pressure = "⚠️ SELL PRESSURE / TRAP"
+                        ai_signal = "📉 REJECTION"
+                    elif ltp >= levels["Level_5"] and ltp < levels["Level_3"]:
+                        pressure = "🟢 MOMENTUM BUILDING"
+                        ai_signal = "⚡ TREND BUY"
+                    
                     gvn_scanner_data[symbol].append({
                         "strike": f"{int(strike)} {opt_type}",
                         "ltp": ltp,
                         "delta": round(delta, 2),
+                        "oi_change": oi_change,
+                        "volume": volume,
                         "score": score,
                         "zone": zone,
+                        "pressure": pressure,
+                        "ai_signal": ai_signal,
                         "potential": "HIGH" if score >= 60 else "MODERATE",
                         "levels": levels
                     })
@@ -307,6 +334,35 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     # Sort & Truncate
     gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
     
+    # 🌟 NEW: Update Market Pulse Sentiment
+    try:
+        ce_oi_total = sum(item.get('oi_change', 0) for item in gvn_scanner_data[symbol] if 'CE' in item['strike'])
+        pe_oi_total = sum(item.get('oi_change', 0) for item in gvn_scanner_data[symbol] if 'PE' in item['strike'])
+        
+        # Calculate a basic sentiment score 0-100 (Bullish if PE OI Change > CE OI Change)
+        total_oi_chg = abs(ce_oi_total) + abs(pe_oi_total)
+        score = 50
+        if total_oi_chg > 0:
+            # More Put Writing = Bullish
+            score = 50 + ((pe_oi_total - ce_oi_total) / total_oi_chg * 50)
+            score = max(0, min(100, score))
+            
+        sentiment = "NEUTRAL"
+        if score > 65: sentiment = "STRONG BUY"
+        elif score > 55: sentiment = "BUY"
+        elif score < 35: sentiment = "STRONG SELL"
+        elif score < 45: sentiment = "SELL"
+        
+        market_pulse[symbol] = {
+            "sentiment": sentiment,
+            "score": round(score, 1),
+            "trend": "BULLISH" if score > 55 else ("BEARISH" if score < 45 else "SIDEWAYS"),
+            "volume": "HIGH" if total_oi_chg > 500000 else "NORMAL",
+            "inst_activity": "ACTIVE" if abs(pe_oi_total - ce_oi_total) > 200000 else "QUIET"
+        }
+        market_pulse["last_updated"] = datetime.now().strftime("%H:%M:%S")
+    except: pass
+
     # Mark source
     source = data.get("source", "NSE_WEB")
     gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S") + f" ({source})"
