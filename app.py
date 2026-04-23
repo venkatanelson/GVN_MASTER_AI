@@ -1737,7 +1737,7 @@ def ai_chat():
                     cipher = Fernet(b'gvn_secure_key_for_encryption_26')
                     token = cipher.decrypt(row[1]).decode()
                     d_client = dhanhq(row[0], token)
-                    lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
+                    lp_resp = d_client.quote_data({"IDX_I": ["13"]})
                     n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
             except: pass
 
