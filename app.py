@@ -1697,82 +1697,49 @@ import requests
 
 @app.route('/api/ai-chat', methods=['POST'])
 def ai_chat():
-    user_msg = request.json.get('message', '')
-    from dotenv import dotenv_values
-    env_config = dotenv_values(".env")
-    api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
-    
-    if not api_key:
-        return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set!"})
-    
-    if 'user_id' not in session:
-        return jsonify({"reply": "⚠️ Please login first."})
-    
-    user = User.query.get(session['user_id'])
-    if user and user.is_locked:
-        return jsonify({"reply": "🔒 Your AI Engine is Locked."})
-        
     try:
-        # 🌟 DIRECT SYNC WITH DHAN FOR AI CONTEXT
-        n_spot = 0
-        try:
-            print("\n" + "!"*40)
-            print("🚀 AI CHAT SYNC STARTING...")
-            import sqlite3
-            from cryptography.fernet import Fernet
-            from dhanhq import dhanhq
+        data = request.json
+        user_msg = data.get('message', '')
+        # 🌟 NEW: Get price directly from frontend request
+        n_spot = data.get('nifty_price', '0')
+        
+        from dotenv import dotenv_values
+        env_config = dotenv_values(".env")
+        api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
+        
+        if not api_key:
+            return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set!"})
+        
+        if 'user_id' not in session:
+            return jsonify({"reply": "⚠️ Please login first."})
+        
+        user = User.query.get(session['user_id'])
+        if user and user.is_locked:
+            return jsonify({"reply": "🔒 Your AI Engine is Locked."})
             
-            conn = sqlite3.connect('instance/gvn_algo_pro.db')
-            cursor = conn.cursor()
-            uid = session.get('user_id')
-            # 🌟 FLEXIBLE SYNC: Try current user, then Admin (ID 1), then any
-            cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = ? LIMIT 1", (uid,))
-            row = cursor.fetchone()
-            
-            if not row:
-                print(f"⚠️ [AI SYNC] No Config for User {uid}, trying Admin (ID 1)...")
-                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = 1 LIMIT 1")
+        # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
+        if str(n_spot) == '0' or n_spot == 0:
+            try:
+                import sqlite3
+                from cryptography.fernet import Fernet
+                from dhanhq import dhanhq
+                conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                cursor = conn.cursor()
+                uid = session.get('user_id')
+                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = ? LIMIT 1", (uid,))
                 row = cursor.fetchone()
-            
-            if not row:
-                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
-                row = cursor.fetchone()
-            
-            conn.close()
-            
-            if row:
-                print("✅ [AI SYNC] FOUND CONFIG. CONNECTING DHAN...")
-                cipher = Fernet(b'gvn_secure_key_for_encryption_26')
-                token = cipher.decrypt(row[1]).decode()
-                d_client = dhanhq(row[0], token)
-                lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
-                raw_data = lp_resp.get('data', {})
+                if not row:
+                    cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+                    row = cursor.fetchone()
+                conn.close()
                 
-                if '13' in raw_data:
-                    n_spot = raw_data['13'].get('lastPrice', 0)
-                else:
-                    for k, v in raw_data.items():
-                        if isinstance(v, dict) and 'lastPrice' in v:
-                            n_spot = v['lastPrice']
-                            break
-                print(f"✨ [AI SYNC] NIFTY PRICE DETECTED: {n_spot}")
-            else:
-                print("❌ [AI SYNC] NO CONFIG FOUND ANYWHERE!")
-            
-            # 🌟 DOUBLE SAFETY: Fallback to JSON if still 0
-            if n_spot == 0:
-                try:
-                    import json
-                    if os.path.exists('live_market_data.json'):
-                        with open('live_market_data.json', 'r') as f:
-                            js_data = json.load(f)
-                            n_spot = js_data.get('NIFTY', {}).get('last_price', 0)
-                            print(f"🔄 [AI FALLBACK] Using JSON Data: {n_spot}")
-                except: pass
-
-            print("!"*40 + "\n")
-        except Exception as de:
-            print(f"❌ [AI SYNC ERROR] {de}")
+                if row:
+                    cipher = Fernet(b'gvn_secure_key_for_encryption_26')
+                    token = cipher.decrypt(row[1]).decode()
+                    d_client = dhanhq(row[0], token)
+                    lp_resp = d_client.quote_data({"NSE_INDEX": ["13"]})
+                    n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
+            except: pass
 
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}. Analyze based on this price."
         system_prompt = "You are GVN AI Analyst. Analyze the NIFTY spot price and provide brief, professional trading insights."
@@ -1795,6 +1762,7 @@ def ai_chat():
             
     except Exception as e:
         return jsonify({"reply": f"Error: {str(e)}"})
+
 
 def get_ai_validation(symbol, txn_type, price):
     """
