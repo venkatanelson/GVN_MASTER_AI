@@ -1653,21 +1653,20 @@ def sync_admin_dhan_to_worker():
 # ==========================================
 # 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
 # ==========================================
-import google.generativeai as genai
+from groq import Groq
 
 @app.route('/api/ai-chat', methods=['POST'])
 def ai_chat():
     user_msg = request.json.get('message', '')
     from dotenv import dotenv_values
     env_config = dotenv_values(".env")
-    api_key = env_config.get('GEMINI_API_KEY') or os.environ.get('GEMINI_API_KEY')
+    api_key = env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY')
     
-    if not api_key or api_key == 'YOUR_GEMINI_API_KEY_HERE':
-        return jsonify({"reply": "⚠️ **GEMINI_API_KEY** is not set! Please add your free API key from Google AI Studio to the system environment variables to activate the Double Engine."})
+    if not api_key:
+        return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set! Please add your free API key to activate the Double Engine."})
     
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        client = Groq(api_key=api_key)
         
         # Get live data context from the background worker
         live_data = {
@@ -1681,12 +1680,27 @@ You act as a 'Double Engine' verifying trades based on live Option Chain data.
 Be concise, highly professional, and use trading terminology (Call Writing, Put Unwinding, Delta, Momentum). 
 Respond in English (or Telugu if specifically asked) with clear actionable insights."""
 
-        response = model.generate_content(f"{system_prompt}\n\n{context}\nUser: {user_msg}")
-        return jsonify({"reply": response.text})
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": f"{context}\nUser: {user_msg}"
+                }
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            max_tokens=500,
+        )
+
+        return jsonify({"reply": chat_completion.choices[0].message.content})
         
     except Exception as e:
         if "429" in str(e):
-            return jsonify({"reply": "⚠️ మీ API కీ కి ఫ్రీ లిమిట్ '0' (జీరో) అని వస్తోంది. బహుశా మీ అకౌంట్ కి ఫ్రీ కోటా లేకపోవచ్చు. దయచేసి Google AI Studio లో కొత్త API కీ ని క్రియేట్ చేయండి లేదా వేరే Google అకౌంట్ తో ట్రై చేయండి."})
+             return jsonify({"reply": "⚠️ Groq Rate limit exceeded. Please wait a moment."})
         return jsonify({"reply": f"❌ AI Engine Error: {str(e)}"})
 
 if __name__ == '__main__':
