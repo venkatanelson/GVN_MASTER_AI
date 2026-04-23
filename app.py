@@ -469,20 +469,14 @@ with app.app_context():
     except Exception:
         db.session.rollback()
 
-    # 🌟 Ensure algo_trades_v3 columns exist (Migration Fix)
-    try:
-        res = db.session.execute(db.text('PRAGMA table_info(algo_trades_v3);')).fetchall()
-        columns = [row[1] for row in res]
-        if 'target_price' not in columns:
-            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN target_price FLOAT;'))
-        if 'stop_loss' not in columns:
-            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN stop_loss FLOAT;'))
-        if 'ai_opinion' not in columns:
-            db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN ai_opinion VARCHAR(500);'))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"Migration Error on algo_trades_v3: {e}")
+    # 🌟 Ensure algo_trades_v3 columns exist (Migration Fix for SQLite & Postgres)
+    for col_name, col_type in [('target_price', 'FLOAT'), ('stop_loss', 'FLOAT'), ('ai_opinion', 'VARCHAR(500)')]:
+        try:
+            db.session.execute(db.text(f'ALTER TABLE algo_trades_v3 ADD COLUMN {col_name} {col_type};'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
         
     try:
         db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN trade_lots INTEGER DEFAULT 1;'))
@@ -975,12 +969,16 @@ def user_dashboard(user_id):
 
 @app.route('/admin/clear-today-trades')
 def clear_today_trades():
-    if not current_user.is_authenticated or not current_user.is_admin:
+    uid = session.get('user_id')
+    if not uid:
+        return redirect(url_for('index'))
+    
+    user = User.query.get(uid)
+    if not user or not user.is_admin:
         flash("Admin access required.", "danger")
-        return redirect(url_for('user_dashboard', user_id=current_user.id))
+        return redirect(url_for('user_dashboard', user_id=uid))
     
     try:
-        # Get IST today's date
         now = datetime.utcnow() + timedelta(hours=5, minutes=30)
         today_date = now.date()
         start_of_today = datetime(today_date.year, today_date.month, today_date.day)
@@ -993,7 +991,8 @@ def clear_today_trades():
         db.session.rollback()
         flash(f"Error clearing history: {e}", "danger")
     
-    return redirect(url_for('user_dashboard', user_id=current_user.id))
+    return redirect(url_for('user_dashboard', user_id=uid))
+
 
 @app.route('/update-lots', methods=['POST'])
 def update_lots():
