@@ -1275,8 +1275,22 @@ def save_api_settings():
         broker_config.encrypted_totp_key = cipher.encrypt(totp_key.encode())
     
     db.session.commit()
+    
+    # 🌟 NEW: Immediately sync new keys to the background NSE worker
+    try:
+        sync_admin_dhan_to_worker()
+    except: pass
+    
     flash("API Settings Updated Successfully!")
     return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/admin/refresh-data-feed')
+@requires_auth
+def admin_refresh_feed():
+    """Manual trigger to sync Dhan keys to NSE worker."""
+    sync_admin_dhan_to_worker()
+    flash("⚡ Data Feed Sync Triggered! Market data should update in a few seconds.")
+    return redirect(request.referrer or url_for('admin_dashboard'))
 
 # ---------------------------------------------------------
 # DASHBOARD LOGIC (Admin & Global)
