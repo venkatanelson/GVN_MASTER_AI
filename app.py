@@ -187,6 +187,8 @@ class AlgoTrade(db.Model):
     status = db.Column(db.String(20)) # Running, Closed
     entry_price = db.Column(db.Float)
     exit_price = db.Column(db.Float, nullable=True)
+    target_price = db.Column(db.Float, nullable=True) # 🌟 NEW
+    stop_loss = db.Column(db.Float, nullable=True)    # 🌟 NEW
     pnl = db.Column(db.Float, default=0.0)
     ai_opinion = db.Column(db.String(500), nullable=True) # 🌟 NEW: Store AI's sentiment validation
 
@@ -456,6 +458,13 @@ with app.app_context():
 
     try:
         db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        
+    try:
+        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN target_price FLOAT;'))
+        db.session.execute(db.text('ALTER TABLE "algo_trades_v3" ADD COLUMN stop_loss FLOAT;'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -911,6 +920,8 @@ def user_dashboard(user_id):
             "status": t.status,
             "entry_price": t.entry_price,
             "exit_price": t.exit_price,
+            "target": t.target_price or 'N/A', # 🌟 NEW
+            "sl": t.stop_loss or 'N/A',        # 🌟 NEW
             "ai_opinion": getattr(t, 'ai_opinion', 'N/A') # 🌟 NEW
         })
         
@@ -1122,7 +1133,20 @@ def tv_webhook():
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
-                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=user_execution_qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt, ai_opinion=ai_opinion)
+                target_val = float(alert_data.get('target', 0))
+                sl_val = float(alert_data.get('sl', 0))
+                new_trade = AlgoTrade(
+                    user_id=u.id, 
+                    symbol=symbol, 
+                    quantity=user_execution_qty, 
+                    trade_type="BUY", 
+                    entry_price=price, 
+                    target_price=target_val, # 🌟 NEW
+                    stop_loss=sl_val,        # 🌟 NEW
+                    status="Running", 
+                    timestamp=today_dt, 
+                    ai_opinion=ai_opinion
+                )
                 db.session.add(new_trade)
                 trade_executed = True
 
@@ -1745,9 +1769,9 @@ def ai_chat():
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
             "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
-            "Analyze the given Nifty spot price. Identify if the current supports/resistances are genuine or fake (traps). "
-            "Provide clear, logical predictions for Zero-to-Hero strike prices. "
-            "Always explain your reasoning and answer the user's question directly."
+            "Analyze the given Nifty spot price. Identify if the current supports/resistances are genuine or fake (traps) using Call VS Put data. "
+            "Provide clear, logical predictions for Zero-to-Hero strike prices and exact reversal points. "
+            "CRITICAL RULE: You MUST provide your entire analysis and explanation in pure TELUGU language. Do NOT use English paragraphs. Use clear, descriptive Telugu."
         )
         
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -1817,6 +1841,7 @@ def gvn_scanner():
         "status": "success",
         "data": nse_option_chain.gvn_scanner_data,
         "summary": nse_option_chain.live_option_chain_summary,
+        "market_pulse": nse_option_chain.market_pulse, # 🌟 NEW
         "nifty_spot": n_price
     })
 
