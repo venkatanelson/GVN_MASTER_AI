@@ -1725,11 +1725,16 @@ def ai_chat():
             conn = sqlite3.connect('instance/gvn_algo_pro.db')
             cursor = conn.cursor()
             uid = session.get('user_id')
+            # 🌟 FLEXIBLE SYNC: Try current user, then Admin (ID 1), then any
             cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = ? LIMIT 1", (uid,))
             row = cursor.fetchone()
             
             if not row:
-                print(f"⚠️ [AI SYNC] NO CONFIG FOR USER {uid}, TRYING FIRST...")
+                print(f"⚠️ [AI SYNC] No Config for User {uid}, trying Admin (ID 1)...")
+                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = 1 LIMIT 1")
+                row = cursor.fetchone()
+            
+            if not row:
                 cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
                 row = cursor.fetchone()
             
