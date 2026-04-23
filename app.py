@@ -1665,7 +1665,7 @@ def ai_chat():
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
         
         # Get live data context from the background worker
         live_data = {
