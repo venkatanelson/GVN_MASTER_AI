@@ -477,6 +477,7 @@
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Status</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Entry</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Exit</th>
+                    <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">AI Opinion</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">P&L (₹)</th>
                     <th style="padding:12px; font-weight: 800; text-transform: uppercase; font-size: 11px;">Action</th>
                 </tr>
@@ -507,9 +508,16 @@
                     <td style="padding:15px; color: #cbd5e1;">
                         {% if t.status == 'Running' %} - {% else %} ₹ {{ t.exit_price }} {% endif %}
                     </td>
-                    <td style="padding:15px; font-weight: 800;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
-                        {% if t.status == 'Running' %}
+                    <td style="padding:15px; font-size: 11px; color: #94a3b8;">
+                        {% if t.ai_opinion %}
+                            <span style="background: rgba(99, 102, 241, 0.1); padding: 4px 8px; border-radius: 5px; border-left: 2px solid #6366f1;">{{ t.ai_opinion }}</span>
+                        {% else %}
                             -
+                        {% endif %}
+                    </td>
+                    <td style="padding:15px; font-weight: 800;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}" id="pnl-{{ t.id }}">
+                        {% if t.status == 'Running' %}
+                            <span class="live-pnl" data-trade-id="{{ t.id }}">₹ {{ "%.2f"|format(t.pnl) }}</span>
                         {% else %}
                             {% if t.pnl > 0 %}+{% endif %}₹ {{ "%.2f"|format(t.pnl) }}
                         {% endif %}
@@ -930,6 +938,33 @@
             }
             chatBody.scrollTop = chatBody.scrollHeight;
         }
+
+        // 🌟 LIVE P&L POLLING SCRIPT
+        function updateLivePnL() {
+            const livePnLCells = document.querySelectorAll('.live-pnl');
+            livePnLCells.forEach(cell => {
+                const tradeId = cell.getAttribute('data-trade-id');
+                fetch(`/api/live_trade_price/${tradeId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            const pnl = data.loss_points * -1; // API returns loss_points as positive for loss
+                            cell.innerText = `₹ ${pnl.toFixed(2)}`;
+                            const parentTd = cell.parentElement;
+                            if (pnl > 0) {
+                                parentTd.className = 'profit';
+                                cell.innerText = `+₹ ${pnl.toFixed(2)}`;
+                            } else if (pnl < 0) {
+                                parentTd.className = 'loss';
+                            } else {
+                                parentTd.className = '';
+                            }
+                        }
+                    })
+                    .catch(err => console.error('Error fetching live P&L:', err));
+            });
+        }
+        setInterval(updateLivePnL, 3000); // Poll every 3 seconds
     </script>
 </body>
 </html>
