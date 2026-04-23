@@ -1660,7 +1660,7 @@ def ai_chat():
     user_msg = request.json.get('message', '')
     from dotenv import dotenv_values
     env_config = dotenv_values(".env")
-    api_key = env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY')
+    api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
     
     if not api_key:
         return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set! Please add your free API key to activate the Double Engine."})
