@@ -889,7 +889,7 @@
         <div class="ai-quick-prompts">
             <button onclick="sendAIPrompt('Analyze Nifty Trend based on Option Chain')">📊 Nifty Trend</button>
             <button onclick="sendAIPrompt('Is it safe to buy CE now?')">🟢 CE Safe?</button>
-            <button onclick="sendAIPrompt('What is the sentiment? Tell me in Telugu')">🗣️ Telugu</button>
+            <button onclick="sendAIPrompt('Run GVN Deep Scan: Analyze Greeks (Gamma, Theta, IV), Operator Traps based on Change in OI, and predict the exact Zero-to-Hero strike price in Telugu.')" style="background: linear-gradient(45deg, #FF007A, #7A00FF); color: white; border: none; font-weight: bold; padding: 6px 12px; border-radius: 6px; box-shadow: 0 4px 10px rgba(255,0,122,0.3); animation: pulse 2s infinite; font-size: 11px;">🔮 DEEP SCAN</button>
         </div>
         <div class="ai-chat-input-area">
             <input type="text" id="aiChatInput" class="ai-input" placeholder="Ask AI..." onkeypress="if(event.key === 'Enter') sendAIPrompt()" {% if user.is_locked %}disabled{% endif %}>
