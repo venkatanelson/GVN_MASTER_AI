@@ -12,9 +12,13 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             secret_key = webhook_url.split('/')[-1]
             print(f"[DHAN DEBUG] Extracted Secret Key from URL: {secret_key}")
 
-        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-        t_type = "B" if transaction_type.upper() == "BUY" else "S"
-        
+        # 🌟 SMART: For NFO Options, Dhan Webhook Bridge often prefers no spaces (e.g., NIFTY25APR22400CE)
+        if is_nfo:
+            # Try to create a condensed symbol for the bridge
+            clean_symbol = symbol.replace(" ", "").upper()
+        else:
+            clean_symbol = symbol.upper()
+
         payload = {
             "secret": secret_key,
             "alertType": "single_order",
@@ -22,12 +26,14 @@ def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, 
             "orderType": "MKT",
             "quantity": str(quantity),
             "exchange": "NFO" if is_nfo else "NSE",
-            "symbol": symbol.upper(),
-            "productType": "M"
+            "symbol": clean_symbol,
+            "productType": "M",
+            "validity": "DAY",
+            "price": "0"
         }
         
         resp = requests.post(webhook_url, json=payload, timeout=8)
-        print(f"[DHAN WEBHOOK] URL: {webhook_url[:40]}... | Status: {resp.status_code} | Resp: {resp.text}")
+        print(f"[DHAN WEBHOOK] Sym: {clean_symbol} | Status: {resp.status_code} | Resp: {resp.text}")
         
         if resp.status_code != 200:
             print(f"❌ [DHAN REJECTION] Broker returned status {resp.status_code}. Check your URL or Secret Key.")
@@ -104,26 +110,28 @@ def execute_broker_order_async(broker_name, webhook_url, secret_key, symbol, tra
     Entry point to run the order in a background thread.
     """
     def run_order():
-        print(f"🚀 Executing Trade for {user_name} -> Broker: {broker_name} | {transaction_type} {quantity} {symbol}")
+        print(f"🚀 [ORDER ENGINE] User: {user_name} | {transaction_type} {quantity} {symbol}")
         
         success = False
         if broker_name.lower() == 'dhan':
-            # Priority 1: Official Dhan API (Gives instant Pass/Fail & Rejection reasons)
-            if client_id and access_token:
-                print(f"[DHAN] Using Official API for {symbol}...")
+            # Priority 1: Official Dhan API (Requires numeric Security ID)
+            if client_id and access_token and symbol.isdigit():
+                print(f"[DHAN] Attempting Official API for Security ID: {symbol}...")
                 success = place_dhan_official_api_order(client_id, access_token, symbol, transaction_type, quantity)
             
-            # Priority 2: Fallback to Webhook Bridge if API fails or credentials are missing
+            # Priority 2: Webhook Bridge (Best for string symbols like NIFTY25APR22400CE)
             if not success and webhook_url and secret_key:
-                print(f"[DHAN] Falling back to Webhook Bridge for {symbol}...")
+                print(f"[DHAN] Routing to Webhook Bridge for: {symbol}...")
                 success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
+            elif not success:
+                print(f"⚠️ [DHAN ALERT] No valid API credentials or Webhook configuration found for {user_name}.")
         else:
             success = place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
             
         if success:
-            print(f"✅ Trade successful for {user_name}")
+            print(f"✅ [SUCCESS] Trade confirmed for {user_name}")
         else:
-            print(f"❌ Trade FAILED for {user_name}")
+            print(f"❌ [FAILURE] Trade could not be placed for {user_name}. Check logs.")
 
     threading.Thread(target=run_order, daemon=True).start()
 def force_square_off_all_positions(client_id, access_token):
