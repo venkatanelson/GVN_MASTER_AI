@@ -131,6 +131,9 @@ def fetch_option_chain(symbol="NIFTY"):
             # 🌟 NEW: Try to get expiry list
             expiry_resp = dhan.expiry_list(sid, idx_segment)
             
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [DHAN EXPIRY DEBUG] {symbol} Resp: {expiry_resp}\n")
+            
             nearest_expiry = ""
             if expiry_resp.get('status') == 'success' and expiry_resp.get('data'):
                 nearest_expiry = expiry_resp.get('data')[0]
@@ -147,7 +150,7 @@ def fetch_option_chain(symbol="NIFTY"):
             chain_resp = dhan.option_chain(sid, idx_segment, nearest_expiry)
             
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')}\n")
+                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')} | Remarks: {chain_resp.get('remarks')}\n")
             
             if chain_resp.get('status') == 'success':
                 chain_data = chain_resp.get('data', [])
