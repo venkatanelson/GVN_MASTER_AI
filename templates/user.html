@@ -768,7 +768,8 @@
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
                         // 🌟 UPDATE MOVEMENT PULSE TEXT
-                        document.getElementById('movement-text').innerText = pulse.last_signal || 'SIDEWAYS';
+                        const pulseText = pulse.labels ? pulse.labels.join(' | ') : 'NATURAL MOMENTUM';
+                        document.getElementById('movement-text').innerText = pulseText;
                         if(data.length > 0) document.getElementById('active-strike-name').innerText = data[0].strike;
 
                         // 🌟 DYNAMIC COLORING & RAINBOW GAUGE
@@ -779,7 +780,7 @@
                             sentimentEl.style.background = "linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff)";
                             sentimentEl.style.webkitBackgroundClip = "text";
                             sentimentEl.style.webkitTextFillColor = "transparent";
-                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8f00ff)";
+                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ff0000 0%, #ff7f00 15%, #ffff00 30%, #00ff00 45%, #0000ff 60%, #4b0082 75%, #8f00ff 90%, #ff0000 100%)";
                             gauge.classList.add('live-pulse');
                         } else {
                             sentimentEl.style.webkitTextFillColor = "";
@@ -790,9 +791,7 @@
                         }
 
                         // 🌟 SHOW AI LABELS (Pine Script Logic)
-                        if(pulse.labels && pulse.labels.length > 0) {
-                            document.getElementById('pulse-inst').innerHTML = pulse.labels.map(l => `<div style="font-size:10px; margin-bottom:2px;">${l}</div>`).join('');
-                        }
+                        document.getElementById('pulse-inst').innerHTML = pulse.labels ? pulse.labels.map(l => `<div style="font-size:10px; margin-bottom:2px; font-weight:800;">${l}</div>`).join('') : 'LOW';
 
                         const angle = (pulse.score - 50) * 1.8;
                         document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
