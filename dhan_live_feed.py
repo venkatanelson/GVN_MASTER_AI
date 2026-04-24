@@ -28,6 +28,14 @@ live_option_chain_summary = {
     "SENSEX": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
     "last_updated": None
 }
+# Global memory for full Option Chain data
+full_option_chain_data = {
+    "NIFTY": [],
+    "BANKNIFTY": [],
+    "FINNIFTY": [],
+    "last_updated": None
+}
+
 # Global memory for Market Pulse (Technicals Gauge)
 market_pulse = {
     "NIFTY": {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"},
@@ -117,21 +125,31 @@ def fetch_option_chain(symbol="NIFTY"):
         
         # Get Option Chain from Dhan
         try:
-            # Dhan option_chain expects (UnderSecurityId, UnderExchangeSegment, Expiry)
+            # 🌟 NEW: First get the nearest expiry date
             idx_segment = "IDX_I" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
-            chain_resp = dhan.option_chain(sid, idx_segment, "")
+            expiry_resp = dhan.expiry_list(sid, idx_segment)
+            
+            nearest_expiry = ""
+            if expiry_resp.get('status') == 'success' and expiry_resp.get('data'):
+                # Sort if needed, usually the first one is nearest
+                nearest_expiry = expiry_resp.get('data')[0]
+                
+            # Now fetch the actual option chain for this expiry
+            chain_resp = dhan.option_chain(sid, idx_segment, nearest_expiry)
+            
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} Option Chain Status: {chain_resp.get('status')}\n")
+                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')}\n")
             
             if chain_resp.get('status') == 'success':
                 chain_data = chain_resp.get('data', [])
                 return {
                     "records": {
                         "underlyingValue": lp,
-                        "expiryDates": [datetime.now().strftime("%d-%b-%Y")], 
+                        "expiryDates": expiry_resp.get('data', [datetime.now().strftime("%Y-%m-%d")]), 
                         "data": chain_data
                     },
-                    "source": "DHAN_OPTION_CHAIN"
+                    "source": "DHAN_OPTION_CHAIN",
+                    "nearest_expiry": nearest_expiry
                 }
         except Exception as e:
             with open("dhan_feed_status.log", "a") as f:
@@ -140,7 +158,7 @@ def fetch_option_chain(symbol="NIFTY"):
         return {
             "records": {
                 "underlyingValue": lp,
-                "expiryDates": [datetime.now().strftime("%d-%b-%Y")], 
+                "expiryDates": [datetime.now().strftime("%Y-%m-%d")], 
                 "data": [] # Still return index price at least
             },
             "source": "DHAN_LTP_ONLY"
@@ -164,7 +182,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     nearest_expiry = expiry_dates[0]
     
     # Time to Expiry (T)
-    expiry_dt = datetime.strptime(nearest_expiry, "%d-%b-%Y")
+    try:
+        expiry_dt = datetime.strptime(nearest_expiry, "%d-%b-%Y")
+    except ValueError:
+        try:
+            expiry_dt = datetime.strptime(nearest_expiry, "%Y-%m-%d")
+        except ValueError:
+            expiry_dt = datetime.now() + timedelta(days=1)
+    
     now_dt = datetime.now()
     days_to_expiry = max((expiry_dt - now_dt).days, 0.01)
     T = days_to_expiry / 365.0  
@@ -172,6 +197,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     # Reset scanner data for this symbol
     gvn_scanner_data[symbol] = []
+    chain_map = {} # To store strike-wise CE and PE data
     
     best_ce_60 = None
     best_pe_60 = None
@@ -197,9 +223,22 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         for opt_type, opt in options_to_process:
             ltp = opt.get("lastPrice") or opt.get("lastTradedPrice", 0)
             iv = opt.get("impliedVolatility", 0)
+            oi = opt.get("openInterest") or opt.get("oi", 0)
             oi_change = opt.get("changeinOpenInterest") or opt.get("oiChange", 0)
             volume = opt.get("totalTradedVolume") or opt.get("volume", 0)
             
+            # Store in chain_map
+            if strike not in chain_map:
+                chain_map[strike] = {"strike": strike}
+            
+            suffix = opt_type.lower()
+            chain_map[strike].update({
+                f"{suffix}_ltp": ltp,
+                f"{suffix}_oi": oi,
+                f"{suffix}_iv": round(iv, 2),
+                f"{suffix}_vol": volume
+            })
+
             key = f"{int(strike)}_{opt_type}"
             live_option_ltps[key] = ltp
             
@@ -275,8 +314,18 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     if underlying_value > 0:
         live_option_chain_summary[symbol]["spot"] = underlying_value
-        live_option_chain_summary[symbol]["atm"] = int(round(underlying_value / (100 if symbol != "BANKNIFTY" else 100)) * (100 if symbol != "BANKNIFTY" else 100))
+        atm = int(round(underlying_value / (50 if symbol == "NIFTY" else 100)) * (50 if symbol == "NIFTY" else 100))
+        live_option_chain_summary[symbol]["atm"] = atm
         live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
+
+        # 🌟 Store Full Option Chain
+        sorted_chain = sorted(chain_map.values(), key=lambda x: x['strike'])
+        # Mark ATM row
+        for row in sorted_chain:
+            row['is_atm'] = (row['strike'] == atm)
+        
+        full_option_chain_data[symbol] = sorted_chain
+        full_option_chain_data["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
     if best_ce_60 and best_pe_60:
         formatted_expiry = expiry_dt.strftime("%d %b").upper()
