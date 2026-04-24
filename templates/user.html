@@ -484,19 +484,52 @@
     </div>
 
     <!-- 🤖 GVN AI WIDGET -->
-    <div onclick="toggleAIChat()" style="position: fixed; bottom: 30px; right: 30px; width: 70px; height: 70px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 20px var(--primary-glow); z-index: 1000; font-weight: 900; color: white;">GVN</div>
+    <div onclick="toggleAIChat()" style="position: fixed; bottom: 30px; right: 30px; width: 80px; height: 80px; background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 25px rgba(168, 85, 247, 0.6); z-index: 1000; font-weight: 900; color: white; font-size: 15px; text-align: center; line-height: 1.2; animation: pulse-ai 2s infinite; border: 2px solid rgba(255,255,255,0.2);">GVN<br>AI</div>
     
-    <div id="aiChatWindow" style="display: none; position: fixed; bottom: 110px; right: 30px; width: 350px; height: 500px; background: rgba(15, 23, 42, 0.98); border: 1px solid var(--primary); border-radius: 24px; flex-direction: column; z-index: 1000; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-        <div style="background: var(--primary); padding: 15px; color: white; font-weight: 900; display: flex; justify-content: space-between;">
-            <span>⚡ GVN AI Double Engine</span>
-            <span style="cursor: pointer;" onclick="toggleAIChat()">✕</span>
+    <style>
+        @keyframes pulse-ai {
+            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        .ai-quick-btn {
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--primary);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: 0.3s;
+            font-weight: 800;
+        }
+        .ai-quick-btn:hover { background: var(--primary); }
+    </style>
+
+    <div id="aiChatWindow" style="display: none; position: fixed; bottom: 120px; right: 30px; width: 360px; height: 520px; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 24px; flex-direction: column; z-index: 1000; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.7); backdrop-filter: blur(20px);">
+        <div style="background: linear-gradient(135deg, #6366f1, #a855f7); padding: 18px; color: white; font-weight: 900; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🤖</span>
+                <span>GVN AI Double Engine</span>
+            </div>
+            <span style="cursor: pointer; font-size: 18px;" onclick="toggleAIChat()">✕</span>
         </div>
-        <div id="aiChatBody" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
-            <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px;">Hello! I am GVN AI. How can I help you?</div>
+        
+        <div id="aiChatBody" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px 12px 12px 0; max-width: 85%; border-left: 3px solid #a855f7;">
+                Hello! I am GVN AI. How can I help you optimize your trades today?
+            </div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px;">
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Run Deep Scan on Option Chain'; sendAIPrompt();">🔍 Deep Scan</button>
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Analyze Alpha Grid Feed'; sendAIPrompt();">⚡ Alpha Grid Feed</button>
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Calculate i1-i7 Fibonacci Levels'; sendAIPrompt();">📐 i-Levels (Fibonacci)</button>
+            </div>
         </div>
-        <div style="padding: 10px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px;">
-            <input type="text" id="aiChatInput" placeholder="Ask AI..." style="margin-bottom: 0;">
-            <button onclick="sendAIPrompt()" class="btn-premium" style="padding: 8px 15px;">➤</button>
+        
+        <div style="padding: 15px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px; background: rgba(0,0,0,0.2);">
+            <input type="text" id="aiChatInput" placeholder="Ask GVN AI..." style="margin-bottom: 0; background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; border-radius: 50px !important;">
+            <button onclick="sendAIPrompt()" class="btn-premium" style="padding: 0 20px; border-radius: 50px; background: linear-gradient(135deg, #a855f7, #ec4899); box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);">➤</button>
         </div>
     </div>
 
