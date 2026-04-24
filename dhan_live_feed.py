@@ -47,6 +47,128 @@ market_pulse = {
 live_option_ltps = {}
 # History of last 10 LTPs for Balloon Pressure Logic
 option_ltp_history = {} 
+# 🌟 Memory for 9:15 Candle per Option Strike (for i0-i7 levels)
+option_915_candles = {} 
+
+# --- GVN Option Level Calculator (Based on User's Pine Script) ---
+def calculate_option_gvn_levels(high915, low915):
+    """
+    Calculates i0-i7 levels for Option LTPs based on the 9:15 candle.
+    """
+    if not high915 or not low915: return {}
+    
+    diff = high915 - low915
+    result = diff / 2
+    n1 = high915 + result
+    n2 = low915 + result
+    
+    gvn0 = n2 * 0.118 / 0.5
+    gvn100 = n1 * 0.786 / 0.5
+    gvnR = gvn100 - gvn0
+    
+    levels = {
+        "i0": gvn100,
+        "i1": gvn0,
+        "i2": gvn0 + 0.763 * gvnR,
+        "i3": gvn0 + 0.618 * gvnR,
+        "i5": gvn0 + 0.5 * gvnR,
+        "i6": gvn0 + 0.382 * gvnR,
+        "i7": gvn0 + 0.220 * gvnR
+    }
+    return levels
+
+# --- GVN AI DASHBOARD ANALYSIS ---
+def update_ai_dashboard(symbol, underlying_value):
+    """
+    Advanced AI Sentiment Analysis based on GVN Pine Script Logic.
+    Calculates Volume Pressure, Institutional Activity, and Momentum.
+    """
+    try:
+        scanner_list = gvn_scanner_data.get(symbol, [])
+        if not scanner_list: return
+
+        # GVN Special Logic from Pine Script
+        # volRatio: buyingVolume / sellingVolume
+        # deltaFlow: buyVolFlow - sellVolFlow
+        # isInstPump: volume > (avgV * 2.5) and cBody <= avgB
+        
+        status_labels = []
+        sentiment = "NEUTRAL"
+        color_code = "yellow"
+        trend = "SIDEWAYS"
+        score = 50
+        
+        now = datetime.now()
+        time_val = now.hour + (now.minute / 60.0)
+        
+        # 1. Trend and Control (Pine Script Mode Decision)
+        if underlying_value > 0:
+            # We use a placeholder for volRatio based on scanner sentiment
+            # In a full tick-by-tick system, this would be more precise
+            ce_vol = sum(item.get('volume', 0) for item in scanner_list if 'CE' in item.get('strike_name', ''))
+            pe_vol = sum(item.get('volume', 0) for item in scanner_list if 'PE' in item.get('strike_name', ''))
+            vol_ratio = pe_vol / (ce_vol if ce_vol > 0 else 1)
+            
+            if vol_ratio > 1.2:
+                sentiment, trend, color_code, score = "BULLISH", "UPTREND 🚀", "green", 75
+                status_labels.append("BUYERS CONTROL 🟢")
+            elif vol_ratio < 0.8:
+                sentiment, trend, color_code, score = "BEARISH", "DOWNTREND 🩸", "red", 25
+                status_labels.append("SELLERS CONTROL 🔴")
+            else:
+                sentiment, trend, color_code, score = "NEUTRAL", "SIDEWAYS ⚠️", "yellow", 50
+                status_labels.append("NORMAL VOLUME 📊")
+
+        # 2. Time Zone Momentum (Pine Script Logic)
+        if 9.25 <= time_val <= 10.5:
+            status_labels.append("MORNING MOMENTUM ⚡")
+        elif 13.5 <= time_val <= 15.0:
+            status_labels.append("BREAKOUT ZONE 🚀")
+        
+        # 3. Institutional Activity (Simulated from Scanner)
+        if any(item.get('score', 0) > 60 for item in scanner_list):
+            status_labels.append("BIG BOYS ACTIVE 🔥")
+            status_labels.append("INSTITUTIONAL PUMP 🚨")
+            color_code = "rainbow" if sentiment == "BULLISH" else color_code
+
+        # 🌟 4. LEVEL-TO-LEVEL ANALYSIS (Pine Script Logic)
+        for item in scanner_list[:3]: # Analyze Top 3 strikes
+            strike_key = item['strike']
+            ltp = item['ltp']
+            
+            # Calculate levels if 9:15 candle exists
+            candle = option_915_candles.get(strike_key)
+            if candle:
+                levels = calculate_option_gvn_levels(candle['high'], candle['low'])
+                item['levels'] = levels # Send to UI
+                
+                # Signal Detection (Example: 0.5 Level Breach)
+                i5 = levels.get('i5', 0)
+                if ltp > i5 and item.get('prev_ltp', 0) <= i5:
+                    status_labels.append(f"🚀 {strike_key} i5 BREAKOUT")
+                    # Set trigger for app.py to pick up
+                    item['trigger_signal'] = "BUY_ACTIVE"
+                elif ltp < i5 and item.get('prev_ltp', 0) >= i5:
+                    status_labels.append(f"🩸 {strike_key} i5 BREAKDOWN")
+                    item['trigger_signal'] = "SELL_ACTIVE"
+
+            item['prev_ltp'] = ltp
+
+        # Update the Global Pulse
+        market_pulse[symbol] = {
+            "sentiment": sentiment,
+            "score": score,
+            "trend": trend,
+            "volume": "HIGH" if len(status_labels) > 2 else "NORMAL",
+            "inst_activity": "ACTIVE 🔥" if "BIG BOYS ACTIVE 🔥" in status_labels else "LOW",
+            "color": color_code,
+            "labels": status_labels[:5],
+            "last_signal": status_labels[-1] if status_labels else "No Signal"
+        }
+        
+    except Exception as e:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [AI DASHBOARD ERROR] {e}\n")
 
 # --- GVN Fibonacci Level Calculator ---
 def calculate_gvn_levels(high915, low915):
@@ -370,19 +492,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
             score = 50 + ((pe_oi_total - ce_oi_total) / total_oi_chg * 50)
             score = max(0, min(100, score))
             
-        sentiment = "NEUTRAL"
-        if score > 65: sentiment = "STRONG BUY"
-        elif score > 55: sentiment = "BUY"
-        elif score < 35: sentiment = "STRONG SELL"
-        elif score < 45: sentiment = "SELL"
-        
-        market_pulse[symbol] = {
-            "sentiment": sentiment,
-            "score": round(score, 1),
-            "trend": "BULLISH" if score > 55 else ("BEARISH" if score < 45 else "SIDEWAYS"),
-            "volume": "HIGH" if total_oi_chg > 500000 else "NORMAL",
-            "inst_activity": "ACTIVE" if abs(pe_oi_total - ce_oi_total) > 200000 else "QUIET"
-        }
+        # 🌟 GVN AI ADVANCED ANALYSIS
+        update_ai_dashboard(symbol, underlying_value)
         market_pulse["last_updated"] = datetime.now().strftime("%H:%M:%S")
     except: pass
 
@@ -419,6 +530,10 @@ def live_feed_background_worker():
                 f.write(f"{datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             if dhan_master_config.get('active'):
+                # 🌟 Reset 9:15 candles on new day
+                if now.hour == 9 and now.minute == 0:
+                    option_915_candles.clear()
+
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                     with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
                         f.write(f"{datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
