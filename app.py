@@ -1034,6 +1034,10 @@ def update_lots():
 @app.route('/tv-webhook', methods=['POST'])
 def tv_webhook():
     import json
+    # 🌟 GVN WEBHOOK DIAGNOSTICS
+    with open("webhook_alerts.log", "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now()}: [INCOMING] {request.get_data(as_text=True)}\n")
+    
     alert_data = request.json
     if not alert_data:
         # Fallback to parse it manually if it contains dirty text from TradingView (like {{alert_message}})
@@ -1784,27 +1788,43 @@ def debug_data():
 
 
 def get_tradingview_technicals(symbol="NIFTY"):
-    """Fetches technical analysis summary from TradingView (Simulated for speed)."""
+    """Fetches real-time technical analysis summary from TradingView Scanner API."""
     try:
-        # In a real scenario, we'd use a scraping lib or a dedicated API.
-        # Here we simulate the values based on Market Pulse to keep it fast.
-        pulse = dhan_live_feed.market_pulse.get(symbol, {})
-        sentiment = pulse.get('sentiment', 'NEUTRAL')
+        # TradingView India Scanner Endpoint
+        url = "https://scanner.tradingview.com/india/scan"
+        ticker = f"NSE:{symbol}"
+        if symbol == "NIFTY": ticker = "NSE:NIFTY"
+        elif symbol == "BANKNIFTY": ticker = "NSE:BANKNIFTY"
         
-        if "STRONG BUY" in sentiment: recommendation = "STRONG_BUY"
-        elif "BUY" in sentiment: recommendation = "BUY"
-        elif "STRONG SELL" in sentiment: recommendation = "STRONG_SELL"
-        elif "SELL" in sentiment: recommendation = "SELL"
-        else: recommendation = "NEUTRAL"
-        
-        return {
-            "recommendation": recommendation,
-            "buy": random.randint(10, 20) if "BUY" in recommendation else random.randint(0, 10),
-            "sell": random.randint(10, 20) if "SELL" in recommendation else random.randint(0, 10),
-            "neutral": random.randint(5, 10)
+        payload = {
+            "symbols": {"tickers": [ticker], "query": {"types": []}},
+            "columns": ["Recommend.All", "buy", "sell", "neutral"]
         }
-    except:
-        return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
+        
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.post(url, json=payload, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            if data:
+                res = data[0].get('d', [])
+                # Mapping Recommendation Value to String
+                rec_val = res[0]
+                if rec_val > 0.5: rec_str = "STRONG_BUY"
+                elif rec_val > 0.1: rec_str = "BUY"
+                elif rec_val < -0.5: rec_str = "STRONG_SELL"
+                elif rec_val < -0.1: rec_str = "SELL"
+                else: rec_str = "NEUTRAL"
+                
+                return {
+                    "recommendation": rec_str,
+                    "buy": int(res[1]) if len(res)>1 else 0,
+                    "sell": int(res[2]) if len(res)>2 else 0,
+                    "neutral": int(res[3]) if len(res)>3 else 0
+                }
+    except Exception as e:
+        print(f"[TV SCANNER ERROR] {e}")
+    return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
