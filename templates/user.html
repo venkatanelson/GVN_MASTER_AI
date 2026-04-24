@@ -453,9 +453,18 @@
                 <h3 style="margin-bottom: 15px;">🔑 API Settings</h3>
                 <form action="/save_api_settings" method="POST">
                     <input type="hidden" name="user_id" value="{{ user.id }}">
+                    
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 5px 5px; text-transform: uppercase;">TradingView Webhook Details</p>
+                    <input type="text" name="webhook_url" placeholder="Webhook URL" value="{{ broker_config.webhook_url if broker_config else user.dhan_webhook_url }}">
+                    <input type="password" name="secret_key" placeholder="TradingView Secret Key" value="{{ '********' if broker_config else '' }}">
+                    
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Dhan API Credentials</p>
                     <input type="text" name="client_id" placeholder="Dhan Client ID" value="{{ broker_config.client_id if broker_config else '' }}">
-                    <input type="password" name="access_token" placeholder="Access Token" value="{{ '********' if broker_config else '' }}">
-                    <button type="submit" class="btn-premium" style="width: 100%;">Connect Broker</button>
+                    <input type="password" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if broker_config else '' }}">
+                    <input type="password" name="client_secret" placeholder="Dhan Client Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
+                    <input type="password" name="totp_key" placeholder="Dhan TOTP Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                    
+                    <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
                 </form>
             </div>
         </div>
