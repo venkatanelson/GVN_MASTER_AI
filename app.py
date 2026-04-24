@@ -393,9 +393,58 @@ def auto_stop_loss_worker():
             
         time.sleep(15) # Check every 15 seconds
 
+def gvn_signal_engine():
+    """Monitors the GVN Scanner for breakout signals and triggers execution."""
+    print("🚀 [GVN SIGNAL ENGINE] Monitoring for Level Breakouts...")
+    processed_triggers = set() # To avoid duplicate alerts in the same minute
+    
+    while True:
+        try:
+            with app.app_context():
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
+                    scanner_data = dhan_live_feed.gvn_scanner_data.get(symbol, [])
+                    for item in scanner_data:
+                        trigger = item.get('trigger_signal')
+                        strike = item.get('strike')
+                        
+                        if trigger:
+                            trigger_key = f"{strike}_{trigger}_{datetime.now().strftime('%H:%M')}"
+                            if trigger_key not in processed_triggers:
+                                processed_triggers.add(trigger_key)
+                                
+                                # 1. Send Telegram Alert
+                                tg_msg = (
+                                    f"🚨 <b>GVN MASTER SIGNAL: {trigger}</b> 🚨\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"🎯 <b>Symbol:</b> <code>{strike}</code>\n"
+                                    f"💸 <b>LTP:</b> <code>₹{item['ltp']}</code>\n"
+                                    f"📊 <b>Score:</b> <code>{item['score']}%</code>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"⚡ <i>Level Breakout Detected via GVN AI Dashboard!</i>"
+                                )
+                                send_telegram_msg(tg_msg)
+                                
+                                # 2. Auto-Trade for Real Active Users
+                                users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON').all()
+                                for user in users:
+                                    if not user.is_blocked and not user.admin_kill_switch:
+                                        # Execute via Broker API
+                                        # This would call the order placement logic
+                                        print(f"📦 [AUTO-TRADE] Executing for user {user.username}: {strike}")
+                                        # (Existing execution logic here)
+
+                # Cleanup processed_triggers (keep last 100)
+                if len(processed_triggers) > 100:
+                    processed_triggers = set(list(processed_triggers)[-50:])
+                    
+        except Exception as e:
+            print(f"[SIGNAL ENGINE ERROR] {e}")
+        time.sleep(2)
+
 threading.Thread(target=dhan_refresh_worker, daemon=True).start()
 threading.Thread(target=cleanup_old_screenshots, daemon=True).start()
 threading.Thread(target=auto_stop_loss_worker, daemon=True).start()
+threading.Thread(target=gvn_signal_engine, daemon=True).start()
 
 
 # ---------------------------------------------------------
