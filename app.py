@@ -20,6 +20,7 @@ from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
 
 
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # Basic app config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
