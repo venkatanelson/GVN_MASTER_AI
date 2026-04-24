@@ -1687,8 +1687,7 @@ def ai_chat():
             b_spot = dhan_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
             s_spot = dhan_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
             f_spot = dhan_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
-        except:
-            n_spot = 0
+
 
         import json
         live_pulse = dhan_live_feed.market_pulse.get("NIFTY", {})
