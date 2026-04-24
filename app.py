@@ -1682,27 +1682,13 @@ def ai_chat():
             
         # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
         if str(n_spot) == '0' or n_spot == 0:
-            try:
-                import sqlite3
-                from cryptography.fernet import Fernet
-                from dhanhq import dhanhq
-                conn = sqlite3.connect('instance/gvn_algo_pro.db')
-                cursor = conn.cursor()
-                uid = session.get('user_id')
-                cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config WHERE user_id = ? LIMIT 1", (uid,))
-                row = cursor.fetchone()
-                if not row:
-                    cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
-                    row = cursor.fetchone()
-                conn.close()
-                
-                if row:
-                    cipher = Fernet(b'gvn_secure_key_for_encryption_26')
-                    token = cipher.decrypt(row[1]).decode()
-                    d_client = dhanhq(row[0], token)
-                    lp_resp = d_client.quote_data({"IDX_I": ["13"]})
-                    n_spot = lp_resp.get('data', {}).get('13', {}).get('lastPrice', 0)
-            except: pass
+            # 🌟 Get live prices from background worker summary
+            n_spot = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+            b_spot = dhan_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
+            s_spot = dhan_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
+            f_spot = dhan_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
+        except:
+            n_spot = 0
 
         import json
         live_pulse = dhan_live_feed.market_pulse.get("NIFTY", {})
