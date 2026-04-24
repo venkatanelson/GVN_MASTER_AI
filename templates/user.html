@@ -173,9 +173,93 @@
 
         /* --- HEARTBEAT --- */
         .heartbeat {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 16px;
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            position: relative;
+        }
+        
+        .dot::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        .dot-blue { background: #3b82f6; }
+        .dot-blue::after { background: #3b82f6; }
+        
+        @keyframes pulse-dot {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        
+        /* --- OPTION CHAIN MODAL --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: var(--bg-dark);
+            border: 1px solid var(--primary);
+            border-radius: 20px;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        
+        .oc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .oc-table th, .oc-table td {
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .oc-table th {
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--primary);
+            position: sticky;
+            top: 0;
+        }
+        
+        .oc-table .atm-row {
+            background: rgba(255, 255, 255, 0.05);
+            border-top: 2px solid var(--warning);
+            border-bottom: 2px solid var(--warning);
+        }
             background: rgba(15, 23, 42, 0.8);
             padding: 8px 16px;
             border-radius: 30px;
@@ -251,6 +335,13 @@
                 </p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="heartbeat" style="margin-right: 15px;">
+                    <div class="dot dot-blue"></div>
+                    <span style="color: #3b82f6;">Dhan API Active</span>
+                </div>
+                <button class="btn-premium" onclick="openOptionChain()" style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 16px;">
+                    📊 Live Option Chain
+                </button>
                 <div style="text-align: right;">
                     <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
                     <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
@@ -478,6 +569,9 @@
                 <p style="font-size: 12px; color: var(--text-dim);">Pay via PhonePe/UPI to:</p>
                 <p style="font-size: 20px; font-weight: 900; margin: 10px 0;">93814 90610</p>
                 <p style="font-size: 11px; color: var(--text-dim);">(Name: Venkata Nelson)</p>
+                <hr style="opacity: 0.1; margin: 15px 0;">
+                <p style="font-size: 11px; color: #10b981; font-weight: 800;">OR START FREE</p>
+                <a href="/unlock-premium/{{ user.id }}" class="btn-premium" style="display: block; width: 100%; text-decoration: none; background: #10b981; color: white; margin-top: 10px; font-size: 12px;">Activate Free Premium (30 Days)</a>
             </div>
             <button onclick="document.getElementById('paymentModal').style.display='none'" class="btn-premium" style="width: 100%; background: rgba(255,255,255,0.1);">Close</button>
         </div>
@@ -629,6 +723,89 @@
         setInterval(updateScanner, 10000);
         setInterval(updateLivePnL, 3000);
         updateScanner();
+    </script>
+    <!-- 🌟 OPTION CHAIN MODAL -->
+    <div id="optionChainModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
+                <div>
+                    <h2 style="margin: 0; color: var(--primary);">📊 Dhan Live Option Chain (NIFTY)</h2>
+                    <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 13px;" id="oc-update-time">Waiting for data...</p>
+                </div>
+                <button onclick="closeOptionChain()" style="background: var(--danger); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">X CLOSE</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="oc-table">
+                    <thead>
+                        <tr>
+                            <th colspan="4">CALLS (CE)</th>
+                            <th>STRIKE</th>
+                            <th colspan="4">PUTS (PE)</th>
+                        </tr>
+                        <tr>
+                            <th>OI</th>
+                            <th>Vol</th>
+                            <th>IV</th>
+                            <th>LTP</th>
+                            <th style="background: var(--primary); color: white;">PRICE</th>
+                            <th>LTP</th>
+                            <th>IV</th>
+                            <th>Vol</th>
+                            <th>OI</th>
+                        </tr>
+                    </thead>
+                    <tbody id="oc-body">
+                        <tr><td colspan="9">Loading Dhan API Data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openOptionChain() {
+            document.getElementById('optionChainModal').style.display = 'flex';
+            fetchOptionChainData();
+            // Start auto-refreshing while open
+            window.ocInterval = setInterval(fetchOptionChainData, 3000);
+        }
+        
+        function closeOptionChain() {
+            document.getElementById('optionChainModal').style.display = 'none';
+            if(window.ocInterval) clearInterval(window.ocInterval);
+        }
+        
+        function fetchOptionChainData() {
+            fetch('/api/dhan-option-chain')
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    document.getElementById('oc-update-time').innerText = "Last Updated: " + data.timestamp + " | Spot Price: " + data.spot_price;
+                    let html = '';
+                    data.chain.forEach(row => {
+                        let is_atm = row.is_atm ? 'class="atm-row"' : '';
+                        html += `<tr ${is_atm}>
+                            <td style="color: #ef4444;">${row.ce_oi || '-'}</td>
+                            <td>${row.ce_vol || '-'}</td>
+                            <td>${row.ce_iv || '-'}</td>
+                            <td style="font-weight: bold; color: #10b981;">₹${row.ce_ltp || '-'}</td>
+                            <td style="background: rgba(99,102,241,0.1); font-weight: 900; color: white;">${row.strike}</td>
+                            <td style="font-weight: bold; color: #ef4444;">₹${row.pe_ltp || '-'}</td>
+                            <td>${row.pe_iv || '-'}</td>
+                            <td>${row.pe_vol || '-'}</td>
+                            <td style="color: #10b981;">${row.pe_oi || '-'}</td>
+                        </tr>`;
+                    });
+                    document.getElementById('oc-body').innerHTML = html;
+                } else {
+                    document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">Error: ${data.message}</td></tr>`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">API Connection Failed. Is Dhan feed active?</td></tr>`;
+            });
+        }
     </script>
 </body>
 </html>
