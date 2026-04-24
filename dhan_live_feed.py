@@ -117,7 +117,9 @@ def fetch_option_chain(symbol="NIFTY"):
         
         # Get Option Chain from Dhan
         try:
-            chain_resp = dhan.option_chain(symbol, segment_name, "")
+            # Dhan option_chain expects (UnderSecurityId, UnderExchangeSegment, Expiry)
+            idx_segment = "IDX_I" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
+            chain_resp = dhan.option_chain(sid, idx_segment, "")
             with open("dhan_feed_status.log", "a") as f:
                 f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} Option Chain Status: {chain_resp.get('status')}\n")
             
