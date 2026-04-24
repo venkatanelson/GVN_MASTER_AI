@@ -664,15 +664,7 @@ def dhan_option_chain_api():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
-@app.route('/api/gvn-scanner')
-def gvn_scanner_api():
-    """Returns the latest Zero-to-Hero scanner data for NIFTY and SENSEX."""
-    return jsonify({
-        "status": "success",
-        "data": dhan_live_feed.gvn_scanner_data,
-        "delta_60": dhan_live_feed.current_delta_60_strikes,
-        "summary": dhan_live_feed.live_option_chain_summary
-    })
+
 
 @app.route('/api/nse-log')
 def nse_log_api():
@@ -1779,29 +1771,7 @@ def get_ai_validation(symbol, txn_type, price):
         pass
     return "AI Validation Pending..."
 
-@app.route('/api/gvn-scanner')
-def gvn_scanner():
-    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
-    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-    return jsonify({
-        "status": "success",
-        "data": dhan_live_feed.gvn_scanner_data,
-        "summary": dhan_live_feed.live_option_chain_summary,
-        "market_pulse": dhan_live_feed.market_pulse,
-        "nifty_spot": n_price
-    })
 
-@app.route('/unlock-premium/<int:user_id>')
-def unlock_premium(user_id):
-    """🌟 FREE PREMIUM UNLOCK: Activates account for 30 days instantly."""
-    user = User.query.get_or_404(user_id)
-    user.is_locked = False
-    user.is_approved = True
-    user.user_type = 'REAL'
-    user.expiry_date = datetime.utcnow() + timedelta(days=30)
-    db.session.commit()
-    flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
-    return redirect(url_for('user_dashboard', user_id=user.id))
 
 @app.route('/api/debug-data')
 def debug_data():
