@@ -402,6 +402,8 @@
                 <div class="tab-container">
                     <button onclick="switchIndex('NIFTY')" id="tab-NIFTY" class="tab-btn active">NIFTY</button>
                     <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
+                    <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
+                    <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
                 </div>
             </div>
             
@@ -440,9 +442,12 @@
         <div class="premium-card" style="border-top: 6px solid var(--secondary); margin-top: 30px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px;">
                 <h3 style="margin: 0; font-weight: 900; color: var(--secondary);">🎯 GVN AI Zero-to-Hero Scanner</h3>
-                <div class="heartbeat">
-                    <span id="heartbeat-dot" class="dot dot-blue"></span>
-                    <span style="color: #3b82f6;">NIFTY: <span id="ui-nifty-price">0.00</span></span>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button onclick="openOptionChain(currentActiveIndex)" class="btn-premium" style="padding: 8px 16px; background: #10b981; border: none; font-size: 11px;">📊 Live Option Chain</button>
+                    <div class="heartbeat">
+                        <span id="heartbeat-dot" class="dot dot-blue"></span>
+                        <span style="color: #3b82f6;"><span id="oc-symbol-name">NIFTY</span>: <span id="ui-nifty-price">0.00</span></span>
+                    </div>
                 </div>
             </div>
             
@@ -672,7 +677,14 @@
             fetch('/api/gvn-scanner')
                 .then(r => r.json())
                 .then(res => {
-                    if (res.nifty_spot) document.getElementById('ui-nifty-price').innerText = res.nifty_spot;
+                    document.getElementById('oc-symbol-name').innerText = currentActiveIndex;
+                    if (res.nifty_spot) {
+                        // Dynamically show the spot price for the active index
+                        let activePrice = 0;
+                        if(currentActiveIndex === 'NIFTY') activePrice = res.nifty_spot;
+                        else if(res.summary && res.summary[currentActiveIndex]) activePrice = res.summary[currentActiveIndex].spot;
+                        document.getElementById('ui-nifty-price').innerText = activePrice;
+                    }
                     const body = document.getElementById('scanner-body');
                     const data = res.data[currentActiveIndex] || [];
                     const pulse = res.market_pulse ? res.market_pulse[currentActiveIndex] : null;
@@ -729,7 +741,7 @@
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
                 <div>
-                    <h2 style="margin: 0; color: var(--primary);">📊 Dhan Live Option Chain (NIFTY)</h2>
+                    <h2 style="margin: 0; color: var(--primary);">📊 Dhan Live Option Chain (<span id="oc-symbol-display">NIFTY</span>)</h2>
                     <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 13px;" id="oc-update-time">Waiting for data...</p>
                 </div>
                 <button onclick="closeOptionChain()" style="background: var(--danger); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">X CLOSE</button>
@@ -764,10 +776,16 @@
     </div>
 
     <script>
-        function openOptionChain() {
+        let currentOCSymbol = 'NIFTY';
+        
+        function openOptionChain(symbol = 'NIFTY') {
+            currentOCSymbol = symbol;
+            document.getElementById('oc-symbol-display').innerText = symbol;
+            document.getElementById('oc-body').innerHTML = '<tr><td colspan="9">Fetching ' + symbol + ' Data...</td></tr>';
             document.getElementById('optionChainModal').style.display = 'flex';
             fetchOptionChainData();
             // Start auto-refreshing while open
+            if(window.ocInterval) clearInterval(window.ocInterval);
             window.ocInterval = setInterval(fetchOptionChainData, 3000);
         }
         
@@ -777,7 +795,7 @@
         }
         
         function fetchOptionChainData() {
-            fetch('/api/dhan-option-chain')
+            fetch('/api/dhan-option-chain?symbol=' + currentOCSymbol)
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {
