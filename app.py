@@ -11,7 +11,7 @@ import random
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
-import nse_option_chain # 🌟 Custom NSE Real-Time Delta Option Engine
+import dhan_live_feed # 🌟 Custom Dhan API Real-Time Option Engine
 import broker_api
 import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
@@ -322,7 +322,7 @@ def auto_stop_loss_worker():
                     continue
                 
                 # We need live LTPs from the NSE engine memory
-                if not hasattr(nse_option_chain, 'live_option_ltps') or not nse_option_chain.live_option_ltps:
+                if not hasattr(dhan_live_feed, 'live_option_ltps') or not dhan_live_feed.live_option_ltps:
                     time.sleep(10)
                     continue
                     
@@ -336,8 +336,8 @@ def auto_stop_loss_worker():
                     if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
                     
                     key = f"{strike}_{opt_type}"
-                    ltp = nse_option_chain.live_option_ltps.get(key)
-                    ltp_history = nse_option_chain.option_ltp_history.get(key, [])
+                    ltp = dhan_live_feed.live_option_ltps.get(key)
+                    ltp_history = dhan_live_feed.option_ltp_history.get(key, [])
                     
                     if ltp and ltp > 0:
                         loss = trade.entry_price - ltp
@@ -650,9 +650,9 @@ def gvn_scanner_api():
     """Returns the latest Zero-to-Hero scanner data for NIFTY and SENSEX."""
     return jsonify({
         "status": "success",
-        "data": nse_option_chain.gvn_scanner_data,
-        "delta_60": nse_option_chain.current_delta_60_strikes,
-        "summary": nse_option_chain.live_option_chain_summary
+        "data": dhan_live_feed.gvn_scanner_data,
+        "delta_60": dhan_live_feed.current_delta_60_strikes,
+        "summary": dhan_live_feed.live_option_chain_summary
     })
 
 @app.route('/api/nse-log')
@@ -709,7 +709,7 @@ def get_live_trade_price(trade_id):
             strike = strike_match.group(1)
             opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
             if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
-            live_price = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+            live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
             
     if live_price == 0.0:
         live_price = trade.entry_price # Fallback to entry
@@ -759,14 +759,14 @@ def square_off_user_trades(user, reason, manual_price=None):
             exit_p = dhan_prices.get(t.symbol, 0.0)
             
         if exit_p == 0.0:
-            # Try NSE memory from nse_option_chain
+            # Try memory from dhan_live_feed
             import re
             strike_match = re.search(r'(\d+)', t.symbol)
             if strike_match:
                 strike = strike_match.group(1)
                 opt_type = "CE" if "C" in t.symbol.upper() else "PE"
                 key = f"{strike}_{opt_type}"
-                exit_p = nse_option_chain.live_option_ltps.get(key, 0.0)
+                exit_p = dhan_live_feed.live_option_ltps.get(key, 0.0)
         
         if exit_p == 0.0:
             exit_p = t.entry_price # Final fallback to break-even
@@ -850,7 +850,7 @@ def force_close_trade(trade_id):
             if strike_match:
                 strike = strike_match.group(1)
                 opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
-                exit_p = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+                exit_p = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
         
         # 3. Final fallback to entry
         if exit_p == 0.0: exit_p = trade.entry_price
@@ -918,7 +918,7 @@ def user_dashboard(user_id):
             if strike_match:
                 strike = strike_match.group(1)
                 opt_type = "CE" if "C" in t.symbol.upper() else "PE"
-                live_price = nse_option_chain.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+                live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
                 if live_price > 0:
                     current_pnl = (live_price - t.entry_price) * t.quantity if t.trade_type == 'BUY' else (t.entry_price - live_price) * t.quantity
 
@@ -1072,7 +1072,7 @@ def tv_webhook():
         elif "FIN" in symbol.upper(): lookup_symbol = "FINNIFTY"
         elif "SENSEX" in symbol.upper(): lookup_symbol = "SENSEX"
         
-        index_strikes = nse_option_chain.current_delta_60_strikes.get(lookup_symbol, {})
+        index_strikes = dhan_live_feed.current_delta_60_strikes.get(lookup_symbol, {})
         live_strike = index_strikes.get(opt_type)
         expiry_str = index_strikes.get('expiry', today_dt.strftime("%d %b").upper()) # Fallback to today
         
@@ -1211,10 +1211,10 @@ def tv_webhook():
                     strike_val = match.group(1)
                     opt_type = match.group(2)
                     lookup_key = f"{strike_val}_{opt_type}"
-                    live_price = nse_option_chain.live_option_ltps.get(lookup_key, 0.0)
+                    live_price = dhan_live_feed.live_option_ltps.get(lookup_key, 0.0)
                 
                 # If still 0, try the fallback
-                if live_price == 0 and nse_option_chain.dhan_master_config.get('active'):
+                if live_price == 0 and dhan_live_feed.dhan_master_config.get('active'):
                     try:
                         # Minimal fetch from Dhan for the specific symbol
                         # Note: This still needs a security_id, so it might fail for options
@@ -1754,7 +1754,7 @@ def sync_admin_dhan_to_worker():
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
                 if conf and conf.client_id and conf.encrypted_access_token:
                     token = cipher.decrypt(conf.encrypted_access_token).decode()
-                    nse_option_chain.dhan_master_config.update({
+                    dhan_live_feed.dhan_master_config.update({
                         "client_id": conf.client_id,
                         "access_token": token,
                         "active": True
@@ -1815,8 +1815,8 @@ def ai_chat():
             except: pass
 
         import json
-        live_pulse = nse_option_chain.market_pulse.get("NIFTY", {})
-        live_options = nse_option_chain.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
+        live_pulse = dhan_live_feed.market_pulse.get("NIFTY", {})
+        live_options = dhan_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
@@ -1860,8 +1860,8 @@ def get_ai_validation(symbol, txn_type, price):
         
     try:
         live_data = {
-            "summary": nse_option_chain.live_option_chain_summary,
-            "scanner": nse_option_chain.gvn_scanner_data
+            "summary": dhan_live_feed.live_option_chain_summary,
+            "scanner": dhan_live_feed.gvn_scanner_data
         }
         
         system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
@@ -1900,17 +1900,17 @@ def gvn_scanner():
 @app.route('/api/debug-data')
 def debug_data():
     return jsonify({
-        "summary": nse_option_chain.live_option_chain_summary,
-        "scanner": nse_option_chain.gvn_scanner_data,
-        "config": nse_option_chain.dhan_master_config.get('active'),
-        "nifty_spot": nse_option_chain.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+        "summary": dhan_live_feed.live_option_chain_summary,
+        "scanner": dhan_live_feed.gvn_scanner_data,
+        "config": dhan_live_feed.dhan_master_config.get('active'),
+        "nifty_spot": dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
 
 with app.app_context():
     db.create_all()
     # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
     if not getattr(app, '_workers_started', False):
-        nse_option_chain.start_nse_worker()
+        dhan_live_feed.start_live_feed_worker()
         sync_admin_dhan_to_worker()
         app._workers_started = True
 
