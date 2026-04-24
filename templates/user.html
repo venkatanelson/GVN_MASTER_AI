@@ -300,11 +300,67 @@
             margin-bottom: 15px;
             font-family: inherit;
         }
+    <style>
+        /* 🔒 LOCK & SECURITY STYLES */
+        .locked-content {
+            filter: blur(15px);
+            pointer-events: none;
+            user-select: none;
+        }
+        .lock-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 6, 23, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+        }
+        .watermark {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: 6vw;
+            color: rgba(255, 255, 255, 0.04);
+            pointer-events: none;
+            z-index: 10000;
+            white-space: nowrap;
+            user-select: none;
+            font-weight: 900;
+        }
+        .live-pulse {
+            animation: pulse-rainbow 2s infinite linear;
+        }
+        @keyframes pulse-rainbow {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
     </style>
 </head>
 
-<body>
-    <div class="container">
+<body style="user-select: none;" oncontextmenu="return false;">
+    <!-- 🔒 SECURITY WATERMARK -->
+    <div class="watermark">GVN SECURE - {{ user.phone }}</div>
+
+    {% if user.is_locked %}
+    <div class="lock-overlay">
+        <div class="premium-card" style="max-width: 450px; padding: 40px; border: 2px solid var(--primary); box-shadow: 0 0 100px rgba(99, 102, 241, 0.4);">
+            <div style="font-size: 80px; margin-bottom: 25px;">🔒</div>
+            <h1 style="font-weight: 900; margin-bottom: 10px; color: white; letter-spacing: 2px;">ACCESS RESTRICTED</h1>
+            <p style="color: var(--text-dim); margin-bottom: 30px; font-size: 14px; line-height: 1.6;">Your GVN AI Master Engine is currently locked. To access live "Zero-to-Hero" signals and i-Level levels, please activate your premium subscription.</p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="background: var(--secondary);">ACTIVATE NOW</button>
+                <a href="https://wa.me/{{ config.support_number_1 }}" class="btn-premium" style="background: rgba(255,255,255,0.1);">SUPPORT</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="container {{ 'locked-content' if user.is_locked else '' }}">
         <!-- FLASH MESSAGES -->
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -434,6 +490,20 @@
                         <small style="color: var(--text-dim); font-size: 10px;">Update</small>
                         <span id="pulse-time" style="font-weight: 900; font-size: 16px; color: var(--primary);">--:--:--</span>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📍 MARKET MOVEMENT PULSE BOX -->
+        <div class="premium-card" style="border-left: 5px solid var(--accent); margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">📍 Market Movement Pulse</h3>
+                    <p id="movement-text" style="font-size: 20px; font-weight: 900; color: var(--accent);">📡 ANALYSIS IN PROGRESS...</p>
+                </div>
+                <div id="selected-strike-box" style="text-align: right; background: rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 12px;">
+                    <small style="color: var(--text-dim); font-size: 9px; display: block;">SELECTED STRIKE</small>
+                    <span id="active-strike-name" style="font-size: 16px; font-weight: 900; color: var(--primary);">N/A</span>
                 </div>
             </div>
         </div>
@@ -697,20 +767,26 @@
                         document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
-                        // 🌟 DYNAMIC COLORING
+                        // 🌟 UPDATE MOVEMENT PULSE TEXT
+                        document.getElementById('movement-text').innerText = pulse.last_signal || 'SIDEWAYS';
+                        if(data.length > 0) document.getElementById('active-strike-name').innerText = data[0].strike;
+
+                        // 🌟 DYNAMIC COLORING & RAINBOW GAUGE
                         const sentimentEl = document.getElementById('pulse-sentiment');
                         const gauge = document.getElementById('pulse-gauge');
                         
                         if(pulse.color === 'rainbow') {
-                            sentimentEl.style.background = "linear-gradient(to right, #ef4444, #f59e0b, #10b981, #3b82f6)";
+                            sentimentEl.style.background = "linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff)";
                             sentimentEl.style.webkitBackgroundClip = "text";
                             sentimentEl.style.webkitTextFillColor = "transparent";
-                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ef4444 0%, #f59e0b 25%, #10b981 50%, #3b82f6 75%, #ef4444 100%)";
+                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8f00ff)";
+                            gauge.classList.add('live-pulse');
                         } else {
                             sentimentEl.style.webkitTextFillColor = "";
                             sentimentEl.style.background = "";
                             sentimentEl.style.color = pulse.color === 'green' ? '#10b981' : (pulse.color === 'red' ? '#ef4444' : '#f59e0b');
                             gauge.style.background = `conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg)`;
+                            gauge.classList.remove('live-pulse');
                         }
 
                         // 🌟 SHOW AI LABELS (Pine Script Logic)
