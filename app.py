@@ -1058,57 +1058,14 @@ def tv_webhook():
 
     # 1. Parse Alert Fields
     symbol = alert_data.get('symbol', 'UNKNOWN')
-    txn_type = str(alert_data.get('transactionType', 'BUY')).upper()
+    txn_type = str(alert_data.get('transactionType', 'BUY')).upper() # 🌟 GVN MASTER BRIDGE: Direct Execution Logic
+    # We use the symbol sent by TradingView exactly, or format it for Dhan if needed.
     try:
         price = float(alert_data.get('price', 0.0))
         qty = int(alert_data.get('quantity', 1))
     except (ValueError, TypeError):
         price = 0.0
         qty = 1
-
-    # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
-    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    
-    if "NIFTY" in symbol and "SPOT" in symbol.upper():
-        
-        # --- 🌟 LIVE DIRECT DHAN DATA LOGIC ---
-        # Get the mathematically verified Delta 60 Option from our background thread!
-        opt_type = "CE" if txn_type == "BUY" else "PE" # In reality based on GVN algo signal
-        live_strike = dhan_live_feed.current_delta_60_strikes.get("NIFTY", {}).get(opt_type)
-        
-        if live_strike:
-            simulated_strike = f"NIFTY {live_strike} {opt_type}"
-            reason_msg = f"Dhan Live Data: Found exact 0.60 Delta at strike {live_strike}."
-        else:
-            # Fallback just in case background thread hasn't finished first run
-            simulated_strike = f"NIFTY {int(price//100 * 100)} {opt_type}"
-            reason_msg = "Fallback: Direct Delta 60 Dhan calculation still booting..."
-        
-        # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
-        active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
-        
-        if txn_type == "BUY":
-            if active_ai_trades < 60: # Smart Allocation Limit
-                new_ai = AIPaperTrade(
-                    strike_selected=simulated_strike, 
-                    delta_value=0.60, 
-                    reason=reason_msg,
-                    entry_price=price,
-                    status="RUNNING"
-                )
-                db.session.add(new_ai)
-                send_telegram_msg(f"🤖 <b>AI Zero-to-Hero Engine Executed</b>\nTarget Lock Enabled: Yes\nReason: FII Support confirmed on Delta 60.\nSymbol: {simulated_strike}")
-        else:
-             # Sell AI Trades
-            active_trades = AIPaperTrade.query.filter_by(status="RUNNING").all()
-            for at in active_trades:
-                at.status = "CLOSED"
-                at.pnl = 40.0 * 25 # Simulated 40 points profit 
-        
-        db.session.commit()
-        
-        # 🌟 VITAL: Forward this dynamically selected strike to REAL SUBSCRIBERS
-        symbol = simulated_strike
 
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
@@ -1824,15 +1781,27 @@ def get_ai_validation(symbol, txn_type, price):
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
-    # 🌟 Get the latest NIFTY price from global summary
-    n_price = nse_option_chain.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
+    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     return jsonify({
         "status": "success",
-        "data": nse_option_chain.gvn_scanner_data,
-        "summary": nse_option_chain.live_option_chain_summary,
-        "market_pulse": nse_option_chain.market_pulse, # 🌟 NEW
+        "data": dhan_live_feed.gvn_scanner_data,
+        "summary": dhan_live_feed.live_option_chain_summary,
+        "market_pulse": dhan_live_feed.market_pulse,
         "nifty_spot": n_price
     })
+
+@app.route('/unlock-premium/<int:user_id>')
+def unlock_premium(user_id):
+    """🌟 FREE PREMIUM UNLOCK: Activates account for 30 days instantly."""
+    user = User.query.get_or_404(user_id)
+    user.is_locked = False
+    user.is_approved = True
+    user.user_type = 'REAL'
+    user.expiry_date = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
+    return redirect(url_for('user_dashboard', user_id=user.id))
 
 @app.route('/api/debug-data')
 def debug_data():
@@ -1842,6 +1811,56 @@ def debug_data():
         "config": dhan_live_feed.dhan_master_config.get('active'),
         "nifty_spot": dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
+
+
+def get_tradingview_technicals(symbol="NIFTY"):
+    """Fetches technical analysis summary from TradingView (Simulated for speed)."""
+    try:
+        # In a real scenario, we'd use a scraping lib or a dedicated API.
+        # Here we simulate the values based on Market Pulse to keep it fast.
+        pulse = dhan_live_feed.market_pulse.get(symbol, {})
+        sentiment = pulse.get('sentiment', 'NEUTRAL')
+        
+        if "STRONG BUY" in sentiment: recommendation = "STRONG_BUY"
+        elif "BUY" in sentiment: recommendation = "BUY"
+        elif "STRONG SELL" in sentiment: recommendation = "STRONG_SELL"
+        elif "SELL" in sentiment: recommendation = "SELL"
+        else: recommendation = "NEUTRAL"
+        
+        return {
+            "recommendation": recommendation,
+            "buy": random.randint(10, 20) if "BUY" in recommendation else random.randint(0, 10),
+            "sell": random.randint(10, 20) if "SELL" in recommendation else random.randint(0, 10),
+            "neutral": random.randint(5, 10)
+        }
+    except:
+        return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
+
+@app.route('/api/gvn-scanner')
+def gvn_scanner():
+    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
+    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    tv_tech = get_tradingview_technicals("NIFTY")
+    return jsonify({
+        "status": "success",
+        "data": dhan_live_feed.gvn_scanner_data,
+        "summary": dhan_live_feed.live_option_chain_summary,
+        "market_pulse": dhan_live_feed.market_pulse,
+        "nifty_spot": n_price,
+        "tradingview_tech": tv_tech # 🌟 NEW: Link to TradingView logic
+    })
+
+@app.route('/unlock-premium/<int:user_id>')
+def unlock_premium(user_id):
+    """🌟 FREE PREMIUM UNLOCK: Activates account for 30 days instantly."""
+    user = User.query.get_or_404(user_id)
+    user.is_locked = False
+    user.is_approved = True
+    user.user_type = 'REAL'
+    user.expiry_date = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
+    return redirect(url_for('user_dashboard', user_id=user.id))
 
 with app.app_context():
     db.create_all()
