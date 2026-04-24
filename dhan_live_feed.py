@@ -115,24 +115,33 @@ def fetch_option_chain(symbol="NIFTY"):
         sid = sec_ids.get(symbol)
         if not sid: return None
         
-        segment_name = "NSE_FNO" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
-        
+        # 🌟 SMART SEGMENT DETECTION
+        if symbol == "SENSEX":
+            idx_segment = "BSE_INDEX" # Often used for Sensex in Dhan
+        else:
+            idx_segment = "IDX_I"
+            
         # Get LTP first using quote_data
-        idx_segment = "IDX_I" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
         instruments = {idx_segment: [sid]}
         lp_resp = dhan.quote_data(instruments)
         lp = lp_resp.get('data', {}).get(sid, {}).get('lastPrice', 0)
         
         # Get Option Chain from Dhan
         try:
-            # 🌟 NEW: First get the nearest expiry date
-            idx_segment = "IDX_I" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE_EQ"
+            # 🌟 NEW: Try to get expiry list
             expiry_resp = dhan.expiry_list(sid, idx_segment)
             
             nearest_expiry = ""
             if expiry_resp.get('status') == 'success' and expiry_resp.get('data'):
-                # Sort if needed, usually the first one is nearest
                 nearest_expiry = expiry_resp.get('data')[0]
+                
+            # 🌟 FALLBACK: If expiry_list fails, calculate next Thursday
+            if not nearest_expiry:
+                from datetime import date, timedelta
+                d = date.today()
+                while d.weekday() != 3: # Thursday
+                    d += timedelta(1)
+                nearest_expiry = d.strftime("%Y-%m-%d")
                 
             # Now fetch the actual option chain for this expiry
             chain_resp = dhan.option_chain(sid, idx_segment, nearest_expiry)
@@ -407,7 +416,7 @@ def live_feed_background_worker():
                 f.write(f"{datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             if dhan_master_config.get('active'):
-                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                     with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
                         f.write(f"{datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
                     analyze_and_update_gvn_scanner(symbol)
