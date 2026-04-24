@@ -645,6 +645,25 @@ def simple_login():
 def subscription_plans():
     return render_template('plans.html')
 
+@app.route('/api/dhan-option-chain')
+def dhan_option_chain_api():
+    """Returns real-time Option Chain data from Dhan background worker."""
+    try:
+        symbol = request.args.get('symbol', 'NIFTY').upper()
+        chain_data = dhan_live_feed.full_option_chain_data.get(symbol, [])
+        spot = dhan_live_feed.live_option_chain_summary.get(symbol, {}).get('spot', 0)
+        
+        # If no real data yet, return empty but success
+        return jsonify({
+            "status": "success",
+            "symbol": symbol,
+            "spot_price": spot,
+            "timestamp": dhan_live_feed.full_option_chain_data.get("last_updated", "N/A"),
+            "chain": chain_data
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 @app.route('/api/gvn-scanner')
 def gvn_scanner_api():
     """Returns the latest Zero-to-Hero scanner data for NIFTY and SENSEX."""
