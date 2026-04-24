@@ -109,15 +109,23 @@ def update_ai_dashboard(symbol, underlying_value):
             pe_vol = sum(item.get('volume', 0) for item in scanner_list if 'PE' in item.get('strike_name', ''))
             vol_ratio = pe_vol / (ce_vol if ce_vol > 0 else 1)
             
-            if vol_ratio > 1.2:
-                sentiment, trend, color_code, score = "BULLISH", "UPTREND 🚀", "green", 75
+            if vol_ratio > 1.8:
+                sentiment, trend, color_code, score = "STRONG BUY 🚀", "ULTRA BREAKOUT", "rainbow", 95
+                status_labels.append("HIGH MOMENTUM 🔥")
+                status_labels.append("BUYERS MOMENTUM UP 🚀")
+            elif vol_ratio > 1.3:
+                sentiment, trend, color_code, score = "BUY 📈", "UPTREND", "green", 75
                 status_labels.append("BUYERS CONTROL 🟢")
-            elif vol_ratio < 0.8:
-                sentiment, trend, color_code, score = "BEARISH", "DOWNTREND 🩸", "red", 25
+            elif vol_ratio < 0.4:
+                sentiment, trend, color_code, score = "STRONG SELL 🩸", "ULTRA CRASH", "rainbow", 5
+                status_labels.append("HIGH SELLING MOMENTUM 🩸")
+                status_labels.append("SELLERS MOMENTUM DOWN 🩸")
+            elif vol_ratio < 0.7:
+                sentiment, trend, color_code, score = "SELL 📉", "DOWNTREND", "red", 25
                 status_labels.append("SELLERS CONTROL 🔴")
             else:
-                sentiment, trend, color_code, score = "NEUTRAL", "SIDEWAYS ⚠️", "yellow", 50
-                status_labels.append("NORMAL VOLUME 📊")
+                sentiment, trend, color_code, score = "NATURAL 📊", "SIDEWAYS", "yellow", 50
+                status_labels.append("NATURAL MOMENTUM 📊")
 
         # 2. Time Zone Momentum (Pine Script Logic)
         if 9.25 <= time_val <= 10.5:
@@ -126,10 +134,10 @@ def update_ai_dashboard(symbol, underlying_value):
             status_labels.append("BREAKOUT ZONE 🚀")
         
         # 3. Institutional Activity (Simulated from Scanner)
-        if any(item.get('score', 0) > 60 for item in scanner_list):
+        if any(item.get('score', 0) > 65 for item in scanner_list):
             status_labels.append("BIG BOYS ACTIVE 🔥")
             status_labels.append("INSTITUTIONAL PUMP 🚨")
-            color_code = "rainbow" if sentiment == "BULLISH" else color_code
+            color_code = "rainbow" if sentiment in ["BULLISH", "STRONG BULLISH"] else color_code
 
         # 🌟 4. LEVEL-TO-LEVEL ANALYSIS (Pine Script Logic)
         for item in scanner_list[:3]: # Analyze Top 3 strikes
@@ -145,11 +153,11 @@ def update_ai_dashboard(symbol, underlying_value):
                 # Signal Detection (Example: 0.5 Level Breach)
                 i5 = levels.get('i5', 0)
                 if ltp > i5 and item.get('prev_ltp', 0) <= i5:
-                    status_labels.append(f"🚀 {strike_key} i5 BREAKOUT")
+                    status_labels.append(f"🚀 {strike_key} BREAKOUT UP")
                     # Set trigger for app.py to pick up
                     item['trigger_signal'] = "BUY_ACTIVE"
                 elif ltp < i5 and item.get('prev_ltp', 0) >= i5:
-                    status_labels.append(f"🩸 {strike_key} i5 BREAKDOWN")
+                    status_labels.append(f"🩸 {strike_key} BREAKDOWN DOWN")
                     item['trigger_signal'] = "SELL_ACTIVE"
 
             item['prev_ltp'] = ltp
@@ -159,10 +167,10 @@ def update_ai_dashboard(symbol, underlying_value):
             "sentiment": sentiment,
             "score": score,
             "trend": trend,
-            "volume": "HIGH" if len(status_labels) > 2 else "NORMAL",
+            "volume": "HIGH" if len(status_labels) > 3 else "NORMAL",
             "inst_activity": "ACTIVE 🔥" if "BIG BOYS ACTIVE 🔥" in status_labels else "LOW",
             "color": color_code,
-            "labels": status_labels[:5],
+            "labels": status_labels[:6],
             "last_signal": status_labels[-1] if status_labels else "No Signal"
         }
         
