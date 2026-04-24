@@ -1047,45 +1047,23 @@ def tv_webhook():
         price = 0.0
         qty = 1
 
-    # 🌟 SMART DETECT: If TradingView forgot to send "SELL", but we already have it running, auto-convert it!
-    if txn_type == "BUY":
-        existing_any = AlgoTrade.query.filter_by(symbol=symbol, status='Running').first()
-        if existing_any:
-            print(f"🤖 [SMART DETECT] Alert received for {symbol} without SELL tag, but it's already running. Assuming EXIT/SL Alert!")
-            txn_type = "SELL"
-
     # 🌟 AI PAPER TRADING ENGINE INTERCEPTOR
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
     
-    # Index detection (Indices are usually NIFTY, BANKNIFTY, FINNIFTY, SENSEX)
-    is_index = any(idx == symbol.upper() for idx in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "NIFTY50"]) or "SPOT" in symbol.upper()
-    
-    if is_index:
+    if "NIFTY" in symbol and "SPOT" in symbol.upper():
         
-        # --- 🌟 LIVE DIRECT NSE DATA LOGIC ---
+        # --- 🌟 LIVE DIRECT DHAN DATA LOGIC ---
         # Get the mathematically verified Delta 60 Option from our background thread!
-        opt_type = "CE" if txn_type == "BUY" else "PE" 
-        
-        # Determine base index name for lookup
-        lookup_symbol = "NIFTY"
-        if "BANK" in symbol.upper(): lookup_symbol = "BANKNIFTY"
-        elif "FIN" in symbol.upper(): lookup_symbol = "FINNIFTY"
-        elif "SENSEX" in symbol.upper(): lookup_symbol = "SENSEX"
-        
-        index_strikes = dhan_live_feed.current_delta_60_strikes.get(lookup_symbol, {})
-        live_strike = index_strikes.get(opt_type)
-        expiry_str = index_strikes.get('expiry', today_dt.strftime("%d %b").upper()) # Fallback to today
+        opt_type = "CE" if txn_type == "BUY" else "PE" # In reality based on GVN algo signal
+        live_strike = dhan_live_feed.current_delta_60_strikes.get("NIFTY", {}).get(opt_type)
         
         if live_strike:
-            # Format: NIFTY 25 APR 22400 CE
-            simulated_strike = f"{lookup_symbol} {expiry_str} {live_strike} {opt_type}"
-            reason_msg = f"NSE Live Data: Found exact 0.60 Delta at strike {live_strike} for {lookup_symbol} ({expiry_str})."
+            simulated_strike = f"NIFTY {live_strike} {opt_type}"
+            reason_msg = f"Dhan Live Data: Found exact 0.60 Delta at strike {live_strike}."
         else:
             # Fallback just in case background thread hasn't finished first run
-            # Use a slightly more realistic fallback symbol
-            fallback_strike = int(price//100 * 100) if price > 0 else "ATM"
-            simulated_strike = f"{lookup_symbol} {expiry_str} {fallback_strike} {opt_type}"
-            reason_msg = f"Fallback: Direct Delta 60 NSE calculation for {lookup_symbol} still booting..."
+            simulated_strike = f"NIFTY {int(price//100 * 100)} {opt_type}"
+            reason_msg = "Fallback: Direct Delta 60 Dhan calculation still booting..."
         
         # Check Capital Limit Logic (Assume max 1 Lakh, 1 trade limits)
         active_ai_trades = AIPaperTrade.query.filter_by(status="RUNNING").count()
@@ -1113,9 +1091,6 @@ def tv_webhook():
         # 🌟 VITAL: Forward this dynamically selected strike to REAL SUBSCRIBERS
         symbol = simulated_strike
 
-    # 🌟 NEW: Get AI Validation for the signal (One call per alert)
-    ai_opinion = get_ai_validation(symbol, txn_type, price)
-
     # 2. Sync for ALL Users based on their status
     all_users = User.query.all()
     today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
@@ -1136,11 +1111,6 @@ def tv_webhook():
 
         # Handle demo/real trade tracking per user
         if txn_type == "BUY":
-            if u.user_type == 'DEMO':
-                user_execution_qty = qty
-            else:
-                user_execution_qty = qty * (getattr(u, 'trade_lots', 1) or 1)
-                
             # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
             # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
             running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
@@ -1169,64 +1139,23 @@ def tv_webhook():
                                 )
                         except Exception as e:
                             pass
+
             # Avoid duplications if already running
             existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
             if not existing:
-                target_val = float(alert_data.get('target', 0))
-                sl_val = float(alert_data.get('sl', 0))
-                new_trade = AlgoTrade(
-                    user_id=u.id, 
-                    symbol=symbol, 
-                    quantity=user_execution_qty, 
-                    trade_type="BUY", 
-                    entry_price=price, 
-                    target_price=target_val, # 🌟 NEW
-                    stop_loss=sl_val,        # 🌟 NEW
-                    status="Running", 
-                    timestamp=today_dt, 
-                    ai_opinion=ai_opinion
-                )
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
                 db.session.add(new_trade)
                 trade_executed = True
-
         
         elif txn_type == "SELL":
             active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
             if active_trades:
                 trade_executed = True
-            
-            user_execution_qty = 0 # Default if no trades found
             for at in active_trades:
-                live_price = 0.0
-                symbol_str = at.symbol.upper()
-                
-                # 🌟 NEW: Parse strike and type from formatted symbol (e.g., "NIFTY 25 APR 19500 CE")
-                import re
-                match = re.search(r'(\d{5,})\s+(CE|PE)', symbol_str) # Look for 5+ digit strike and CE/PE
-                if not match:
-                    # Try another pattern if the format is different
-                    match = re.search(r'(\d+)\s+(CE|PE)', symbol_str)
-                
-                if match:
-                    strike_val = match.group(1)
-                    opt_type = match.group(2)
-                    lookup_key = f"{strike_val}_{opt_type}"
-                    live_price = dhan_live_feed.live_option_ltps.get(lookup_key, 0.0)
-                
-                # If still 0, try the fallback
-                if live_price == 0 and dhan_live_feed.dhan_master_config.get('active'):
-                    try:
-                        # Minimal fetch from Dhan for the specific symbol
-                        # Note: This still needs a security_id, so it might fail for options
-                        pass 
-                    except:
-                        pass
-
-                exit_val = price if price > 0.0 else (live_price if live_price > 0 else at.entry_price)
+                exit_val = price if price > 0.0 else at.entry_price
                 at.exit_price = exit_val
                 at.pnl = (exit_val - at.entry_price) * at.quantity
                 at.status = "Closed"
-                user_execution_qty += at.quantity # Send the exact quantity we bought
                 
                 # Update Daily P&L Tracker for this user if needed (can be global/per-user)
                 # For now, let's keep DailyPnL as a global metric for the system's performance
@@ -1237,7 +1166,7 @@ def tv_webhook():
                     daily_record.pnl += at.pnl
 
         # 3. For REAL users, also forward to Broker
-        if u.user_type == 'REAL' and u.is_approved and user_execution_qty > 0:
+        if u.user_type == 'REAL' and u.is_approved:
             try:
                 broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
                 webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
@@ -1246,22 +1175,14 @@ def tv_webhook():
                 
                 if enc_secret and webhook_url:
                     secret_key = cipher.decrypt(enc_secret).decode()
-                    
-                    # Decrypt Access Token & Client ID if they exist
-                    access_token = None
-                    if broker_conf and broker_conf.encrypted_access_token:
-                        access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                    
                     broker_api.execute_broker_order_async(
                         broker_name=broker_name,
                         webhook_url=webhook_url,
                         secret_key=secret_key,
                         symbol=symbol,
                         transaction_type=txn_type,
-                        quantity=user_execution_qty,
-                        user_name=u.username,
-                        client_id=broker_conf.client_id if broker_conf else None,
-                        access_token=access_token
+                        quantity=qty,
+                        user_name=u.username
                     )
             except Exception as e:
                 print(f"Forwarding error for {u.username}: {e}", flush=True)
@@ -1280,21 +1201,18 @@ def tv_webhook():
                 f"💸 <b>Entry Price:</b> <code>₹{price}</code>\n"
                 f"✅ <b>Target:</b> <code>₹{target_val}</code>\n"
                 f"⛔ <b>Stop Loss:</b> <code>₹{sl_val}</code>\n"
-                f"🤖 <b>AI Opinion:</b> <i>{ai_opinion}</i>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ <i>Processed exactly as per GVN Settings</i>"
             )
             send_telegram_msg(tg_msg)
         else:
-            event_type = alert_data.get('eventType', 'CLOSED')
-            status_msg = alert_data.get('message', event_type)
-            icon = "🛑" if "SL" in status_msg.upper() else "🏅" if "TARGET" in status_msg.upper() else "📉"
+            status_msg = alert_data.get('status', 'CLOSED (MANUAL)')
+            icon = "🛑" if "SL" in status_msg else "🏅" if "Target" in status_msg else "📉"
             tg_msg = (
                 f"{icon} <b>GVN ALGO - {status_msg.upper()}</b> {icon}\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
                 f"💸 <b>Exit Price:</b> <code>₹{price}</code>\n"
-                f"🤖 <b>AI Opinion:</b> <i>{ai_opinion}</i>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ <i>Trade Successfully Closed by System</i>"
             )
