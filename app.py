@@ -1286,8 +1286,9 @@ def tv_webhook():
             )
             send_telegram_msg(tg_msg)
         else:
-            status_msg = alert_data.get('status', 'CLOSED (MANUAL)')
-            icon = "🛑" if "SL" in status_msg else "🏅" if "Target" in status_msg else "📉"
+            event_type = alert_data.get('eventType', 'CLOSED')
+            status_msg = alert_data.get('message', event_type)
+            icon = "🛑" if "SL" in status_msg.upper() else "🏅" if "TARGET" in status_msg.upper() else "📉"
             tg_msg = (
                 f"{icon} <b>GVN ALGO - {status_msg.upper()}</b> {icon}\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
