@@ -596,10 +596,12 @@
                     <input type="hidden" name="user_id" value="{{ user.id }}">
                     
                     <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 5px 5px; text-transform: uppercase;">TradingView Webhook Details</p>
+                    <p style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">WEBHOOK URL (COPY THIS TO TRADINGVIEW)</p>
                     <input type="text" name="webhook_url" placeholder="Webhook URL" value="{{ broker_config.webhook_url if broker_config else user.dhan_webhook_url }}">
                     
+                    <p style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TRADINGVIEW SECRET KEY</p>
                     <div style="position: relative;">
-                        <input type="password" id="tv_secret" name="secret_key" placeholder="TradingView Secret Key" value="{{ '********' if broker_config else '' }}">
+                        <input type="password" id="tv_secret" name="secret_key" placeholder="Create a Secret Key (e.g., GVN@123)" value="{{ '********' if broker_config else '' }}">
                         <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
@@ -616,19 +618,24 @@
                         <option value="FlatTrade" {% if broker_config and broker_config.broker_name == 'FlatTrade' %}selected{% endif %}>FlatTrade</option>
                     </select>
 
-                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 5px 5px; text-transform: uppercase;">Broker API Credentials</p>
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 15px 5px; text-transform: uppercase;">Broker API Credentials</p>
+                    
+                    <p id="label_client_id" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT ID / APP ID</p>
                     <input type="text" id="api_client_id" name="client_id" placeholder="Client ID / App ID" value="{{ broker_config.client_id if broker_config else '' }}">
                     
+                    <p id="label_access_token" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">ACCESS TOKEN / API KEY</p>
                     <div style="position: relative;">
                         <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
                         <span onclick="toggleVisibility('api_access_token')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
+                    <p id="label_client_secret" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT SECRET / APP SECRET</p>
                     <div style="position: relative;">
                         <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
                         <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
+                    <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
                     <div style="position: relative;">
                         <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
                         <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
@@ -649,31 +656,56 @@
                         const clientSecret = document.getElementById('api_client_secret');
                         const totpKey = document.getElementById('api_totp');
 
+                        const lblClientId = document.getElementById('label_client_id');
+                        const lblAccessToken = document.getElementById('label_access_token');
+                        const lblClientSecret = document.getElementById('label_client_secret');
+                        const lblTotpKey = document.getElementById('label_totp');
+
                         if (broker === 'Shoonya') {
                             clientId.placeholder = "Shoonya User ID";
+                            lblClientId.innerText = "SHOONYA USER ID (CLIENT ID)";
                             accessToken.placeholder = "Vendor Code (API Key)";
+                            lblAccessToken.innerText = "VENDOR CODE (API KEY)";
                             clientSecret.placeholder = "API Secret";
+                            lblClientSecret.innerText = "API SECRET";
                             totpKey.placeholder = "TOTP Secret Key (16 chars)";
+                            lblTotpKey.innerText = "TOTP SECRET KEY (16 CHARS)";
                         } else if (broker === 'Dhan') {
                             clientId.placeholder = "Dhan Client ID";
+                            lblClientId.innerText = "DHAN CLIENT ID";
                             accessToken.placeholder = "Dhan Access Token";
-                            clientSecret.placeholder = "Dhan Client Secret (For Auto-Refresh)";
+                            lblAccessToken.innerText = "DHAN ACCESS TOKEN";
+                            clientSecret.placeholder = "Dhan Client Secret (Optional)";
+                            lblClientSecret.innerText = "DHAN CLIENT SECRET (OPTIONAL)";
                             totpKey.placeholder = "Dhan TOTP Secret";
+                            lblTotpKey.innerText = "DHAN TOTP SECRET (OPTIONAL)";
                         } else if (broker === 'AngelOne') {
                             clientId.placeholder = "Angel One Client ID";
+                            lblClientId.innerText = "ANGEL ONE CLIENT ID";
                             accessToken.placeholder = "SmartAPI Key";
+                            lblAccessToken.innerText = "SMARTAPI KEY";
                             clientSecret.placeholder = "SmartAPI Secret";
+                            lblClientSecret.innerText = "SMARTAPI SECRET";
                             totpKey.placeholder = "Angel One TOTP Secret or PIN";
+                            lblTotpKey.innerText = "ANGEL ONE TOTP SECRET OR PIN";
                         } else if (broker === 'Fyers') {
                             clientId.placeholder = "Fyers App ID (Client ID)";
+                            lblClientId.innerText = "FYERS APP ID (CLIENT ID)";
                             accessToken.placeholder = "Access Token (App ID Hash)";
+                            lblAccessToken.innerText = "ACCESS TOKEN (APP ID HASH)";
                             clientSecret.placeholder = "Secret Key";
+                            lblClientSecret.innerText = "SECRET KEY";
                             totpKey.placeholder = "PIN";
+                            lblTotpKey.innerText = "PIN";
                         } else {
                             clientId.placeholder = "Client ID / App ID";
+                            lblClientId.innerText = "CLIENT ID / APP ID";
                             accessToken.placeholder = "Access Token / API Key";
+                            lblAccessToken.innerText = "ACCESS TOKEN / API KEY";
                             clientSecret.placeholder = "Client Secret / App Secret";
+                            lblClientSecret.innerText = "CLIENT SECRET / APP SECRET";
                             totpKey.placeholder = "TOTP Secret / PIN";
+                            lblTotpKey.innerText = "TOTP SECRET / PIN";
                         }
                     });
 
