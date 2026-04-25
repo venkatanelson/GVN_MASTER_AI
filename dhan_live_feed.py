@@ -162,6 +162,39 @@ def update_ai_dashboard(symbol, underlying_value):
 
             item['prev_ltp'] = ltp
 
+        # 🌟 NEW: DUAL-PULSE CONFIRMATION (Call vs Put Sync)
+        ce_active = None
+        pe_active = None
+        
+        # Identify active CE and PE strikes from top 3
+        for item in scanner_list[:5]:
+            if 'CE' in item['strike'] and not ce_active: ce_active = item
+            if 'PE' in item['strike'] and not pe_active: pe_active = item
+            if ce_active and pe_active: break
+
+        # Signal Quality Logic
+        confirmation_label = "NEUTRAL"
+        if ce_active and pe_active:
+            ce_ltp, pe_ltp = ce_active['ltp'], pe_active['ltp']
+            ce_i5 = ce_active.get('levels', {}).get('i5', 0)
+            pe_i5 = pe_active.get('levels', {}).get('i5', 0)
+            ce_i7 = ce_active.get('levels', {}).get('i7', 0)
+            pe_i7 = pe_active.get('levels', {}).get('i7', 0)
+            
+            # 🛑 FAKE BREAKOUT DETECTION
+            if ce_ltp > ce_i5 and pe_ltp > pe_i5:
+                confirmation_label = "⚠️ POTENTIAL FAKE (No Sync)"
+                score = min(score, 50)
+                color_code = "yellow"
+            elif ce_ltp > ce_i5 and pe_ltp < pe_i7:
+                confirmation_label = "🔥 REAL BREAKOUT (CE Sync)"
+                score = 90
+                color_code = "rainbow"
+            elif pe_ltp > pe_i5 and ce_ltp < ce_i7:
+                confirmation_label = "🩸 REAL BREAKOUT (PE Sync)"
+                score = 10 # Low score for PE side (Bearish)
+                color_code = "rainbow"
+
         # Update the Global Pulse
         market_pulse[symbol] = {
             "sentiment": sentiment,
@@ -171,6 +204,7 @@ def update_ai_dashboard(symbol, underlying_value):
             "inst_activity": "ACTIVE 🔥" if "BIG BOYS ACTIVE 🔥" in status_labels else "LOW",
             "color": color_code,
             "labels": status_labels[:6],
+            "confirmation": confirmation_label,
             "last_signal": status_labels[-1] if status_labels else "No Signal"
         }
         
