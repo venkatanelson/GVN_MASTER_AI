@@ -635,10 +635,12 @@
                         <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
+                    <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
                     <div style="position: relative;">
                         <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys and decrypted_keys.totp_key else '' }}">
                         <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+
 
                     <p id="label_broker_password" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">BROKER PASSWORD</p>
                     <div style="position: relative;">
@@ -657,7 +659,12 @@
 
                     document.querySelector('select[name="broker_name"]').addEventListener('change', function() {
                         const broker = this.value;
+                        const clientId = document.getElementById('api_client_id');
+                        const accessToken = document.getElementById('api_access_token');
+                        const clientSecret = document.getElementById('api_client_secret');
+                        const totpKey = document.getElementById('api_totp');
                         const brokerPassword = document.getElementById('api_broker_password');
+
 
                         const lblClientId = document.getElementById('label_client_id');
                         const lblAccessToken = document.getElementById('label_access_token');
