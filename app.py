@@ -103,9 +103,25 @@ class AdminConfig(db.Model):
     reset_otp = db.Column(db.String(10), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
     attack_mode = db.Column(db.Boolean, default=False) # 🛡️ Security Mode Toggle
+    plan_basic_price = db.Column(db.Integer, default=2999)
+    plan_premium_price = db.Column(db.Integer, default=5999)
+    plan_ultimate_price = db.Column(db.Integer, default=9999)
 
 
 def get_admin_config():
+    try:
+        # Check if new columns exist, if not add them
+        db.session.execute("SELECT plan_basic_price FROM admin_system_config LIMIT 1")
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute("ALTER TABLE admin_system_config ADD COLUMN plan_basic_price INTEGER DEFAULT 2999")
+            db.session.execute("ALTER TABLE admin_system_config ADD COLUMN plan_premium_price INTEGER DEFAULT 5999")
+            db.session.execute("ALTER TABLE admin_system_config ADD COLUMN plan_ultimate_price INTEGER DEFAULT 9999")
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     config = AdminConfig.query.first()
     if not config:
         config = AdminConfig()
@@ -1360,6 +1376,15 @@ def update_settings():
     config.admin_phone = request.form.get('admin_phone', config.admin_phone)
     config.support_number_1 = request.form.get('support_1', config.support_number_1)
     config.support_number_2 = request.form.get('support_2', config.support_number_2)
+    
+    # 🌟 Update Dynamic Plans
+    if request.form.get('plan_basic_price'):
+        config.plan_basic_price = int(request.form.get('plan_basic_price'))
+    if request.form.get('plan_premium_price'):
+        config.plan_premium_price = int(request.form.get('plan_premium_price'))
+    if request.form.get('plan_ultimate_price'):
+        config.plan_ultimate_price = int(request.form.get('plan_ultimate_price'))
+        
     db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
