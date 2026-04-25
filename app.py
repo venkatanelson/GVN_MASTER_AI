@@ -1786,13 +1786,22 @@ def sync_admin_dhan_to_worker():
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
                 if conf:
                     token = cipher.decrypt(conf.encrypted_access_token).decode() if conf.encrypted_access_token else ""
+                    pwd = cipher.decrypt(conf.encrypted_password).decode() if conf.encrypted_password else ""
+                    c_secret = cipher.decrypt(conf.encrypted_client_secret).decode() if conf.encrypted_client_secret else ""
+                    t_key = cipher.decrypt(conf.encrypted_totp_key).decode() if conf.encrypted_totp_key else ""
+
                     dhan_live_feed.dhan_master_config.update({
                         "client_id": conf.client_id,
                         "access_token": token,
+                        "broker_password": pwd,
+                        "client_secret": c_secret,
+                        "totp_key": t_key,
                         "broker_name": conf.broker_name,
                         "active": True
                     })
                     print(f"✅ [{conf.broker_name.upper()} SYNC] Master Data Feed linked to Admin: {admin.username}")
+
+
         except Exception as e:
             print(f"❌ [DATA SYNC ERROR] {e}")
 
