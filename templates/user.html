@@ -635,11 +635,17 @@
                         <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
-                    <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
                     <div style="position: relative;">
                         <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys and decrypted_keys.totp_key else '' }}">
                         <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+
+                    <p id="label_broker_password" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">BROKER PASSWORD</p>
+                    <div style="position: relative;">
+                        <input type="password" id="api_broker_password" name="broker_password" placeholder="Broker Password" value="{{ decrypted_keys.broker_password if decrypted_keys and decrypted_keys.broker_password else '' }}">
+                        <span onclick="toggleVisibility('api_broker_password')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+
                     
                     <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
                 </form>
@@ -651,15 +657,13 @@
 
                     document.querySelector('select[name="broker_name"]').addEventListener('change', function() {
                         const broker = this.value;
-                        const clientId = document.getElementById('api_client_id');
-                        const accessToken = document.getElementById('api_access_token');
-                        const clientSecret = document.getElementById('api_client_secret');
-                        const totpKey = document.getElementById('api_totp');
+                        const brokerPassword = document.getElementById('api_broker_password');
 
                         const lblClientId = document.getElementById('label_client_id');
                         const lblAccessToken = document.getElementById('label_access_token');
                         const lblClientSecret = document.getElementById('label_client_secret');
                         const lblTotpKey = document.getElementById('label_totp');
+                        const lblBrokerPassword = document.getElementById('label_broker_password');
 
                         if (broker === 'Shoonya') {
                             clientId.placeholder = "Shoonya User ID";
@@ -670,6 +674,8 @@
                             lblClientSecret.innerText = "API SECRET";
                             totpKey.placeholder = "TOTP Secret Key (16 chars)";
                             lblTotpKey.innerText = "TOTP SECRET KEY (16 CHARS)";
+                            brokerPassword.placeholder = "Shoonya Password";
+                            lblBrokerPassword.innerText = "SHOONYA PASSWORD";
                         } else if (broker === 'Dhan') {
                             clientId.placeholder = "Dhan Client ID";
                             lblClientId.innerText = "DHAN CLIENT ID";
@@ -679,6 +685,8 @@
                             lblClientSecret.innerText = "DHAN CLIENT SECRET (OPTIONAL)";
                             totpKey.placeholder = "Dhan TOTP Secret";
                             lblTotpKey.innerText = "DHAN TOTP SECRET (OPTIONAL)";
+                            brokerPassword.placeholder = "Broker Password (Optional)";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD (OPTIONAL)";
                         } else if (broker === 'AngelOne') {
                             clientId.placeholder = "Angel One Client ID";
                             lblClientId.innerText = "ANGEL ONE CLIENT ID";
@@ -688,6 +696,8 @@
                             lblClientSecret.innerText = "SMARTAPI SECRET";
                             totpKey.placeholder = "Angel One TOTP Secret or PIN";
                             lblTotpKey.innerText = "ANGEL ONE TOTP SECRET OR PIN";
+                            brokerPassword.placeholder = "Broker Password (PIN)";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD (PIN)";
                         } else if (broker === 'Fyers') {
                             clientId.placeholder = "Fyers App ID (Client ID)";
                             lblClientId.innerText = "FYERS APP ID (CLIENT ID)";
@@ -697,16 +707,21 @@
                             lblClientSecret.innerText = "SECRET KEY";
                             totpKey.placeholder = "PIN";
                             lblTotpKey.innerText = "PIN";
+                            brokerPassword.placeholder = "Fyers Password";
+                            lblBrokerPassword.innerText = "FYERS PASSWORD";
                         } else {
                             clientId.placeholder = "Client ID / App ID";
                             lblClientId.innerText = "CLIENT ID / APP ID";
                             accessToken.placeholder = "Access Token / API Key";
-                            lblAccessToken.innerText = "ACCESS TOKEN / API KEY";
+                            lblAccessToken.innerText = "ACCESS TOKEN (API KEY)";
                             clientSecret.placeholder = "Client Secret / App Secret";
                             lblClientSecret.innerText = "CLIENT SECRET / APP SECRET";
                             totpKey.placeholder = "TOTP Secret / PIN";
                             lblTotpKey.innerText = "TOTP SECRET / PIN";
+                            brokerPassword.placeholder = "Broker Password";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD";
                         }
+
                     });
 
                     // Trigger the event on page load to set correct placeholders
