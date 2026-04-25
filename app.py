@@ -1050,8 +1050,23 @@ def user_dashboard(user_id):
         
     pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
         
-    # Fetch Broker Config
-    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    # Fetch Broker Config (With Self-Healing Migration for column addition)
+    try:
+        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    except Exception:
+        db.session.rollback()
+        try:
+            # 🌟 Emergency Migration: Add encrypted_password column if missing
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
+            db.session.commit()
+        except:
+            db.session.rollback()
+            try:
+                db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BLOB;'))
+                db.session.commit()
+            except:
+                db.session.rollback()
+        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     
     # Decrypt keys for UI visibility
     decrypted_keys = {
@@ -1315,10 +1330,21 @@ def save_api_settings():
     
     user = User.query.get_or_404(user_id)
     
-    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    try:
+        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
+            db.session.commit()
+        except:
+            db.session.rollback()
+        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+
     if not broker_config:
         broker_config = UserBrokerConfig(user_id=user_id)
         db.session.add(broker_config)
+
         
     broker_config.broker_name = broker_name
     broker_config.webhook_url = webhook_url
