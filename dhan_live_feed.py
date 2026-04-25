@@ -1,6 +1,6 @@
 import math
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import threading
 
 # Global memory to store the latest Delta 60 strikes per index
@@ -311,7 +311,7 @@ def fetch_option_chain(symbol="NIFTY"):
                 
             # 🌟 FALLBACK: If expiry_list fails, calculate next Thursday
             if not nearest_expiry:
-                from datetime import date, timedelta
+                # from datetime import date, timedelta # REMOVED: Caused UnboundLocalError
                 d = date.today()
                 while d.weekday() != 3: # Thursday
                     d += timedelta(1)
