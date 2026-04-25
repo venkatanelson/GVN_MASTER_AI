@@ -1043,6 +1043,25 @@ def user_dashboard(user_id):
         
     # Fetch Broker Config
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    
+    # Decrypt keys for UI visibility
+    decrypted_keys = {
+        "tv_secret": "",
+        "access_token": "",
+        "client_secret": "",
+        "totp_key": ""
+    }
+    if broker_config:
+        try:
+            if broker_config.encrypted_secret_key:
+                decrypted_keys["tv_secret"] = cipher.decrypt(broker_config.encrypted_secret_key).decode()
+            if broker_config.encrypted_access_token:
+                decrypted_keys["access_token"] = cipher.decrypt(broker_config.encrypted_access_token).decode()
+            if broker_config.encrypted_client_secret:
+                decrypted_keys["client_secret"] = cipher.decrypt(broker_config.encrypted_client_secret).decode()
+            if broker_config.encrypted_totp_key:
+                decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
+        except: pass
 
     # 🔒 Check if signal unlock has expired
     if not user.is_locked and user.signals_unlocked_until:
@@ -1053,6 +1072,7 @@ def user_dashboard(user_id):
     return render_template('user.html', 
                            user=user, 
                            broker_config=broker_config,
+                           decrypted_keys=decrypted_keys,
                            remaining_days=max(0, remaining_days),
                            discount_percent=user.personal_discount + 10,
                            pnl_1d=pnl_1d,
