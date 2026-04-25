@@ -380,8 +380,10 @@
                     <span style="background: var(--warning); color: #000; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">DEMO ACCOUNT</span>
                     {% else %}
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
-                    {% if broker_config and broker_config.client_id %}
-                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ DHAN LINKED</span>
+                    {% if broker_config and broker_config.client_id and broker_config.encrypted_access_token %}
+                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ DHAN CONNECTED</span>
+                    {% else %}
+                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ DHAN NOT CONNECTED</span>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -579,16 +581,38 @@
                     
                     <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 5px 5px; text-transform: uppercase;">TradingView Webhook Details</p>
                     <input type="text" name="webhook_url" placeholder="Webhook URL" value="{{ broker_config.webhook_url if broker_config else user.dhan_webhook_url }}">
-                    <input type="password" name="secret_key" placeholder="TradingView Secret Key" value="{{ '********' if broker_config else '' }}">
+                    
+                    <div style="position: relative;">
+                        <input type="password" id="tv_secret" name="secret_key" placeholder="TradingView Secret Key" value="{{ '********' if broker_config else '' }}">
+                        <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
                     
                     <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Dhan API Credentials</p>
                     <input type="text" name="client_id" placeholder="Dhan Client ID" value="{{ broker_config.client_id if broker_config else '' }}">
-                    <input type="password" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if broker_config else '' }}">
-                    <input type="password" name="client_secret" placeholder="Dhan Client Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
-                    <input type="password" name="totp_key" placeholder="Dhan TOTP Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                    
+                    <div style="position: relative;">
+                        <input type="password" id="dhan_access" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
+                        <span onclick="toggleVisibility('dhan_access')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+
+                    <div style="position: relative;">
+                        <input type="password" id="dhan_secret" name="client_secret" placeholder="Dhan Client Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
+                        <span onclick="toggleVisibility('dhan_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+
+                    <div style="position: relative;">
+                        <input type="password" id="dhan_totp" name="totp_key" placeholder="Dhan TOTP Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                        <span onclick="toggleVisibility('dhan_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
                     
                     <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
                 </form>
+                <script>
+                    function toggleVisibility(id) {
+                        var x = document.getElementById(id);
+                        if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
+                    }
+                </script>
             </div>
         </div>
     </div>
