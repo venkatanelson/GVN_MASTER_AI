@@ -238,6 +238,8 @@ class UserBrokerConfig(db.Model):
     encrypted_access_token = db.Column(db.LargeBinary, nullable=True)
     encrypted_client_secret = db.Column(db.LargeBinary, nullable=True) # 🌟 NEW for Auto-Refresh
     encrypted_totp_key = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Auto-Refresh
+    encrypted_password = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Shoonya/Fyers Password
+
 
 class AIPaperTrade(db.Model):
     __tablename__ = 'ai_paper_trades'
@@ -1049,7 +1051,8 @@ def user_dashboard(user_id):
         "tv_secret": "",
         "access_token": "",
         "client_secret": "",
-        "totp_key": ""
+        "totp_key": "",
+        "broker_password": ""
     }
     if broker_config:
         try:
@@ -1061,6 +1064,8 @@ def user_dashboard(user_id):
                 decrypted_keys["client_secret"] = cipher.decrypt(broker_config.encrypted_client_secret).decode()
             if broker_config.encrypted_totp_key:
                 decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
+            if broker_config.encrypted_password:
+                decrypted_keys["broker_password"] = cipher.decrypt(broker_config.encrypted_password).decode()
         except: pass
 
     # 🔒 Check if signal unlock has expired
@@ -1297,8 +1302,9 @@ def save_api_settings():
     secret_key = request.form.get('secret_key')
     client_id = request.form.get('client_id')
     access_token = request.form.get('access_token')
-    client_secret = request.form.get('client_secret') # 🌟 NEW
-    totp_key = request.form.get('totp_key')           # 🌟 NEW
+    client_secret = request.form.get('client_secret') 
+    totp_key = request.form.get('totp_key')           
+    broker_password = request.form.get('broker_password')
     
     user = User.query.get_or_404(user_id)
     
