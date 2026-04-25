@@ -532,28 +532,56 @@
             </div>
         </div>
 
-        <!-- 🖼️ INTEGRATED TRADINGVIEW CHART (PRO SYNC) -->
-        <div class="premium-card" style="padding: 0; height: 500px; overflow: hidden; border: 1px solid var(--primary); box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);">
+        <!-- 🖼️ ADVANCED GVN PRO CHART (LIVE SYNC) -->
+        <div class="premium-card" style="padding: 0; height: 600px; overflow: hidden; border: 1px solid var(--primary); box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);">
             <div id="tv-chart-container" style="height: 100%; width: 100%;">
                 <!-- TradingView Widget BEGIN -->
                 <div class="tradingview-widget-container" style="height:100%;width:100%">
                   <div id="tradingview_gvn" style="height:100%;width:100%"></div>
                   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
                   <script type="text/javascript">
-                  new TradingView.widget({
-                  "autosize": true,
-                  "symbol": "NSE:NIFTY",
-                  "interval": "1",
-                  "timezone": "Asia/Kolkata",
-                  "theme": "dark",
-                  "style": "1",
-                  "locale": "en",
-                  "toolbar_bg": "#f1f3f6",
-                  "enable_publishing": false,
-                  "hide_side_toolbar": false,
-                  "allow_symbol_change": true,
-                  "container_id": "tradingview_gvn"
-                });
+                  // 🔧 GVN Symbol Map: Correct FREE TradingView symbols for Indian indices
+                  const GVN_TV_SYMBOLS = {
+                      'NIFTY':     'NSE:NIFTY50',
+                      'BANKNIFTY': 'NSE:BANKNIFTY',
+                      'FINNIFTY':  'NSE:FINNIFTY',
+                      'SENSEX':    'BSE:SENSEX'
+                  };
+
+                  var tvWidgetInstance = null;
+                  function initTV(symbol = 'NSE:NIFTY50') {
+                      if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
+                      tvWidgetInstance = new TradingView.widget({
+                        "autosize": true,
+                        "symbol": symbol,
+                        "interval": "1",
+                        "timezone": "Asia/Kolkata",
+                        "theme": "dark",
+                        "style": "1",
+                        "locale": "en",
+                        "toolbar_bg": "#f1f3f6",
+                        "enable_publishing": false,
+                        "withdateranges": true,
+                        "hide_side_toolbar": false,
+                        "allow_symbol_change": true,
+                        "details": true,
+                        "hotlist": false,
+                        "calendar": false,
+                        "show_popup_button": true,
+                        "popup_width": "1000",
+                        "popup_height": "650",
+                        "container_id": "tradingview_gvn"
+                      });
+                  }
+                  initTV();
+
+                  function changeTVSymbol(indexName) {
+                      const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY50';
+                      if (window.lastTVSym !== sym) {
+                          window.lastTVSym = sym;
+                          initTV(sym);
+                      }
+                  }
                   </script>
                 </div>
                 <!-- TradingView Widget END -->
@@ -909,13 +937,11 @@
                         document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
-                        // 🌟 DYNAMIC CHART UPDATE (NSE Sync)
-                        if (data.length > 0) {
-                            const mainStrike = data[0].strike_symbol || `NSE:${currentActiveIndex}`;
-                            if (window.lastChartSymbol !== mainStrike) {
-                                changeTVSymbol(mainStrike);
-                                window.lastChartSymbol = mainStrike;
-                            }
+                        // 🌟 DYNAMIC CHART UPDATE — switch to correct free index symbol
+                        const correctSym = GVN_TV_SYMBOLS[currentActiveIndex] || 'NSE:NIFTY50';
+                        if (window.lastChartSymbol !== correctSym) {
+                            changeTVSymbol(currentActiveIndex);
+                            window.lastChartSymbol = correctSym;
                         }
                         
                         // 🌟 UPDATE DUAL-PULSE CONFIRMATION BOARD
@@ -1006,25 +1032,9 @@
         }
 
         function changeTVSymbol(symbol) {
-            if (window.tvWidget) {
-                window.tvWidget.setSymbol(symbol, "1", () => {});
-            } else {
-                // Initialize widget if not exists
-                window.tvWidget = new TradingView.widget({
-                    "autosize": true,
-                    "symbol": symbol.includes(':') ? symbol : `NSE:${symbol}`,
-                    "interval": "1",
-                    "timezone": "Asia/Kolkata",
-                    "theme": "dark",
-                    "style": "1",
-                    "locale": "en",
-                    "toolbar_bg": "#f1f3f6",
-                    "enable_publishing": false,
-                    "hide_side_toolbar": false,
-                    "allow_symbol_change": true,
-                    "container_id": "tradingview_gvn"
-                });
-            }
+            console.log("Switching Chart to:", symbol);
+            // Re-initialize to ensure all tools and indicators are fresh for the new symbol
+            initTV(symbol.includes(':') ? symbol : `NSE:${symbol}`);
         }
 
         setInterval(updateScanner, 10000);
