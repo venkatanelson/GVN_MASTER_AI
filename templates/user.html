@@ -601,7 +601,7 @@
                     
                     <p style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TRADINGVIEW SECRET KEY</p>
                     <div style="position: relative;">
-                        <input type="password" id="tv_secret" name="secret_key" placeholder="Create a Secret Key (e.g., GVN@123)" value="{{ '********' if broker_config else '' }}">
+                        <input type="password" id="tv_secret" name="secret_key" placeholder="Create a Secret Key (e.g., GVN@123)" value="{{ decrypted_keys.tv_secret if decrypted_keys and decrypted_keys.tv_secret else '' }}">
                         <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
@@ -625,19 +625,19 @@
                     
                     <p id="label_access_token" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">ACCESS TOKEN / API KEY</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
+                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ decrypted_keys.access_token if decrypted_keys and decrypted_keys.access_token else '' }}">
                         <span onclick="toggleVisibility('api_access_token')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <p id="label_client_secret" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT SECRET / APP SECRET</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
+                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ decrypted_keys.client_secret if decrypted_keys and decrypted_keys.client_secret else '' }}">
                         <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys and decrypted_keys.totp_key else '' }}">
                         <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
