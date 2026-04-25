@@ -311,7 +311,7 @@ def cleanup_old_screenshots():
 trade_hold_memory = {}
 
 def auto_stop_loss_worker():
-    """Continuously checks running trades and auto squares off if loss exceeds 15 points using NSE LTPs."""
+    """Continuously checks running trades and auto squares off if loss exceeds 16 points using NSE LTPs."""
     import re
     while True:
         try:
@@ -343,7 +343,7 @@ def auto_stop_loss_worker():
                         loss = trade.entry_price - ltp
                         
                         # --- BALLOON PRESSURE LOGIC ---
-                        if trade.trade_type == "BUY" and loss >= 12.0:
+                        if trade.trade_type == "BUY" and loss >= 16.0:
                             # Check if price is showing a bounce or stabilization in the last 3-4 ticks
                             is_bouncing = False
                             if len(ltp_history) >= 3:
@@ -383,7 +383,7 @@ def auto_stop_loss_worker():
                                 )
                                 send_telegram_msg(tg_msg)
                         else:
-                            # Reset hold count if price recovers above 15-point loss
+                            # Reset hold count if price recovers above 16-point loss
                             trade_id = str(trade.id)
                             if trade_id in trade_hold_memory:
                                 del trade_hold_memory[trade_id]
@@ -775,7 +775,7 @@ def get_live_trade_price(trade_id):
         live_price = trade.entry_price # Fallback to entry
         
     current_loss = trade.entry_price - live_price if trade.trade_type == 'BUY' else live_price - trade.entry_price
-    is_danger = current_loss >= 12.0 # Warn if dropping more than 12 points
+    is_danger = current_loss >= 16.0 # Warn if dropping more than 16 points
         
     return jsonify({
         "status": "success",
