@@ -274,7 +274,11 @@ def login_shoonya():
     if shoonya_api: return shoonya_api
     
     try:
+        try:
         from NorenRestApiPy.NorenApi import NorenApi
+    except ImportError:
+        print("❌ Error: NorenRestApiPy not found. Run 'pip install NorenRestApiPy'")
+        return None
         import pyotp
         
         api = NorenApi()
@@ -479,8 +483,15 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     closest_pe_diff = 1.0
 
     options_count = len(records.get("data", []))
-    with open("dhan_feed_status.log", "a") as f:
-        f.write(f"{datetime.datetime.now()}: [Dhan Worker] {symbol} data count: {options_count}\n")
+    try:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"[{datetime.datetime.now()}] Attempting Shoonya Login...\n")
+    except Exception as e:
+        print(f"⚠️ Log Warning: Could not write to log file: {e}")
+    try:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [Dhan Worker] {symbol} data count: {options_count}\n")
+    except: pass
 
     for item in records.get("data", []):
         strike = item.get("strikePrice") or item.get("strike")
@@ -687,15 +698,21 @@ def live_feed_background_worker():
                             "active": True
                         })
 
-                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                            f.write(f"{datetime.datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
+                        try:
+                            with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                                f.write(f"{datetime.datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
+                        except: pass
                 except Exception as e:
-                    with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
+                    except: pass
 
 
-            with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
+            try:
+                with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
+            except: pass
             
             if dhan_master_config.get('active'):
                 # 🌟 Reset 9:15 candles on new day
@@ -704,19 +721,25 @@ def live_feed_background_worker():
                     option_915_candles.clear()
 
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-                    with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
+                    except: pass
                     analyze_and_update_gvn_scanner(symbol)
-                    with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
+                    except: pass
                     time.sleep(3)
                 
         except Exception as e:
-            print(f"[Dhan Worker Error] {e}")
-            with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.datetime.now()}: FATAL ERROR: {str(e)}\n")
-        
-        time.sleep(15)
+            print(f"🚀 [FEED ENGINE ERROR] {e}")
+            try:
+                with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.datetime.now()}] Worker Error: {str(e)}\n")
+            except:
+                pass
+            time.sleep(10)
 
 def start_live_feed_worker():
     broker = dhan_master_config.get("broker_name", "Dhan").upper()
