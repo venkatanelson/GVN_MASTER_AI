@@ -1,6 +1,6 @@
+import datetime
 import math
 import time
-from datetime import datetime, timedelta, date
 import threading
 
 # Global memory to store the latest Delta 60 strikes per index
@@ -98,7 +98,7 @@ def update_ai_dashboard(symbol, underlying_value):
         trend = "SIDEWAYS"
         score = 50
         
-        now = datetime.now()
+        now = datetime.datetime.now()
         time_val = now.hour + (now.minute / 60.0)
         
         # 1. Trend and Control (Pine Script Mode Decision)
@@ -257,14 +257,14 @@ def login_shoonya():
         if ret and ret.get('stat') == 'Ok':
             shoonya_api = api
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [SHOONYA API] Login Successful.\n")
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Successful.\n")
             return api
         else:
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
     except Exception as e:
         with open("dhan_feed_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [SHOONYA API] Exception during login: {e}\n")
+            f.write(f"{datetime.datetime.now()}: [SHOONYA API] Exception during login: {e}\n")
     return None
 
 
@@ -298,7 +298,7 @@ def fetch_option_chain(symbol="NIFTY"):
             except: pass
 
         with open("dhan_feed_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [SHOONYA ENGINE] Native Shoonya Mode Active... Fetching Live NSE Data\n")
+            f.write(f"{datetime.datetime.now()}: [SHOONYA ENGINE] Native Shoonya Mode Active... Fetching Live NSE Data\n")
         
         # Attempt to fetch real data from NSE website directly
         import requests
@@ -325,7 +325,7 @@ def fetch_option_chain(symbol="NIFTY"):
         return {
             "records": {
                 "underlyingValue": 24000 if symbol == "NIFTY" else (52000 if symbol == "BANKNIFTY" else 0),
-                "expiryDates": [(datetime.now() + timedelta(days=2)).strftime("%d-%b-%Y")],
+                "expiryDates": [(datetime.datetime.now() + datetime.timedelta(days=2)).strftime("%d-%b-%Y")],
                 "data": []
             },
             "source": "SHOONYA_FALLBACK"
@@ -361,7 +361,7 @@ def fetch_option_chain(symbol="NIFTY"):
             expiry_resp = dhan.expiry_list(sid, idx_segment)
             
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [DHAN EXPIRY DEBUG] {symbol} Resp: {expiry_resp}\n")
+                f.write(f"{datetime.datetime.now()}: [DHAN EXPIRY DEBUG] {symbol} Resp: {expiry_resp}\n")
             
             nearest_expiry = ""
             if expiry_resp.get('status') == 'success' and expiry_resp.get('data'):
@@ -369,24 +369,23 @@ def fetch_option_chain(symbol="NIFTY"):
                 
             # 🌟 FALLBACK: If expiry_list fails, calculate next Thursday
             if not nearest_expiry:
-                # from datetime import date, timedelta # REMOVED: Caused UnboundLocalError
-                d = date.today()
+                d = datetime.date.today()
                 while d.weekday() != 3: # Thursday
-                    d += timedelta(1)
+                    d += datetime.timedelta(1)
                 nearest_expiry = d.strftime("%Y-%m-%d")
                 
             # Now fetch the actual option chain for this expiry
             chain_resp = dhan.option_chain(sid, idx_segment, nearest_expiry)
             
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')} | Remarks: {chain_resp.get('remarks')}\n")
+                f.write(f"{datetime.datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')} | Remarks: {chain_resp.get('remarks')}\n")
             
             if chain_resp.get('status') == 'success':
                 chain_data = chain_resp.get('data', [])
                 return {
                     "records": {
                         "underlyingValue": lp,
-                        "expiryDates": expiry_resp.get('data', [datetime.now().strftime("%Y-%m-%d")]), 
+                        "expiryDates": expiry_resp.get('data', [datetime.datetime.now().strftime("%Y-%m-%d")]), 
                         "data": chain_data
                     },
                     "source": "DHAN_OPTION_CHAIN",
@@ -394,19 +393,19 @@ def fetch_option_chain(symbol="NIFTY"):
                 }
         except Exception as e:
             with open("dhan_feed_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [DHAN DEBUG ERROR] {symbol}: {str(e)}\n")
+                f.write(f"{datetime.datetime.now()}: [DHAN DEBUG ERROR] {symbol}: {str(e)}\n")
 
         return {
             "records": {
                 "underlyingValue": lp,
-                "expiryDates": [datetime.now().strftime("%Y-%m-%d")], 
+                "expiryDates": [datetime.datetime.now().strftime("%Y-%m-%d")], 
                 "data": [] # Still return index price at least
             },
             "source": "DHAN_LTP_ONLY"
         }
     except Exception as e:
         with open("dhan_feed_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [DHAN ERROR] {str(e)}\n")
+            f.write(f"{datetime.datetime.now()}: [DHAN ERROR] {str(e)}\n")
     return None
 
 def analyze_and_update_gvn_scanner(symbol="NIFTY"):
@@ -424,14 +423,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
     
     # Time to Expiry (T)
     try:
-        expiry_dt = datetime.strptime(nearest_expiry, "%d-%b-%Y")
+        expiry_dt = datetime.datetime.strptime(nearest_expiry, "%d-%b-%Y")
     except ValueError:
         try:
-            expiry_dt = datetime.strptime(nearest_expiry, "%Y-%m-%d")
+            expiry_dt = datetime.datetime.strptime(nearest_expiry, "%Y-%m-%d")
         except ValueError:
-            expiry_dt = datetime.now() + timedelta(days=1)
+            expiry_dt = datetime.datetime.now() + datetime.timedelta(days=1)
     
-    now_dt = datetime.now()
+    now_dt = datetime.datetime.now()
     days_to_expiry = max((expiry_dt - now_dt).days, 0.01)
     T = days_to_expiry / 365.0  
     r = 0.07 
@@ -447,7 +446,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     options_count = len(records.get("data", []))
     with open("dhan_feed_status.log", "a") as f:
-        f.write(f"{datetime.now()}: [Dhan Worker] {symbol} data count: {options_count}\n")
+        f.write(f"{datetime.datetime.now()}: [Dhan Worker] {symbol} data count: {options_count}\n")
 
     for item in records.get("data", []):
         strike = item.get("strikePrice") or item.get("strike")
@@ -557,7 +556,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         live_option_chain_summary[symbol]["spot"] = underlying_value
         atm = int(round(underlying_value / (50 if symbol == "NIFTY" else 100)) * (50 if symbol == "NIFTY" else 100))
         live_option_chain_summary[symbol]["atm"] = atm
-        live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        live_option_chain_summary["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
 
         # 🌟 Store Full Option Chain
         sorted_chain = sorted(chain_map.values(), key=lambda x: x['strike'])
@@ -601,11 +600,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
             
         # 🌟 GVN AI ADVANCED ANALYSIS
         update_ai_dashboard(symbol, underlying_value)
-        market_pulse["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        market_pulse["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
     except: pass
 
     source = data.get("source", "DHAN_API")
-    gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S") + f" ({source})"
+    gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S") + f" ({source})"
 
 def live_feed_background_worker():
     print("🚀 [Dhan API Live Feed Worker] Thread Started Successfully.")
@@ -655,33 +654,33 @@ def live_feed_background_worker():
                         })
 
                         with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                            f.write(f"{datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
+                            f.write(f"{datetime.datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
                 except Exception as e:
                     with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
+                        f.write(f"{datetime.datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
 
 
             with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
+                f.write(f"{datetime.datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             if dhan_master_config.get('active'):
                 # 🌟 Reset 9:15 candles on new day
-                now = datetime.now()
+                now = datetime.datetime.now()
                 if now.hour == 9 and now.minute == 0:
                     option_915_candles.clear()
 
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
                     with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
+                        f.write(f"{datetime.datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
                     analyze_and_update_gvn_scanner(symbol)
                     with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
+                        f.write(f"{datetime.datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
                     time.sleep(3)
                 
         except Exception as e:
             print(f"[Dhan Worker Error] {e}")
             with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now()}: FATAL ERROR: {str(e)}\n")
+                f.write(f"{datetime.datetime.now()}: FATAL ERROR: {str(e)}\n")
         
         time.sleep(15)
 
@@ -692,7 +691,7 @@ def start_live_feed_worker():
     print("="*50 + "\n")
     
     with open("dhan_feed_status.log", "w") as f:
-        f.write(f"{datetime.now()}: [INIT] {broker} Live Feed Engine Thread Initialized.\n")
+        f.write(f"{datetime.datetime.now()}: [INIT] {broker} Live Feed Engine Thread Initialized.\n")
         
     thread = threading.Thread(target=live_feed_background_worker, daemon=True)
     thread.start()
