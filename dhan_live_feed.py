@@ -241,20 +241,111 @@ def calculate_gvn_levels(high915, low915):
     }
     return levels
 
-# --- Black-Scholes Delta Calculation ---
+# --- Black-Scholes Greeks Engine (Delta, Gamma, Theta, Vega) ---
 def norm_cdf(x):
     """Cumulative distribution function for the standard normal distribution."""
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
-def calculate_delta(S, K, T, r, sigma, option_type):
-    if T <= 0 or sigma <= 0:
-        return 1.0 if (option_type == "CE" and S > K) or (option_type == "PE" and S < K) else 0.0
+def norm_pdf(x):
+    """Probability density function for the standard normal distribution."""
+    return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
 
-    d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-    if option_type == "CE":
-        return norm_cdf(d1)
-    else:
-        return norm_cdf(d1) - 1.0
+def calculate_greeks(S, K, T, r, sigma, option_type):
+    """Returns dict with Delta, Gamma, Theta, Vega for an option."""
+    if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
+        delta = 1.0 if (option_type == "CE" and S > K) or (option_type == "PE" and S < K) else 0.0
+        return {"delta": delta, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
+    try:
+        d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+        d2 = d1 - sigma * math.sqrt(T)
+        pdf_d1 = norm_pdf(d1)
+        delta = norm_cdf(d1) if option_type == "CE" else norm_cdf(d1) - 1.0
+        gamma = pdf_d1 / (S * sigma * math.sqrt(T))
+        # Theta per day (divide by 365)
+        if option_type == "CE":
+            theta = (-(S * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * K * math.exp(-r * T) * norm_cdf(d2)) / 365.0
+        else:
+            theta = (-(S * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * K * math.exp(-r * T) * norm_cdf(-d2)) / 365.0
+        vega = S * pdf_d1 * math.sqrt(T) / 100.0  # per 1% IV change
+        return {
+            "delta": round(delta, 3),
+            "gamma": round(gamma, 4),
+            "theta": round(theta, 2),
+            "vega":  round(vega, 2)
+        }
+    except Exception:
+        return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
+
+def calculate_delta(S, K, T, r, sigma, option_type):
+    """Backward-compatible wrapper — returns abs delta only."""
+    g = calculate_greeks(S, K, T, r, sigma, option_type)
+    return abs(g["delta"])
+
+# 🌟 Deep Scan Auto-Trade Signal Storage
+auto_trade_signals = []  # List of dicts with signal details
+
+def generate_deep_scan_signal(symbol, item, greeks, spot, oi, oi_change):
+    """
+    Deep Scan AI Engine: Creates auto-trade signal when Greeks + OI conditions align.
+    Rules:
+      - Delta 0.35–0.55 (near ATM, high probability)
+      - Gamma > 0.001 (accelerating move)
+      - Theta < -1.0  (not too much decay)
+      - OI_change > 0  (fresh positions being added = conviction)
+      - Comparative high OI vs avg (institutional interest)
+    """
+    global auto_trade_signals
+    delta  = abs(greeks.get("delta", 0))
+    gamma  = greeks.get("gamma", 0)
+    theta  = greeks.get("theta", 0)
+    vega   = greeks.get("vega", 0)
+    strike_name = item.get("strike", "")
+    opt_type = "CE" if "CE" in strike_name else "PE"
+    ltp    = item.get("ltp", 0)
+    
+    # --- Condition Gate ---
+    cond_delta = 0.30 <= delta <= 0.60
+    cond_gamma = gamma > 0.0005
+    cond_theta = theta > -5.0   # Not burning too fast
+    cond_oi    = oi_change > 0  # New OI being added (conviction)
+    cond_ltp   = ltp > 5        # Avoid illiquid options
+
+    if not (cond_delta and cond_gamma and cond_theta and cond_oi and cond_ltp):
+        return None
+
+    # Score the signal
+    score = 0
+    if 0.40 <= delta <= 0.55: score += 30  # ATM zone
+    if gamma > 0.002: score += 25           # High gamma acceleration
+    if oi_change > 500: score += 20         # Strong OI buildup
+    if theta > -2.0: score += 15            # Low decay
+    if vega > 10: score += 10               # IV responsive
+
+    if score < 50:
+        return None
+
+    signal = {
+        "symbol": symbol,
+        "strike": strike_name,
+        "ltp": ltp,
+        "spot": spot,
+        "delta": delta,
+        "gamma": gamma,
+        "theta": theta,
+        "vega": vega,
+        "oi": oi,
+        "oi_change": oi_change,
+        "score": score,
+        "action": f"BUY {opt_type}" if opt_type == "CE" else f"BUY {opt_type}",
+        "reason": f"Delta:{delta:.2f} | Gamma:{gamma:.4f} | OI+:{oi_change} | Score:{score}",
+        "time": datetime.datetime.now().strftime("%H:%M:%S")
+    }
+    # Keep only last 20 signals
+    auto_trade_signals = [s for s in auto_trade_signals if s["symbol"] != symbol or s["strike"] != strike_name]
+    auto_trade_signals.insert(0, signal)
+    if len(auto_trade_signals) > 20:
+        auto_trade_signals = auto_trade_signals[:20]
+    return signal
 
 # Global memory for Dhan Master Token (Updated by app.py)
 dhan_master_config = {
@@ -532,11 +623,21 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
             if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
 
             effective_iv = iv if iv > 0 else 18.0
-            delta = 0
+            greeks = {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
             try:
-                delta = abs(calculate_delta(underlying_value, strike, T, r, effective_iv/100.0, opt_type))
+                greeks = calculate_greeks(underlying_value, strike, T, r, effective_iv/100.0, opt_type)
             except:
-                delta = 0
+                pass
+            delta = abs(greeks["delta"])
+
+            # Store Greeks in chain_map
+            chain_map[strike].update({
+                f"{suffix}_delta": round(greeks["delta"], 3),
+                f"{suffix}_gamma": round(greeks["gamma"], 4),
+                f"{suffix}_theta": round(greeks["theta"], 2),
+                f"{suffix}_vega":  round(greeks["vega"], 2),
+                f"{suffix}_iv":    round(effective_iv, 2)
+            })
 
             # DELTA 60 SELECTION
             if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
@@ -582,10 +683,24 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
                     elif abs(ltp - levels["Level_7"]) < 2: i_level = "i7 (Inst)"
                     elif abs(ltp - levels["Level_1"]) < 2: i_level = "i1 (Expiry)"
                     
+                    # 🌟 DEEP SCAN: Generate auto-trade signal if conditions met
+                    try:
+                        generate_deep_scan_signal(symbol, {
+                            "strike": f"{int(strike)} {opt_type}",
+                            "ltp": ltp
+                        }, greeks, underlying_value, oi, oi_change)
+                    except:
+                        pass
+
                     gvn_scanner_data[symbol].append({
                         "strike": f"{int(strike)} {opt_type}",
                         "ltp": ltp,
                         "delta": round(delta, 2),
+                        "gamma": round(greeks["gamma"], 4),
+                        "theta": round(greeks["theta"], 2),
+                        "vega":  round(greeks["vega"], 2),
+                        "iv":    round(effective_iv, 1),
+                        "oi": oi,
                         "oi_change": oi_change,
                         "volume": volume,
                         "score": score,
