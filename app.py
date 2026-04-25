@@ -1833,7 +1833,7 @@ def ai_chat():
         if 'user_id' not in session:
             return jsonify({"reply": "⚠️ Please login first."})
         
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if user and user.is_locked:
             return jsonify({"reply": "🔒 Your AI Engine is Locked."})
             
