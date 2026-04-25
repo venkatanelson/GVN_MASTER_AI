@@ -176,7 +176,7 @@ def update_ai_dashboard(symbol, underlying_value):
         
     except Exception as e:
         with open("dhan_feed_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [AI DASHBOARD ERROR] {e}\n")
+            f.write(f"{datetime.datetime.now()}: [AI DASHBOARD ERROR] {e}\n")
 
 # --- GVN Fibonacci Level Calculator ---
 def calculate_gvn_levels(high915, low915):
@@ -565,7 +565,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
             row['is_atm'] = (row['strike'] == atm)
         
         full_option_chain_data[symbol] = sorted_chain
-        full_option_chain_data["last_updated"] = datetime.now().strftime("%H:%M:%S")
+        full_option_chain_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
 
     if best_ce_60 and best_pe_60:
         formatted_expiry = expiry_dt.strftime("%d %b").upper()
