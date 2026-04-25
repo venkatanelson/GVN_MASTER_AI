@@ -1936,7 +1936,8 @@ def unlock_premium(user_id):
     user.is_locked = False
     user.is_approved = True
     user.user_type = 'REAL'
-    user.expiry_date = datetime.utcnow() + timedelta(days=30)
+    user.expiry_date = datetime.utcnow() + timedelta(hours=5, minutes=30, days=30)
+    user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30, days=30)
     db.session.commit()
     flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
     return redirect(url_for('user_dashboard', user_id=user.id))
@@ -1945,8 +1946,8 @@ with app.app_context():
     db.create_all()
     # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
     if not getattr(app, '_workers_started', False):
-        dhan_live_feed.start_live_feed_worker()
         sync_admin_dhan_to_worker()
+        dhan_live_feed.start_live_feed_worker()
         app._workers_started = True
 
 if __name__ == '__main__':
