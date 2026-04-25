@@ -256,6 +256,25 @@
                 <label><b>Admin Recovery Phone (For Reset OTP):</b></label><br>
                 <input type="text" name="admin_phone" value="{{ config.admin_phone }}" style="width: 45%; padding: 8px;" required>
             </div>
+            
+            <div style="grid-column: span 2; margin-top: 10px; padding-top: 15px; border-top: 1px dashed #ccc;">
+                <h3 style="margin-top: 0; color: #1a73e8; font-size: 15px;">💸 Subscription Pricing Config (₹)</h3>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                    <div>
+                        <label><b>Basic Plan Price:</b></label><br>
+                        <input type="number" name="plan_basic_price" value="{{ config.plan_basic_price }}" style="width: 90%; padding: 8px;" required>
+                    </div>
+                    <div>
+                        <label><b>Premium Plan Price:</b></label><br>
+                        <input type="number" name="plan_premium_price" value="{{ config.plan_premium_price }}" style="width: 90%; padding: 8px;" required>
+                    </div>
+                    <div>
+                        <label><b>Ultimate Plan Price:</b></label><br>
+                        <input type="number" name="plan_ultimate_price" value="{{ config.plan_ultimate_price }}" style="width: 90%; padding: 8px;" required>
+                    </div>
+                </div>
+            </div>
+            
             <div style="grid-column: span 2; text-align: center; margin-top: 10px;">
                 <button type="submit" class="btn btn-approve" style="padding: 10px 30px; font-size: 16px;">Save All Settings</button>
             </div>
@@ -389,9 +408,9 @@
                         <form action="/approve-user" method="POST" style="display:inline-block; margin-bottom:5px;">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
                             <select name="plan" required style="padding:3px; font-size:12px;">
-                                <option value="Basic">Basic (₹2999)</option>
-                                <option value="Premium">Premium (₹5999)</option>
-                                <option value="Ultimate">Ultimate (₹9999)</option>
+                                <option value="Basic">Basic (₹{{ config.plan_basic_price }})</option>
+                                <option value="Premium">Premium (₹{{ config.plan_premium_price }})</option>
+                                <option value="Ultimate">Ultimate (₹{{ config.plan_ultimate_price }})</option>
                             </select>
                             <select name="months" style="padding:3px; font-size:12px;">
                                 <option value="1">1 Month</option>
