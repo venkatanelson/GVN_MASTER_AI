@@ -1719,22 +1719,23 @@ def auto_square_off_task():
 threading.Thread(target=auto_square_off_task, daemon=True).start()
 
 def sync_admin_dhan_to_worker():
-    """Finds the admin's Dhan API key and shares it with the NSE background worker."""
+    """Finds the admin's API key and shares it with the background worker."""
     with app.app_context():
         try:
             admin = User.query.filter_by(email='nelsonp143@gmail.com').first()
             if admin:
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
-                if conf and conf.client_id and conf.encrypted_access_token:
-                    token = cipher.decrypt(conf.encrypted_access_token).decode()
+                if conf:
+                    token = cipher.decrypt(conf.encrypted_access_token).decode() if conf.encrypted_access_token else ""
                     dhan_live_feed.dhan_master_config.update({
                         "client_id": conf.client_id,
                         "access_token": token,
+                        "broker_name": conf.broker_name,
                         "active": True
                     })
-                    print(f"✅ [DHAN SYNC] Master Data Feed linked to Admin: {admin.username}")
+                    print(f"✅ [{conf.broker_name.upper()} SYNC] Master Data Feed linked to Admin: {admin.username}")
         except Exception as e:
-            print(f"❌ [DHAN SYNC ERROR] {e}")
+            print(f"❌ [DATA SYNC ERROR] {e}")
 
 # ==========================================
 # 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
