@@ -589,19 +589,22 @@ with app.app_context():
     except Exception:
         db.session.rollback()
 
-    # 🌟 NEW: Auto-Migration for Client Secret & TOTP Key
+    # 🌟 NEW: Auto-Migration for Client Secret, TOTP Key & Password
     try:
         db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BLOB;'))
         db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BLOB;'))
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BLOB;'))
         db.session.commit()
     except Exception:
         db.session.rollback()
         try:
             db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BYTEA;'))
             db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BYTEA;'))
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
             db.session.commit()
         except Exception:
             db.session.rollback()
+
 
 @app.route('/')
 def index():
@@ -616,8 +619,12 @@ def db_upgrade():
     try:
         # SQLite / Postgres automatic column adder
         db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        try:
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
+        except: pass
         db.session.commit()
         return "<h3>✅ Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
+
     except Exception as e:
         db.session.rollback()
         # Fallback for postgres reserved word just in case
