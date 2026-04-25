@@ -448,8 +448,20 @@
         </div>
 
         <!-- 🤖 GVN AI MASTER PULSE -->
-        <div class="premium-card" style="border-top: 6px solid var(--primary);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+        <div class="premium-card" style="border-top: 6px solid var(--primary); position: relative;">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 16px;">
+                <div style="text-align: center; background: #fff; padding: 25px; border-radius: 20px; max-width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                    <span style="font-size: 40px;">🔒</span>
+                    <h4 style="color: #000; margin: 15px 0 5px 0;">AI Engine Locked</h4>
+                    <p style="color: #64748b; font-size: 12px; margin-bottom: 15px;">Unlock Premium to view Live Call VS Put Memory Analysis, Rainbow Momentum & Alpha Breakouts.</p>
+                    <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="width: 100%; background: #10b981;">Unlock AI Engine</button>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
                 <h3 style="margin: 0; font-weight: 900;">⚡ GVN AI Market Pulse</h3>
                 <div class="tab-container">
                     <button onclick="switchIndex('NIFTY')" id="tab-NIFTY" class="tab-btn active">NIFTY</button>
@@ -491,8 +503,12 @@
         </div>
 
         <!-- 📍 MARKET MOVEMENT PULSE BOX -->
-        <div class="premium-card" style="border-left: 5px solid var(--accent); margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.3);">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="premium-card" style="border-left: 5px solid var(--accent); margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.3); position: relative;">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; border-radius: 16px;"></div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}" style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">📍 Market Movement Pulse</h3>
                     <p id="movement-text" style="font-size: 20px; font-weight: 900; color: var(--accent);">📡 ANALYSIS IN PROGRESS...</p>
