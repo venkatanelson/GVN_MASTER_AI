@@ -909,6 +909,15 @@
                         document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
+                        // 🌟 DYNAMIC CHART UPDATE (NSE Sync)
+                        if (data.length > 0) {
+                            const mainStrike = data[0].strike_symbol || `NSE:${currentActiveIndex}`;
+                            if (window.lastChartSymbol !== mainStrike) {
+                                changeTVSymbol(mainStrike);
+                                window.lastChartSymbol = mainStrike;
+                            }
+                        }
+                        
                         // 🌟 UPDATE DUAL-PULSE CONFIRMATION BOARD
                         document.getElementById('movement-text').innerText = pulse.confirmation || '📡 SCANNING ALPHA GRID...';
                         document.getElementById('sync-badge').innerText = `SYNC: ${pulse.confirmation ? pulse.confirmation.split(' ')[0] : 'PENDING'}`;
@@ -996,9 +1005,34 @@
             });
         }
 
+        function changeTVSymbol(symbol) {
+            if (window.tvWidget) {
+                window.tvWidget.setSymbol(symbol, "1", () => {});
+            } else {
+                // Initialize widget if not exists
+                window.tvWidget = new TradingView.widget({
+                    "autosize": true,
+                    "symbol": symbol.includes(':') ? symbol : `NSE:${symbol}`,
+                    "interval": "1",
+                    "timezone": "Asia/Kolkata",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "en",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
+                    "hide_side_toolbar": false,
+                    "allow_symbol_change": true,
+                    "container_id": "tradingview_gvn"
+                });
+            }
+        }
+
         setInterval(updateScanner, 10000);
         setInterval(updateLivePnL, 3000);
         updateScanner();
+        
+        // Initial Chart Load
+        setTimeout(() => changeTVSymbol(`NSE:${currentActiveIndex}`), 2000);
     </script>
     <!-- 🌟 OPTION CHAIN MODAL -->
     <div id="optionChainModal" class="modal-overlay">
