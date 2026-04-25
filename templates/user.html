@@ -617,21 +617,21 @@
                     </select>
 
                     <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 5px 5px; text-transform: uppercase;">Broker API Credentials</p>
-                    <input type="text" name="client_id" placeholder="Client ID / App ID" value="{{ broker_config.client_id if broker_config else '' }}">
+                    <input type="text" id="api_client_id" name="client_id" placeholder="Client ID / App ID" value="{{ broker_config.client_id if broker_config else '' }}">
                     
                     <div style="position: relative;">
-                        <input type="password" id="dhan_access" name="access_token" placeholder="Access Token / API Key" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
-                        <span onclick="toggleVisibility('dhan_access')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
+                        <span onclick="toggleVisibility('api_access_token')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <div style="position: relative;">
-                        <input type="password" id="dhan_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
-                        <span onclick="toggleVisibility('dhan_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
+                        <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <div style="position: relative;">
-                        <input type="password" id="dhan_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
-                        <span onclick="toggleVisibility('dhan_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                        <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
                     <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
@@ -641,6 +641,44 @@
                         var x = document.getElementById(id);
                         if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
                     }
+
+                    document.querySelector('select[name="broker_name"]').addEventListener('change', function() {
+                        const broker = this.value;
+                        const clientId = document.getElementById('api_client_id');
+                        const accessToken = document.getElementById('api_access_token');
+                        const clientSecret = document.getElementById('api_client_secret');
+                        const totpKey = document.getElementById('api_totp');
+
+                        if (broker === 'Shoonya') {
+                            clientId.placeholder = "Shoonya User ID";
+                            accessToken.placeholder = "Vendor Code (API Key)";
+                            clientSecret.placeholder = "API Secret";
+                            totpKey.placeholder = "TOTP Secret Key (16 chars)";
+                        } else if (broker === 'Dhan') {
+                            clientId.placeholder = "Dhan Client ID";
+                            accessToken.placeholder = "Dhan Access Token";
+                            clientSecret.placeholder = "Dhan Client Secret (For Auto-Refresh)";
+                            totpKey.placeholder = "Dhan TOTP Secret";
+                        } else if (broker === 'AngelOne') {
+                            clientId.placeholder = "Angel One Client ID";
+                            accessToken.placeholder = "SmartAPI Key";
+                            clientSecret.placeholder = "SmartAPI Secret";
+                            totpKey.placeholder = "Angel One TOTP Secret or PIN";
+                        } else if (broker === 'Fyers') {
+                            clientId.placeholder = "Fyers App ID (Client ID)";
+                            accessToken.placeholder = "Access Token (App ID Hash)";
+                            clientSecret.placeholder = "Secret Key";
+                            totpKey.placeholder = "PIN";
+                        } else {
+                            clientId.placeholder = "Client ID / App ID";
+                            accessToken.placeholder = "Access Token / API Key";
+                            clientSecret.placeholder = "Client Secret / App Secret";
+                            totpKey.placeholder = "TOTP Secret / PIN";
+                        }
+                    });
+
+                    // Trigger the event on page load to set correct placeholders
+                    document.querySelector('select[name="broker_name"]').dispatchEvent(new Event('change'));
                 </script>
             </div>
         </div>
