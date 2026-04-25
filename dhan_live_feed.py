@@ -558,20 +558,22 @@ def live_feed_background_worker():
                     import sqlite3
                     conn = sqlite3.connect('instance/gvn_algo_pro.db')
                     cursor = conn.cursor()
-                    cursor.execute("SELECT client_id, encrypted_access_token FROM user_broker_config LIMIT 1")
+                    cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password FROM user_broker_config LIMIT 1")
                     row = cursor.fetchone()
                     if row and row[0] and row[1]:
                         from cryptography.fernet import Fernet
                         cipher = Fernet(b'gvn_secure_key_for_encryption_26')
                         token = cipher.decrypt(row[1]).decode()
+                        pwd = cipher.decrypt(row[2]).decode() if row[2] else ""
                         
                         dhan_master_config.update({
                             "client_id": row[0],
                             "access_token": token,
+                            "broker_password": pwd,
                             "active": True
                         })
                         with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                            f.write(f"{datetime.now()}: [AUTO-SYNC] Dhan Keys Loaded from DB.\n")
+                            f.write(f"{datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB.\n")
                     conn.close()
                 except: pass
 
