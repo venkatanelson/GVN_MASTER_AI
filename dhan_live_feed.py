@@ -275,10 +275,10 @@ def login_shoonya():
     
     try:
         try:
-        from NorenRestApiPy.NorenApi import NorenApi
-    except ImportError:
-        print("❌ Error: NorenRestApiPy not found. Run 'pip install NorenRestApiPy'")
-        return None
+            from NorenRestApiPy.NorenApi import NorenApi
+        except ImportError:
+            print("❌ Error: NorenRestApiPy not found. Run 'pip install NorenRestApiPy'")
+            return None
         import pyotp
         
         api = NorenApi()
