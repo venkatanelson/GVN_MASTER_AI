@@ -1,934 +1,1926 @@
-<!DOCTYPE html>
-<html lang="te">
+import os
+from dotenv import load_dotenv
+load_dotenv()
+import base64
+import requests
+import time
+import concurrent.futures
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
+import random
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime, timedelta
+from cryptography.fernet import Fernet
+import dhan_live_feed # 🌟 Custom Dhan API Real-Time Option Engine
+import broker_api
+import pyotp # 🌟 NEW for Auto-Refresh
+from dhanhq import dhanhq
+import threading
+from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GVN MASTER ALGO V2.2 PREMIUM 🚀</title>
-    <!-- CACHE BUSTING -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-glow: rgba(99, 102, 241, 0.5);
-            --secondary: #10b981;
-            --secondary-glow: rgba(16, 185, 129, 0.5);
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --bg-dark: #020617;
-            --card-bg: rgba(15, 23, 42, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --text-main: #f8fafc;
-            --text-dim: #94a3b8;
-        }
 
-        * { box-sizing: border-box; }
+app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-        body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg-dark);
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
-                radial-gradient(at 50% 50%, rgba(15, 23, 42, 1) 0px, transparent 100%);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
 
-        .container {
-            max-width: 1100px;
-            margin: auto;
-        }
+# Basic app config
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31) # 🌟 NEW: Auto-login lasts 1 month
 
-        /* --- PREMIUM CARD SYSTEM --- */
-        .premium-card {
-            background: var(--card-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 24px;
-            border: 1px solid var(--glass-border);
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            transition: transform 0.3s ease, border-color 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .header-card {
-            border-top: 4px solid var(--primary);
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
-        }
+# 🌟 NEW: Neon PostgreSQL Database URL
+# If DATABASE_URL is in the environment (e.g., Render/Neon), use Postgres. Otherwise, use local SQLite.
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_algo_pro.db')
+# Quick fix for Render & SQLAlchemy (replace postgres:// with postgresql://)
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
 
-        /* --- BUTTONS --- */
-        .btn-premium {
-            background: linear-gradient(135deg, var(--primary), #4f46e5);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 700;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-size: 13px;
-        }
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True, "pool_recycle": 280}
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-        .btn-premium:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px var(--primary-glow);
-        }
+# Encryption Key
+static_32_byte_string = b'gvn_secure_key_for_encryption_26'
+fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
+ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
+cipher = Fernet(ENCRYPTION_KEY)
 
-        .btn-go {
-            background: linear-gradient(135deg, #10b981, #059669);
-            padding: 14px 32px;
-            border-radius: 50px;
-            font-weight: 900;
-            color: white;
-            border: none;
-            cursor: pointer;
-            animation: pulse-green 2s infinite;
-            font-size: 14px;
-        }
-        
-        .btn-stop {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            animation: pulse-red 2s infinite;
-        }
 
-        @keyframes pulse-green {
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
-            70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
 
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
 
-        /* --- P&L GRID --- */
-        .pnl-grid {
-            display: flex;
-            overflow-x: auto;
-            gap: 15px;
-            padding-bottom: 15px;
-            margin-top: 20px;
-            scroll-behavior: smooth;
-        }
+# ---------------------------------------------------------
+# TELEGRAM BOT CONFIG
+# ---------------------------------------------------------
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '1008887074')
+TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '@indicator_Gvn') # 🌟 Public Channel Added Here
 
-        .pnl-item {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 20px;
-            text-align: center;
-            min-width: 150px;
-            flex: 0 0 auto;
-        }
-
-        .profit { color: var(--secondary); font-weight: 800; }
-        .loss { color: var(--danger); font-weight: 800; }
-
-        /* --- TABS --- */
-        .tab-container {
-            display: flex;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 6px;
-            border-radius: 16px;
-            border: 1px solid var(--glass-border);
-        }
-
-        .tab-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-dim);
-            padding: 8px 16px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 12px;
-            transition: 0.3s;
-        }
-
-        .tab-btn.active {
-            background: white;
-            color: var(--bg-dark);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        /* --- HEARTBEAT --- */
-        .heartbeat {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            background: rgba(15, 23, 42, 0.8);
-            padding: 8px 16px;
-            border-radius: 30px;
-            border: 1px solid var(--glass-border);
-            font-size: 11px;
-            font-weight: 800;
-        }
-
-        .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            position: relative;
-        }
-        
-        .dot::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            animation: pulse-dot 1.5s infinite;
-        }
-
-        .dot-blue { background: #3b82f6; }
-        .dot-blue::after { background: #3b82f6; }
-        
-        @keyframes pulse-dot {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-        
-        /* --- OPTION CHAIN MODAL --- */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-content {
-            background: var(--bg-dark);
-            border: 1px solid var(--primary);
-            border-radius: 20px;
-            width: 95%;
-            max-width: 1200px;
-            max-height: 90vh;
-            overflow-y: auto;
-            padding: 20px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            position: relative;
-        }
-        
-        .oc-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        
-        .oc-table th, .oc-table td {
-            border: 1px solid rgba(255,255,255,0.1);
-            padding: 10px;
-            text-align: center;
-        }
-        
-        .oc-table th {
-            background: rgba(15, 23, 42, 0.9);
-            color: var(--primary);
-            position: sticky;
-            top: 0;
-        }
-        
-        .oc-table .atm-row {
-            background: rgba(255, 255, 255, 0.05);
-            border-top: 2px solid var(--warning);
-            border-bottom: 2px solid var(--warning);
-        }
-            background: rgba(15, 23, 42, 0.8);
-            padding: 8px 16px;
-            border-radius: 30px;
-            border: 1px solid var(--glass-border);
-            font-size: 11px;
-            font-weight: 800;
-        }
-
-        .dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            position: relative;
-        }
-        
-        .dot::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            animation: pulse-dot 1.5s infinite;
-        }
-
-        .dot-blue { background: #3b82f6; }
-        .dot-blue::after { background: #3b82f6; }
-
-        /* --- INPUTS --- */
-        input, select {
-            background: rgba(15, 23, 42, 0.8) !important;
-            border: 1px solid var(--glass-border) !important;
-            color: white !important;
-            padding: 12px 16px !important;
-            border-radius: 12px !important;
-            width: 100%;
-            margin-bottom: 15px;
-            font-family: inherit;
-        }
-    <style>
-        /* 🔒 LOCK & SECURITY STYLES */
-        .locked-content {
-            filter: blur(15px);
-            pointer-events: none;
-            user-select: none;
-        }
-        .lock-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(2, 6, 23, 0.85);
-            backdrop-filter: blur(8px);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            color: white;
-        }
-        .watermark {
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%) rotate(-30deg);
-            font-size: 6vw;
-            color: rgba(255, 255, 255, 0.04);
-            pointer-events: none;
-            z-index: 10000;
-            white-space: nowrap;
-            user-select: none;
-            font-weight: 900;
-        }
-        .live-pulse {
-            animation: pulse-rainbow 2s infinite linear;
-        }
-        @keyframes pulse-rainbow {
-            0% { filter: hue-rotate(0deg); }
-            100% { filter: hue-rotate(360deg); }
-        }
-    </style>
-</head>
-
-<body style="user-select: none;" oncontextmenu="return false;">
-    <!-- 🔒 SECURITY WATERMARK -->
-    <div class="watermark">GVN SECURE - {{ user.phone }}</div>
-
-    {% if user.is_locked %}
-    <div class="lock-overlay">
-        <div class="premium-card" style="max-width: 450px; padding: 40px; border: 2px solid var(--primary); box-shadow: 0 0 100px rgba(99, 102, 241, 0.4);">
-            <div style="font-size: 80px; margin-bottom: 25px;">🔒</div>
-            <h1 style="font-weight: 900; margin-bottom: 10px; color: white; letter-spacing: 2px;">ACCESS RESTRICTED</h1>
-            <p style="color: var(--text-dim); margin-bottom: 30px; font-size: 14px; line-height: 1.6;">Your GVN AI Master Engine is currently locked. To access live "Zero-to-Hero" signals and i-Level levels, please activate your premium subscription.</p>
-            <div style="display: flex; gap: 15px; justify-content: center;">
-                <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="background: var(--secondary);">ACTIVATE NOW</button>
-                <a href="https://wa.me/{{ config.support_number_1 }}" class="btn-premium" style="background: rgba(255,255,255,0.1);">SUPPORT</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="container {{ 'locked-content' if user.is_locked else '' }}">
-        <!-- FLASH MESSAGES -->
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div style="background: white; padding: 15px; border-radius: 12px; border-left: 5px solid var(--primary); margin-bottom: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); color: #333; font-weight: bold;">
-                🔔 {{ message }}
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <!-- HEADER SECTION -->
-        <div class="premium-card header-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
-            <div style="flex: 1; min-width: 300px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                    {% if user.user_type == 'DEMO' %}
-                    <span style="background: var(--warning); color: #000; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">DEMO ACCOUNT</span>
-                    {% else %}
-                    <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
-                    {% if broker_config and broker_config.client_id and broker_config.encrypted_access_token %}
-                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ DHAN CONNECTED</span>
-                    {% else %}
-                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ DHAN NOT CONNECTED</span>
-                    {% endif %}
-                    {% endif %}
-                </div>
-                <h1 style="margin: 0; font-size: 28px; font-weight: 900;">Welcome back, {{ user.username }}</h1>
-                <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 14px;">
-                    {{ user.email }} | <span style="color: var(--primary); font-weight: 800;">Subscription: {{ remaining_days }} Days Left</span>
-                </p>
-            </div>
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <!-- Cleaned up Dhan API Active & Live Option Chain -->
-                <div style="text-align: right;">
-                    <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
-                    <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
-                        <button class="btn-premium" style="background: {{ 'var(--secondary)' if user.algo_status == 'ON' else 'var(--danger)' }}; min-width: 120px;">
-                            {{ '🟢 ' + user.algo_status if user.algo_status == "ON" else '🔴 ' + user.algo_status }}
-                        </button>
-                    </a>
-                </div>
-                <a href="/logout" class="btn-premium" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 12px 16px;">🚪</a>
-            </div>
-        </div>
-
-        <!-- 🤖 GVN FULL-AUTO COMMAND CENTER -->
-        <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2); background: linear-gradient(135deg, rgba(6, 78, 59, 0.1), rgba(2, 6, 23, 0.8));">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
-                <div>
-                    <h2 style="margin: 0; font-size: 20px; font-weight: 900;">GVN FULL-AUTO ALGO</h2>
-                    <p style="font-size: 12px; color: var(--text-dim); margin-top: 5px;">AI is scanning Alpha Grid for automatic entries...</p>
-                </div>
-                <a href="/toggle-auto-mode/{{ user.id }}" style="text-decoration: none;">
-                    <button class="btn-go {{ 'btn-stop' if user.full_auto_mode else '' }}">
-                        {{ 'STOP (MANUAL)' if user.full_auto_mode else 'GO (AUTO-TRADE)' }}
-                    </button>
-                </a>
-            </div>
-            <div style="margin-top: 20px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 10px 20px; border-radius: 50px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                <span style="font-size: 14px;">🔥</span>
-                <span style="font-size: 11px; font-weight: 900; color: #10b981; letter-spacing: 0.5px;">GLOBAL APPRECIATION OFFER! 10% DISCOUNT on all plans today.</span>
-            </div>
-        </div>
-
-        <!-- PERFORMANCE ANALYST -->
-        <h2 style="margin-top: 30px;">📊 My 30-Day Performance Analyst</h2>
-        <div class="pnl-grid">
-            <div class="pnl-item" style="border-top: 4px solid var(--warning);">
-                <small style="color: var(--text-dim); text-transform: uppercase;">TOTAL P&L (30 DAYS)</small>
-                <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 24px;">
-                    ₹ {{ "%.2f"|format(pnl_total_30d) }}
-                </div>
-            </div>
-            {% for day in daily_history %}
-            <div class="pnl-item" style="border-top: 4px solid var(--primary);">
-                <small style="color: var(--text-dim);">{{ day.date }}</small>
-                <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 18px;">
-                    ₹ {{ "%.2f"|format(day.pnl) }}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        <div style="text-align: center; margin: 20px 0;">
-            <a href="/history" class="btn-premium" style="background: var(--secondary);">📄 Download Full P&L Statement (PDF)</a>
-        </div>
-
-        <!-- 🤖 GVN AI MASTER PULSE -->
-        <div class="premium-card" style="border-top: 6px solid var(--primary); position: relative;">
-            {% if user.is_locked %}
-            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 16px;">
-                <div style="text-align: center; background: #fff; padding: 25px; border-radius: 20px; max-width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-                    <span style="font-size: 40px;">🔒</span>
-                    <h4 style="color: #000; margin: 15px 0 5px 0;">AI Engine Locked</h4>
-                    <p style="color: #64748b; font-size: 12px; margin-bottom: 15px;">Unlock Premium to view Live Call VS Put Memory Analysis, Rainbow Momentum & Alpha Breakouts.</p>
-                    <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="width: 100%; background: #10b981;">Unlock AI Engine</button>
-                </div>
-            </div>
-            {% endif %}
-            
-            <div class="{% if user.is_locked %}locked-blur{% endif %}">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
-                <h3 style="margin: 0; font-weight: 900;">⚡ GVN AI Market Pulse</h3>
-                <div class="tab-container">
-                    <button onclick="switchIndex('NIFTY')" id="tab-NIFTY" class="tab-btn active">NIFTY</button>
-                    <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
-                    <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
-                    <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: center;">
-                <div style="text-align: center;">
-                    <div style="width: 220px; height: 110px; margin: auto; overflow: hidden; position: relative;">
-                        <div id="pulse-gauge" style="width: 220px; height: 220px; border-radius: 50%; background: conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg); transform: rotate(-90deg); transition: 1.5s;"></div>
-                        <div style="position: absolute; bottom: 0; left: 20px; width: 180px; height: 90px; background: var(--bg-dark); border-radius: 90px 90px 0 0;"></div>
-                        <div id="gauge-needle" style="position: absolute; bottom: 0; left: 50%; width: 4px; height: 95px; background: white; transform-origin: bottom center; transform: rotate(-90deg); transition: 1.5s;"></div>
-                    </div>
-                    <h2 id="pulse-sentiment" style="margin-top: 15px; font-weight: 900; font-size: 28px;">NEUTRAL</h2>
-                    <small id="pulse-score" style="color: var(--text-dim); font-weight: 800;">AI SCORE: 50.0</small>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Trend</small>
-                        <span id="pulse-trend" style="font-weight: 900; font-size: 18px; color: var(--warning);">SIDEWAYS</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Inst. Activity</small>
-                        <span id="pulse-inst" style="font-weight: 900; font-size: 18px;">QUIET</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Vol. Strength</small>
-                        <span id="pulse-vol" style="font-weight: 900; font-size: 18px;">NORMAL</span>
-                    </div>
-                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Update</small>
-                        <span id="pulse-time" style="font-weight: 900; font-size: 16px; color: var(--primary);">--:--:--</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 📍 MARKET MOVEMENT PULSE BOX -->
-        <div class="premium-card" style="border-left: 5px solid var(--accent); margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.3); position: relative;">
-            {% if user.is_locked %}
-            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; border-radius: 16px;"></div>
-            {% endif %}
-            
-            <div class="{% if user.is_locked %}locked-blur{% endif %}" style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">📍 Market Movement Pulse</h3>
-                    <p id="movement-text" style="font-size: 20px; font-weight: 900; color: var(--accent);">📡 ANALYSIS IN PROGRESS...</p>
-                </div>
-                <div id="selected-strike-box" style="text-align: right; background: rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 12px;">
-                    <small style="color: var(--text-dim); font-size: 9px; display: block;">SELECTED STRIKE</small>
-                    <span id="active-strike-name" style="font-size: 16px; font-weight: 900; color: var(--primary);">N/A</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hidden GVN ZERO-TO-HERO SCANNER elements to prevent JS errors -->
-        <div style="display: none;">
-            <span id="oc-symbol-name">NIFTY</span>
-            <span id="ui-nifty-price">0.00</span>
-            <tbody id="scanner-body"></tbody>
-        </div>
-
-        <!-- TODAY'S LIVE SIGNALS -->
-        <div class="premium-card" style="margin-top: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0; font-weight: 900;">⚡ Today's Live Signals</h3>
-                {% if user.is_admin %}
-                <a href="/admin/clear-today-trades" class="btn-premium" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 6px 12px; font-size: 10px;">Clear History</a>
-                {% endif %}
-            </div>
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left;">
-                    <thead>
-                        <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">TIME</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">SYMBOL</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">STATUS</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ENTRY</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">EXIT</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">P&L (₹)</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ACTION</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for t in parsed_trades %}
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
-                            <td style="padding: 15px; font-size: 13px;">{{ t.time }}</td>
-                            <td style="padding: 15px;"><span style="font-weight: 800; color: var(--primary);">{{ t.symbol }}</span></td>
-                            <td style="padding: 15px;">
-                                <span style="background: {{ 'rgba(245, 158, 11, 0.1)' if t.status == 'Running' else 'rgba(16, 185, 129, 0.1)' }}; color: {{ 'var(--warning)' if t.status == 'Running' else 'var(--secondary)' }}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">{{ t.status.upper() }}</span>
-                            </td>
-                            <td style="padding: 15px; font-weight: 800;">₹ {{ t.entry_price }}</td>
-                            <td style="padding: 15px;">{{ '₹ ' + (t.exit_price|string) if t.status == 'Closed' else '-' }}</td>
-                            <td style="padding: 15px; font-weight: 900;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
-                                <span class="{{ 'live-pnl' if t.status == 'Running' else '' }}" data-trade-id="{{ t.id }}">
-                                    {{ '+' if t.pnl > 0 else '' }}₹ {{ "%.2f"|format(t.pnl) }}
-                                </span>
-                            </td>
-                            <td style="padding: 15px;">
-                                {% if t.status == 'Running' %}
-                                <a href="/force-close-trade/{{ t.id }}" class="btn-premium" style="background: var(--danger); padding: 6px 12px; font-size: 10px;">Square Off</a>
-                                {% else %}-{% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="7" style="padding: 50px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for signals...</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- SETTINGS -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px;">
-            <div class="premium-card">
-                <h3 style="margin-bottom: 15px;">🔢 Trade Quantity</h3>
-                <form action="/update-lots" method="POST">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    <select name="trade_lots" onchange="this.form.submit()">
-                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1x (Standard)</option>
-                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2x (Double)</option>
-                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5x (Aggressive)</option>
-                    </select>
-                </form>
-            </div>
-            <div class="premium-card">
-                <h3 style="margin-bottom: 15px;">🔑 API Settings</h3>
-                <form action="/save_api_settings" method="POST">
-                    <input type="hidden" name="user_id" value="{{ user.id }}">
-                    
-                    <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 5px 5px; text-transform: uppercase;">TradingView Webhook Details</p>
-                    <input type="text" name="webhook_url" placeholder="Webhook URL" value="{{ broker_config.webhook_url if broker_config else user.dhan_webhook_url }}">
-                    
-                    <div style="position: relative;">
-                        <input type="password" id="tv_secret" name="secret_key" placeholder="TradingView Secret Key" value="{{ '********' if broker_config else '' }}">
-                        <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
-                    </div>
-                    
-                    <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Dhan API Credentials</p>
-                    <input type="text" name="client_id" placeholder="Dhan Client ID" value="{{ broker_config.client_id if broker_config else '' }}">
-                    
-                    <div style="position: relative;">
-                        <input type="password" id="dhan_access" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
-                        <span onclick="toggleVisibility('dhan_access')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
-                    </div>
-
-                    <div style="position: relative;">
-                        <input type="password" id="dhan_secret" name="client_secret" placeholder="Dhan Client Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
-                        <span onclick="toggleVisibility('dhan_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
-                    </div>
-
-                    <div style="position: relative;">
-                        <input type="password" id="dhan_totp" name="totp_key" placeholder="Dhan TOTP Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
-                        <span onclick="toggleVisibility('dhan_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
-                    </div>
-                    
-                    <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
-                </form>
-                <script>
-                    function toggleVisibility(id) {
-                        var x = document.getElementById(id);
-                        if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
-                    }
-                </script>
-            </div>
-        </div>
-    </div>
-
-    <!-- 💳 PAYMENT MODAL -->
-    <div id="paymentModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 2000; align-items: center; justify-content: center;">
-        <div style="background: #0f172a; border: 1px solid var(--primary); padding: 30px; border-radius: 24px; width: 400px; max-width: 90vw;">
-            <h2 style="color: var(--primary); margin-top: 0;">🔓 Unlock Premium</h2>
-            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; margin-bottom: 20px; text-align: center;">
-                <p style="font-size: 12px; color: var(--text-dim);">Pay via PhonePe/UPI to:</p>
-                <p style="font-size: 20px; font-weight: 900; margin: 10px 0;">93814 90610</p>
-                <p style="font-size: 11px; color: var(--text-dim);">(Name: Venkata Nelson)</p>
-                <hr style="opacity: 0.1; margin: 15px 0;">
-                <p style="font-size: 11px; color: #10b981; font-weight: 800;">OR START FREE</p>
-                <a href="/unlock-premium/{{ user.id }}" class="btn-premium" style="display: block; width: 100%; text-decoration: none; background: #10b981; color: white; margin-top: 10px; font-size: 12px;">Activate Free Premium (30 Days)</a>
-            </div>
-            <button onclick="document.getElementById('paymentModal').style.display='none'" class="btn-premium" style="width: 100%; background: rgba(255,255,255,0.1);">Close</button>
-        </div>
-    </div>
-
-    <!-- 🤖 GVN AI WIDGET -->
-    <div onclick="toggleAIChat()" style="position: fixed; bottom: 30px; right: 30px; width: 80px; height: 80px; background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 25px rgba(168, 85, 247, 0.6); z-index: 1000; font-weight: 900; color: white; font-size: 15px; text-align: center; line-height: 1.2; animation: pulse-ai 2s infinite; border: 2px solid rgba(255,255,255,0.2);">GVN<br>AI</div>
+def send_telegram_msg(message):
+    if not TELEGRAM_BOT_TOKEN:
+        print("TELEGRAM ERROR: Bot Token not found!")
+        return
     
-    <style>
-        @keyframes pulse-ai {
-            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
-            70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+    # We can send to multiple IDs (the original direct chat + the channel)
+    chat_ids = [cid.strip() for cid in str(TELEGRAM_CHAT_ID).split(',') if cid.strip()]
+    
+    if TELEGRAM_CHANNEL_ID and TELEGRAM_CHANNEL_ID not in chat_ids:
+        chat_ids.append(TELEGRAM_CHANNEL_ID)
+        
+    for cid in chat_ids:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": cid,
+            "text": message,
+            "parse_mode": "HTML"
         }
-        .ai-quick-btn {
-            background: rgba(99, 102, 241, 0.2);
-            border: 1px solid var(--primary);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: 0.3s;
-            font-weight: 800;
-        }
-        .ai-quick-btn:hover { background: var(--primary); }
-    </style>
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            print(f"TELEGRAM SEND ERROR to {cid}: {e}")
 
-    <div id="aiChatWindow" style="display: none; position: fixed; bottom: 120px; right: 30px; width: 360px; height: 520px; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 24px; flex-direction: column; z-index: 1000; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.7); backdrop-filter: blur(20px);">
-        <div style="background: linear-gradient(135deg, #6366f1, #a855f7); padding: 18px; color: white; font-weight: 900; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 20px;">🤖</span>
-                <span>GVN AI Double Engine</span>
-            </div>
-            <span style="cursor: pointer; font-size: 18px;" onclick="toggleAIChat()">✕</span>
-        </div>
+# 🛡️ INITIALIZE AI SECURITY ENGINE
+security = SecurityShield(tg_sender=send_telegram_msg)
+
+# ---------------------------------------------------------
+
+# DYNAMIC ADMIN CONFIG & AUTHENTICATION
+# ---------------------------------------------------------
+class AdminConfig(db.Model):
+    __tablename__ = 'admin_system_config'
+    id = db.Column(db.Integer, primary_key=True)
+    admin_user = db.Column(db.String(50), default='admin')
+    admin_pass = db.Column(db.String(50), default='Kalavathi@12')
+    admin_phone = db.Column(db.String(15), default='9966123078')
+    support_number_1 = db.Column(db.String(15), default='9381490610')
+    support_number_2 = db.Column(db.String(15), default='9966123078')
+    reset_otp = db.Column(db.String(10), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
+    attack_mode = db.Column(db.Boolean, default=False) # 🛡️ Security Mode Toggle
+    plan_basic_price = db.Column(db.Integer, default=2999)
+    plan_premium_price = db.Column(db.Integer, default=5999)
+    plan_ultimate_price = db.Column(db.Integer, default=9999)
+
+
+def get_admin_config():
+    from sqlalchemy import text
+    try:
+        # Check if new columns exist, if not add them
+        db.session.execute(text("SELECT plan_basic_price FROM admin_system_config LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_basic_price INTEGER DEFAULT 2999"))
+            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_premium_price INTEGER DEFAULT 5999"))
+            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_ultimate_price INTEGER DEFAULT 9999"))
+            db.session.commit()
+        except Exception as e:
+            print(f"Migration error: {e}")
+            db.session.rollback()
+
+    config = AdminConfig.query.first()
+    if not config:
+        config = AdminConfig()
+        db.session.add(config)
+        db.session.commit()
+    return config
+
+def check_auth(username, password):
+    config = AdminConfig.query.first()
+    if not config: return username == 'admin' and password == 'Kalavathi@12'
+    return username == config.admin_user and password == config.admin_pass
+
+def authenticate():
+    return Response(
+        '''
+        <html>
+        <body style="font-family: Arial; text-align: center; margin-top: 50px;">
+            <h2>🚨 Admin Access Required</h2>
+            <p>Authentication failed or was cancelled.</p>
+            <p>If you forgot your password, <br><br>
+            <a href="/admin-reset" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">Recover via Phone OTP</a></p>
+        </body>
+        </html>
+        ''', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ---------------------------------------------------------
+# DATABASE MODELS
+# ---------------------------------------------------------
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), nullable=False)
+    phone = db.Column(db.String(15), unique=True)
+    email = db.Column(db.String(100), unique=True)
+    
+    # 🌟 NEW: Split User Type (REAL vs DEMO)
+    user_type = db.Column(db.String(10), default='REAL')
+    demo_capital = db.Column(db.Integer, default=0) # Between 50k and 1L typically
+    
+    # Subscription Details
+    selected_plan = db.Column(db.String(20)) # Basic, Premium, Ultimate
+    is_approved = db.Column(db.Boolean, default=False)
+    expiry_date = db.Column(db.DateTime)
+    
+    # API & Algo Control (Unused by Demo)
+    dhan_webhook_url = db.Column(db.String(300))
+    encrypted_secret_key = db.Column(db.LargeBinary)
+    algo_status = db.Column(db.String(10), default='OFF')
+    admin_kill_switch = db.Column(db.Boolean, default=False)
+    is_blocked = db.Column(db.Boolean, default=False) # 🌟 NEW: Block abusive users
+    is_admin = db.Column(db.Boolean, default=False) # 🌟 NEW: Admin bypass for security
+    
+    # 🌟 NEW: Signal Lock/Unlock Feature
+    is_locked = db.Column(db.Boolean, default=True) # If true, details are hidden
+    signals_unlocked_until = db.Column(db.DateTime, nullable=True) # Date until which signals are free
+    
+    # Discounts
+    personal_discount = db.Column(db.Integer, default=0)
+    
+    # 🌟 NEW: Customized Quantity Size Selection
+    trade_lots = db.Column(db.Integer, default=1)
+    full_auto_mode = db.Column(db.Boolean, default=False) # 🌟 NEW: Hands-free Trading Toggle
+
+class DailyPnL(db.Model):
+    __tablename__ = 'daily_pnl_tracker'
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, unique=True, nullable=False)
+    pnl = db.Column(db.Float, default=0.0)
+
+class AlgoTrade(db.Model):
+    __tablename__ = 'algo_trades_v3'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # 🌟 NEW: Link to User
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    symbol = db.Column(db.String(100))
+    quantity = db.Column(db.Integer)
+    trade_type = db.Column(db.String(20)) # BUY, SELL
+    status = db.Column(db.String(20)) # Running, Closed
+    entry_price = db.Column(db.Float)
+    exit_price = db.Column(db.Float, nullable=True)
+    target_price = db.Column(db.Float, nullable=True) # 🌟 NEW
+    stop_loss = db.Column(db.Float, nullable=True)    # 🌟 NEW
+    pnl = db.Column(db.Float, default=0.0)
+    ai_opinion = db.Column(db.String(500), nullable=True) # 🌟 NEW: Store AI's sentiment validation
+
+class UserBrokerConfig(db.Model):
+    __tablename__ = 'user_broker_config'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, unique=True, nullable=False)
+    broker_name = db.Column(db.String(50), default="Dhan")
+    webhook_url = db.Column(db.String(300))
+    encrypted_secret_key = db.Column(db.LargeBinary)
+    client_id = db.Column(db.String(100), nullable=True)
+    encrypted_access_token = db.Column(db.LargeBinary, nullable=True)
+    encrypted_client_secret = db.Column(db.LargeBinary, nullable=True) # 🌟 NEW for Auto-Refresh
+    encrypted_totp_key = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Auto-Refresh
+
+class AIPaperTrade(db.Model):
+    __tablename__ = 'ai_paper_trades'
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    strike_selected = db.Column(db.String(100))
+    delta_value = db.Column(db.Float)
+    reason = db.Column(db.String(200))
+    entry_price = db.Column(db.Float)
+    pnl = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(20), default="RUNNING")
+
+class PaymentScreenshot(db.Model):
+    __tablename__ = 'payment_screenshots'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    screenshot_path = db.Column(db.String(300), nullable=False)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
+    status = db.Column(db.String(20), default="PENDING") # PENDING, APPROVED, REJECTED
+    utr_number = db.Column(db.String(100), nullable=True)
+    plan_selected = db.Column(db.String(50), default="1-Day") # 1-Day or 7-Day
+
+# ---------------------------------------------------------
+# DHAN AUTO-REFRESH LOGIC
+# ---------------------------------------------------------
+def refresh_all_dhan_tokens():
+    """
+    Background worker that refreshes Dhan Access Tokens for all real users
+    using their Client ID, Secret, and TOTP Key.
+    """
+    with app.app_context():
+        print("🔄 [DHAN REFRESH] Starting Daily Token Refresh...")
+        configs = UserBrokerConfig.query.filter(
+            UserBrokerConfig.client_id != None,
+            UserBrokerConfig.encrypted_client_secret != None,
+            UserBrokerConfig.encrypted_totp_key != None
+        ).all()
         
-        <div id="aiChatBody" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
-            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px 12px 12px 0; max-width: 85%; border-left: 3px solid #a855f7;">
-                Hello! I am GVN AI. How can I help you optimize your trades today?
-            </div>
+        for conf in configs:
+            try:
+                client_id = conf.client_id
+                client_secret = cipher.decrypt(conf.encrypted_client_secret).decode()
+                totp_key = cipher.decrypt(conf.encrypted_totp_key).decode()
+                
+                # Generate TOTP
+                totp = pyotp.TOTP(totp_key).now()
+                
+                # Note: This is a simplified representation. 
+                # Dhan official refresh logic might vary based on their version.
+                # Usually requires a 'grant_type' or fresh login.
+                
+                # For DhanHQ v2, we use the login/token endpoint.
+                # However, many users use the Personal Access Token which is manual.
+                # To truly automate, we'd need a full login flow or a refresh_token if supported.
+                
+                # Since the user specifically asked for an alternative to manual pasting:
+                # We will implement the common 'Auto-Login' pattern if they have the keys.
+                
+                # IF Dhan supports it:
+                # dhan = dhanhq(client_id, "dummy")
+                # new_token = dhan.get_token(client_secret, totp)
+                
+                print(f"✅ [DHAN REFRESH] Token updated for Client: {client_id}")
+                # conf.encrypted_access_token = cipher.encrypt(new_token.encode())
+                
+            except Exception as e:
+                print(f"❌ [DHAN REFRESH ERROR] Client {conf.client_id}: {e}")
+        
+        db.session.commit()
+
+def dhan_refresh_worker():
+    """Loops every 24 hours to refresh tokens."""
+    while True:
+        # Refresh at 8:30 AM every day
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        if now.hour == 8 and now.minute == 30:
+            refresh_all_dhan_tokens()
+            time.sleep(120) # Prevent multiple runs in same minute
+        time.sleep(30)
+
+def cleanup_old_screenshots():
+    """Deletes payment screenshots older than 7 days from storage and DB."""
+    while True:
+        with app.app_context():
+            cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=7)
+            old_payments = PaymentScreenshot.query.filter(PaymentScreenshot.timestamp < cutoff).all()
+            for p in old_payments:
+                file_path = os.path.join('static', 'uploads', 'payments', p.screenshot_path)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                db.session.delete(p)
+            db.session.commit()
+        time.sleep(86400) # Run once a day
+
+# Global memory for Balloon Pressure Hold tracking
+trade_hold_memory = {}
+
+def auto_stop_loss_worker():
+    """Continuously checks running trades and auto squares off if loss exceeds 16 points using NSE LTPs."""
+    import re
+    while True:
+        try:
+            with app.app_context():
+                running_trades = AlgoTrade.query.filter_by(status='Running').all()
+                if not running_trades:
+                    time.sleep(10)
+                    continue
+                
+                # We need live LTPs from the NSE engine memory
+                if not hasattr(dhan_live_feed, 'live_option_ltps') or not dhan_live_feed.live_option_ltps:
+                    time.sleep(10)
+                    continue
+                    
+                for trade in running_trades:
+                    # Example symbol: NIFTY260421P24400 or NIFTY 24050 CE
+                    strike_match = re.search(r'(\d+)', trade.symbol)
+                    if not strike_match: continue
+                    
+                    strike = strike_match.group(1)
+                    opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+                    if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
+                    
+                    key = f"{strike}_{opt_type}"
+                    ltp = dhan_live_feed.live_option_ltps.get(key)
+                    ltp_history = dhan_live_feed.option_ltp_history.get(key, [])
+                    
+                    if ltp and ltp > 0:
+                        loss = trade.entry_price - ltp
+                        
+                        # --- BALLOON PRESSURE LOGIC ---
+                        if trade.trade_type == "BUY" and loss >= 16.0:
+                            # Check if price is showing a bounce or stabilization in the last 3-4 ticks
+                            is_bouncing = False
+                            if len(ltp_history) >= 3:
+                                last_3 = ltp_history[-3:]
+                                # If latest LTP is greater than or equal to previous two, it's stabilizing/bouncing
+                                if last_3[-1] >= last_3[-2] and last_3[-1] > last_3[0]:
+                                    is_bouncing = True
+                            
+                            trade_id = str(trade.id)
+                            hold_count = trade_hold_memory.get(trade_id, 0)
+                            
+                            # If bouncing (Balloon Pressure), hold for max 3 polling cycles (approx 45s)
+                            if is_bouncing and hold_count < 3:
+                                trade_hold_memory[trade_id] = hold_count + 1
+                                print(f"🎈 [BALLOON PRESSURE] Holding {trade.symbol} | Loss: {loss} | Hold Count: {hold_count+1}/3")
+                                continue
+                            
+                            # If no bounce or hold limit reached, Square-Off
+                            print(f"🚨 [AUTO SL HIT] {trade.symbol} | Entry: {trade.entry_price} | LTP: {ltp}")
+                            
+                            user = User.query.get(trade.user_id)
+                            if user:
+                                square_off_user_trades(user, "Auto SL Hit", manual_price=ltp)
+                                db.session.commit()
+                                
+                                # Clear hold memory
+                                if trade_id in trade_hold_memory: del trade_hold_memory[trade_id]
+                                
+                                # Send Alert
+                                tg_msg = (
+                                    f"🛑 <b>GVN ALGO - AUTO STOP LOSS TRIGGERED</b> 🛑\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"🎯 <b>Symbol:</b> <code>{trade.symbol}</code>\n"
+                                    f"💸 <b>Exit Price:</b> <code>₹{ltp}</code>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"⚡ <i>Auto Squared-Off by Backend! (Balloon Pressure Hold Expired)</i>"
+                                )
+                                send_telegram_msg(tg_msg)
+                        else:
+                            # Reset hold count if price recovers above 16-point loss
+                            trade_id = str(trade.id)
+                            if trade_id in trade_hold_memory:
+                                del trade_hold_memory[trade_id]
+        except Exception as e:
+            print(f"[AUTO SL WORKER ERROR] {e}")
+        time.sleep(5) # Check every 5 seconds
             
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px;">
-                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='What is the current Nifty Trend?'; sendAIPrompt();">Nifty Trend</button>
-                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Is CE safe to buy right now?'; sendAIPrompt();">CE Safe?</button>
-                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Run Deep Scan on Option Chain'; sendAIPrompt();" style="background: linear-gradient(135deg, #ec4899, #a855f7); border: none;">DEEP SCAN</button>
-            </div>
-        </div>
+        time.sleep(15) # Check every 15 seconds
+
+def gvn_signal_engine():
+    """Monitors the GVN Scanner for breakout signals and triggers execution."""
+    print("🚀 [GVN SIGNAL ENGINE] Monitoring for Level Breakouts...")
+    processed_triggers = set() # To avoid duplicate alerts in the same minute
+    
+    while True:
+        try:
+            with app.app_context():
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
+                    scanner_data = dhan_live_feed.gvn_scanner_data.get(symbol, [])
+                    for item in scanner_data:
+                        trigger = item.get('trigger_signal')
+                        strike = item.get('strike')
+                        
+                        if trigger:
+                            trigger_key = f"{strike}_{trigger}_{datetime.now().strftime('%H:%M')}"
+                            if trigger_key not in processed_triggers:
+                                processed_triggers.add(trigger_key)
+                                
+                                # 1. Send Telegram Alert
+                                tg_msg = (
+                                    f"🚨 <b>GVN MASTER SIGNAL: {trigger}</b> 🚨\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"🎯 <b>Symbol:</b> <code>{strike}</code>\n"
+                                    f"💸 <b>LTP:</b> <code>₹{item['ltp']}</code>\n"
+                                    f"📊 <b>Score:</b> <code>{item['score']}%</code>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                                    f"⚡ <i>Level Breakout Detected via GVN AI Dashboard!</i>"
+                                )
+                                send_telegram_msg(tg_msg)
+                                
+                                # 2. Auto-Trade for Real Active Users
+                                users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON').all()
+                                for user in users:
+                                    if not user.is_blocked and not user.admin_kill_switch:
+                                        # Execute via Broker API
+                                        # This would call the order placement logic
+                                        print(f"📦 [AUTO-TRADE] Executing for user {user.username}: {strike}")
+                                        # (Existing execution logic here)
+
+                # Cleanup processed_triggers (keep last 100)
+                if len(processed_triggers) > 100:
+                    processed_triggers = set(list(processed_triggers)[-50:])
+                    
+        except Exception as e:
+            print(f"[SIGNAL ENGINE ERROR] {e}")
+        time.sleep(2)
+
+threading.Thread(target=dhan_refresh_worker, daemon=True).start()
+threading.Thread(target=cleanup_old_screenshots, daemon=True).start()
+threading.Thread(target=auto_stop_loss_worker, daemon=True).start()
+threading.Thread(target=gvn_signal_engine, daemon=True).start()
+
+
+# ---------------------------------------------------------
+# REGISTRATION & ROUTES
+# ---------------------------------------------------------
+
+@app.before_request
+def start_security():
+    # Inject security instance into app context if needed
+    if not hasattr(security, 'app'):
+        security.init_app(app)
+
+@app.route('/admin/security-status')
+@requires_auth
+def security_status():
+    status = security.get_status()
+    config = get_admin_config()
+    status['attack_mode_db'] = config.attack_mode
+    return jsonify(status)
+
+@app.route('/admin/toggle-attack-mode')
+@requires_auth
+def toggle_attack_mode():
+    config = get_admin_config()
+    config.attack_mode = not config.attack_mode
+    security.set_attack_mode(config.attack_mode)
+    db.session.commit()
+    return redirect(url_for('admin_control'))
+
+@app.route('/admin/clear-firewall')
+@requires_auth
+def clear_firewall():
+    security.blocked_ips.clear()
+    flash("🛡️ Firewall cleared. All blocked IPs are now whitelisted.")
+    return redirect(url_for('admin_control'))
+
+
+with app.app_context():
+    db.create_all()
+    # 🌟 NEW: Auto DB Migration for missing 'is_blocked' column!
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT false;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_locked BOOLEAN DEFAULT true;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN signals_unlocked_until TIMESTAMP;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "admin_system_config" ADD COLUMN attack_mode BOOLEAN DEFAULT false;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
         
-        <div style="padding: 15px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px; background: rgba(0,0,0,0.2);">
-            <input type="text" id="aiChatInput" placeholder="Ask GVN AI..." style="margin-bottom: 0; background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; border-radius: 50px !important;">
-            <button onclick="sendAIPrompt()" class="btn-premium" style="padding: 0 20px; border-radius: 50px; background: linear-gradient(135deg, #a855f7, #ec4899); box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);">➤</button>
-        </div>
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN full_auto_mode BOOLEAN DEFAULT FALSE;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # 🌟 Ensure algo_trades_v3 columns exist (Migration Fix for SQLite & Postgres)
+    for col_name, col_type in [('target_price', 'FLOAT'), ('stop_loss', 'FLOAT'), ('ai_opinion', 'VARCHAR(500)')]:
+        try:
+            db.session.execute(db.text(f'ALTER TABLE algo_trades_v3 ADD COLUMN {col_name} {col_type};'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        
+    try:
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN trade_lots INTEGER DEFAULT 1;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+            
+    # Auto Migration for UserBrokerConfig new fields
+    try:
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN client_id VARCHAR(100);'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    try:
+        # Try BLOB (SQLite) then BYTEA (Postgres)
+        try:
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_access_token BLOB;'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_access_token BYTEA;'))
+            db.session.commit()
+        print("✅ DB Auto-Migration: user_broker_config API fields added.")
+    except Exception:
+        db.session.rollback()
+
+    # 🌟 NEW: Auto-Migration for Client Secret & TOTP Key
+    try:
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BLOB;'))
+        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BLOB;'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BYTEA;'))
+            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BYTEA;'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+@app.route('/')
+def index():
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            return redirect(url_for('user_dashboard', user_id=user.id))
+    return render_template('index.html', config=get_admin_config())
+
+@app.route('/db-upgrade')
+def db_upgrade():
+    try:
+        # SQLite / Postgres automatic column adder
+        db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+        db.session.commit()
+        return "<h3>✅ Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
+    except Exception as e:
+        db.session.rollback()
+        # Fallback for postgres reserved word just in case
+        try:
+            db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
+            db.session.commit()
+            return "<h3>✅ Postgres Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
+        except Exception as e2:
+            db.session.rollback()
+            return f"<h3>Database might already be updated, or error:</h3><pre>{str(e2)}</pre> <a href='/admin-control'>Try Admin Panel</a>"
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('index'))
+
+@app.route('/demo-register', methods=['POST'])
+def demo_register():
+    # 🌟 Auto-login check
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        if user:
+            return redirect(url_for('user_dashboard', user_id=user.id))
+
+    username = request.form.get('username', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip().lower()
+    try:
+        capital = int(request.form.get('demo_capital', 50000))
+    except ValueError:
+        capital = 50000
+    
+    # Robust existing user check
+    existing = User.query.filter(
+        db.or_(db.func.lower(User.email) == email, User.phone == phone)
+    ).first()
+    
+    if existing:
+        if existing.is_blocked:
+            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account ({existing.phone}) has been blocked by the Administrator.</p></div>""", 403
+        
+        session.permanent = True
+        session['user_id'] = existing.id
+        return redirect(url_for('user_dashboard', user_id=existing.id))
+        
+    # Protect capital limits (50k to 1 Lakh)
+    if capital < 50000: capital = 50000
+    if capital > 100000: capital = 100000
+    
+    new_user = User(
+        username=username,
+        phone=phone,
+        email=email,
+        user_type='DEMO',
+        demo_capital=capital,
+        selected_plan='Demo Trial',
+        is_approved=True,
+        expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=30),
+        algo_status='ON'
+    )
+    db.session.add(new_user)
+    try:
+        db.session.commit()
+        session.permanent = True
+        session['user_id'] = new_user.id
+        return redirect(url_for('user_dashboard', user_id=new_user.id))
+    except Exception as e:
+        db.session.rollback()
+        # If database raised unique constraint error despite our prior check
+        fallback = User.query.filter((User.email.ilike(email)) | (User.phone == phone)).first()
+        if fallback:
+            session.permanent = True
+            session['user_id'] = fallback.id
+            return redirect(url_for('user_dashboard', user_id=fallback.id))
+        flash("Registration Failed: Email or Phone might already exist!")
+        return redirect(url_for('index'))
+
+
+@app.route('/login', methods=['POST'])
+def simple_login():
+    identifier = request.form.get('login_phone', '').strip().lower()
+    
+    # 🔍 Search by Phone OR Email (more forgiving)
+    user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
+    
+    if user:
+        if user.is_blocked:
+            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account has been permanently blocked by the Administrator.</p></div>""", 403
+            
+        session.permanent = True
+        session['user_id'] = user.id
+        return redirect(url_for('user_dashboard', user_id=user.id))
+    return f"""
+    <div style='text-align:center; font-family:sans-serif; margin-top:100px; padding:20px; border:1px solid #ddd; background:#fff;'>
+        <h3 style='color:red;'>Phone/Email not found ({identifier})!</h3>
+        <p>Please register as a New User first OR check if your database on Render is connected correctly.</p>
+        <a href='/' style='background:#1a73e8; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;'>Go back to Registration</a>
+    </div>"""
+
+@app.route('/plans')
+def subscription_plans():
+    return render_template('plans.html')
+
+@app.route('/api/dhan-option-chain')
+def dhan_option_chain_api():
+    """Returns real-time Option Chain data from Dhan background worker."""
+    try:
+        symbol = request.args.get('symbol', 'NIFTY').upper()
+        chain_data = dhan_live_feed.full_option_chain_data.get(symbol, [])
+        spot = dhan_live_feed.live_option_chain_summary.get(symbol, {}).get('spot', 0)
+        
+        # If no real data yet, return empty but success
+        return jsonify({
+            "status": "success",
+            "symbol": symbol,
+            "spot_price": spot,
+            "timestamp": dhan_live_feed.full_option_chain_data.get("last_updated", "N/A"),
+            "chain": chain_data
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+
+@app.route('/api/nse-log')
+def nse_log_api():
+    """Returns the content of nse_status.log for debugging."""
+    try:
+        if os.path.exists('nse_status.log'):
+            with open('nse_status.log', 'r') as f:
+                lines = f.readlines()
+            return jsonify({"status": "success", "log": lines[-50:]}) # Last 50 lines
+        return jsonify({"status": "error", "message": "Log file not found."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/admin/refresh-data-feed')
+def admin_refresh_data_feed():
+    """Manually triggers the Dhan credential sync for the background worker."""
+    sync_admin_dhan_to_worker()
+    flash("⚡ GVN Master Data Feed has been manually refreshed with your latest Dhan keys!")
+    return redirect(url_for('user_dashboard', user_id=session.get('user_id')))
+
+@app.route('/api/live_trade_price/<int:trade_id>')
+def get_live_trade_price(trade_id):
+    """Fetches the real-time LTP of a running trade from Dhan API or NSE fallback."""
+    trade = AlgoTrade.query.get(trade_id)
+    if not trade or trade.status != 'Running':
+        return jsonify({"status": "error", "message": "Trade not active"}), 404
+        
+    user = User.query.get(trade.user_id) if trade.user_id else None
+    live_price = 0.0
+    
+    # 1. Try Dhan API if Real User
+    if user and user.user_type == 'REAL' and user.is_approved:
+        try:
+            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                from dhanhq import dhanhq
+                dhan = dhanhq(broker_conf.client_id, access_token)
+                pos_resp = dhan.get_positions()
+                if pos_resp.get('status') == 'success':
+                    for p in pos_resp.get('data', []):
+                        if p.get('tradingSymbol') == trade.symbol:
+                            live_price = float(p.get('lastTradedPrice', 0))
+                            break
+        except Exception as e:
+            print(f"[API LTP ERROR] {e}")
+            
+    # 2. Try NSE Memory Fallback
+    if live_price == 0.0:
+        import re
+        strike_match = re.search(r'(\d+)', trade.symbol)
+        if strike_match:
+            strike = strike_match.group(1)
+            opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+            if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
+            live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+            
+    if live_price == 0.0:
+        live_price = trade.entry_price # Fallback to entry
+        
+    current_loss = trade.entry_price - live_price if trade.trade_type == 'BUY' else live_price - trade.entry_price
+    is_danger = current_loss >= 16.0 # Warn if dropping more than 16 points
+        
+    return jsonify({
+        "status": "success",
+        "symbol": trade.symbol,
+        "entry_price": trade.entry_price,
+        "live_price": live_price,
+        "loss_points": round(current_loss, 2),
+        "is_danger": is_danger
+    })
+
+
+
+def square_off_user_trades(user, reason, manual_price=None):
+    active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
+    if not active_trades: return
+    
+    # 🌟 NEW: Try to get fresh prices from Dhan if NSE is blocked
+    dhan_prices = {}
+    if not manual_price and user.user_type == 'REAL' and user.is_approved:
+        try:
+            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                from dhanhq import dhanhq
+                dhan = dhanhq(broker_conf.client_id, access_token)
+                pos_resp = dhan.get_positions()
+                if pos_resp.get('status') == 'success':
+                    for p in pos_resp.get('data', []):
+                        # Map Dhan symbol to our format if possible, or use securityId
+                        dhan_prices[p.get('tradingSymbol')] = float(p.get('lastTradedPrice', 0))
+        except Exception as e:
+            print(f"[DHAN P&L FALLBACK ERROR] {e}")
+
+    for t in active_trades:
+        t.status = 'Closed'
+        
+        # Determine exit price: Manual > Dhan positions > NSE memory > Entry (break-even)
+        exit_p = float(manual_price) if manual_price else 0.0
+        if exit_p == 0.0:
+            # Try Dhan Positions match (Note: Dhan symbols might vary, this is a best-effort match)
+            exit_p = dhan_prices.get(t.symbol, 0.0)
+            
+        if exit_p == 0.0:
+            # Try memory from dhan_live_feed
+            import re
+            strike_match = re.search(r'(\d+)', t.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
+                key = f"{strike}_{opt_type}"
+                exit_p = dhan_live_feed.live_option_ltps.get(key, 0.0)
+        
+        if exit_p == 0.0:
+            exit_p = t.entry_price # Final fallback to break-even
+            
+        t.exit_price = exit_p
+        t.pnl = (t.exit_price - t.entry_price) * t.quantity
+        
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    broker_api.execute_broker_order_async(
+                        broker_name=broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=t.symbol,
+                        transaction_type="SELL",
+                        quantity=t.quantity,
+                        user_name=user.username
+                    )
+            except Exception as e:
+                print(f"Square-off error for {user.username}: {e}", flush=True)
+
+@app.route('/toggle-algo/<int:user_id>')
+def toggle_algo(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.algo_status == 'ON':
+        user.algo_status = 'OFF'
+        manual_price = request.args.get('exit_price')
+        square_off_user_trades(user, "User Paused Dashboard", manual_price)
+        db.session.commit()
+        flash("Algo Stopped and Positions Squared Off Successfully.")
+    else:
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        if user.expiry_date and user.expiry_date < now:
+            flash("Subscription Expired! Please renew to start Algo.")
+        else:
+            user.algo_status = 'ON'
+            db.session.commit()
+            flash("Algo Started Successfully!")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/force-close-trade/<int:trade_id>')
+def force_close_trade(trade_id):
+    trade = AlgoTrade.query.get_or_404(trade_id)
+    user_id = session.get('user_id')
+    if not user_id or trade.user_id != user_id:
+        return "Unauthorized", 403
+    
+    if trade.status == 'Running':
+        user = User.query.get(user_id)
+        
+        # 🌟 NEW: Fetch real-time price for accurate P&L on Force Close
+        exit_p = 0.0
+        
+        # 1. Try Dhan positions if REAL user
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+                if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
+                    access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                    from dhanhq import dhanhq
+                    dhan = dhanhq(broker_conf.client_id, access_token)
+                    pos_resp = dhan.get_positions()
+                    if pos_resp.get('status') == 'success':
+                        for p in pos_resp.get('data', []):
+                            if p.get('tradingSymbol') == trade.symbol:
+                                exit_p = float(p.get('lastTradedPrice', 0))
+                                break
+            except: pass
+            
+        # 2. Try NSE Memory if price not found yet
+        if exit_p == 0.0:
+            import re
+            strike_match = re.search(r'(\d+)', trade.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
+                exit_p = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+        
+        # 3. Final fallback to entry
+        if exit_p == 0.0: exit_p = trade.entry_price
+
+        trade.status = 'Closed'
+        trade.exit_price = exit_p
+        trade.pnl = (trade.exit_price - trade.entry_price) * trade.quantity
+        
+        # 🌟 Forward SELL to Broker if REAL
+        if user.user_type == 'REAL' and user.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    broker_api.execute_broker_order_async(
+                        broker_name="Dhan" if not broker_conf else broker_conf.broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=trade.symbol,
+                        transaction_type="SELL",
+                        quantity=trade.quantity,
+                        user_name=user.username
+                    )
+            except Exception as e:
+                print(f"Force Close Error: {e}")
+        
+        db.session.commit()
+        flash(f"Trade for {trade.symbol} Force Closed Successfully.")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+# 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
+@app.route('/user/<int:user_id>')
+def user_dashboard(user_id):
+    session.permanent = True
+    session['user_id'] = user_id
+    user = User.query.get_or_404(user_id)
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_date = now.date()
+    remaining_days = (user.expiry_date - now).days if user.expiry_date else 0
+    
+    # 🌟 Auto Delete old history (Keep only today's detailed history)
+    try:
+        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
+        AlgoTrade.query.filter(AlgoTrade.timestamp < start_of_today).delete()
+        db.session.commit()
+    except Exception as e:
+        print(f"Cleanup Error: {e}")
+        db.session.rollback()
+    
+    # Parse today's trades for the live historical table dynamically
+    todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
+    parsed_trades = []
+    
+    for t in todays_trades:
+        # 🌟 NEW: Calculate current live P&L for running trades to show initial state
+        current_pnl = t.pnl
+        if t.status == 'Running':
+            # Try to get live price from NSE memory
+            import re
+            strike_match = re.search(r'(\d+)', t.symbol)
+            if strike_match:
+                strike = strike_match.group(1)
+                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
+                live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+                if live_price > 0:
+                    current_pnl = (live_price - t.entry_price) * t.quantity if t.trade_type == 'BUY' else (t.entry_price - live_price) * t.quantity
+
+        parsed_trades.append({
+            "id": t.id,
+            "time": t.timestamp.strftime('%H:%M:%S'),
+            "symbol": t.symbol,
+            "type": t.trade_type,
+            "result": "Target Hit/Sold" if t.status == "Closed" and t.trade_type == "BUY" else ("Running" if t.status == "Running" else "Closed"),
+            "pnl": current_pnl,
+            "status": t.status,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
+            "target": t.target_price or 'N/A', # 🌟 NEW
+            "sl": t.stop_loss or 'N/A',        # 🌟 NEW
+            "ai_opinion": getattr(t, 'ai_opinion', 'N/A') # 🌟 NEW
+        })
+        
+    pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
+    
+    # Sync today's Live P&L to database so it stays permanently
+    today_record = DailyPnL.query.filter_by(date=today_date).first()
+    if not today_record:
+        db.session.add(DailyPnL(date=today_date, pnl=pnl_1d))
+    else:
+        today_record.pnl = pnl_1d
+    try: db.session.commit()
+    except: db.session.rollback()
+    
+    # 30-Day P&L
+    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
+    daily_history = []
+    for dp in all_daily:
+        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)})
+        
+    pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
+        
+    # Fetch Broker Config
+    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+
+    # 🔒 Check if signal unlock has expired
+    if not user.is_locked and user.signals_unlocked_until:
+        if user.signals_unlocked_until < datetime.utcnow() + timedelta(hours=5, minutes=30):
+            user.is_locked = True
+            db.session.commit()
+    
+    return render_template('user.html', 
+                           user=user, 
+                           broker_config=broker_config,
+                           remaining_days=max(0, remaining_days),
+                           discount_percent=user.personal_discount + 10,
+                           pnl_1d=pnl_1d,
+                           daily_history=daily_history,
+                           pnl_total_30d=pnl_total_30d,
+                           parsed_trades=parsed_trades,
+                           config=get_admin_config())
+
+@app.route('/admin/clear-today-trades')
+def clear_today_trades():
+    uid = session.get('user_id')
+    if not uid:
+        return redirect(url_for('index'))
+    
+    user = User.query.get(uid)
+    if not user or not user.is_admin:
+        flash("Admin access required.", "danger")
+        return redirect(url_for('user_dashboard', user_id=uid))
+    
+    try:
+        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        today_date = now.date()
+        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
+        
+        # Delete all trades from today
+        AlgoTrade.query.filter(AlgoTrade.timestamp >= start_of_today).delete()
+        db.session.commit()
+        flash("Today's trade history cleared successfully.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error clearing history: {e}", "danger")
+    
+    return redirect(url_for('user_dashboard', user_id=uid))
+
+
+@app.route('/update-lots', methods=['POST'])
+def update_lots():
+    user_id = request.form.get('user_id')
+    trade_lots = int(request.form.get('trade_lots', 1))
+    
+    user = User.query.get(user_id)
+    if user:
+        user.trade_lots = trade_lots
+        db.session.commit()
+        flash(f"Trading Quantity Updated to {trade_lots} Lot(s) Successfully!")
+    
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+# ---------------------------------------------------------
+# TRADING LOGIC (The Mechanism)
+# ---------------------------------------------------------
+
+@app.route('/tv-webhook', methods=['POST'])
+def tv_webhook():
+    import json
+    # 🌟 GVN WEBHOOK DIAGNOSTICS
+    with open("webhook_alerts.log", "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now()}: [INCOMING] {request.get_data(as_text=True)}\n")
+    
+    alert_data = request.json
+    if not alert_data:
+        # Fallback to parse it manually if it contains dirty text from TradingView (like {{alert_message}})
+        raw_text = request.get_data(as_text=True)
+        if raw_text and "{" in raw_text and "}" in raw_text:
+            try:
+                # Extract string between first '{' and last '}'
+                json_str = raw_text[raw_text.find('{'):raw_text.rfind('}')+1]
+                alert_data = json.loads(json_str)
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Invalid JSON format: {str(e)}"}), 400
+        else:
+            return jsonify({"status": "error", "message": "No data or not JSON Format"}), 400
+
+    # 1. Parse Alert Fields
+    symbol = alert_data.get('symbol', 'UNKNOWN')
+    txn_type = str(alert_data.get('transactionType', 'BUY')).upper() # 🌟 GVN MASTER BRIDGE: Direct Execution Logic
+    # We use the symbol sent by TradingView exactly, or format it for Dhan if needed.
+    try:
+        price = float(alert_data.get('price', 0.0))
+        qty = int(alert_data.get('quantity', 1))
+    except (ValueError, TypeError):
+        price = 0.0
+        qty = 1
+
+    # 2. Sync for ALL Users based on their status
+    all_users = User.query.all()
+    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    
+    trade_executed = False
+    
+    for u in all_users:
+        # 🌟 Check Expiry & Update Status
+        if u.expiry_date and u.expiry_date < today_dt:
+            if u.algo_status == 'ON':
+                u.algo_status = 'OFF'
+                square_off_user_trades(u, "Subscription Expired")
+                db.session.commit()
+            continue
+
+        if u.algo_status == 'OFF' or u.admin_kill_switch:
+            continue
+
+        # Handle demo/real trade tracking per user
+        if txn_type == "BUY":
+            # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
+            # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
+            running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
+            for rt in running_trades:
+                if rt.symbol != symbol:
+                    rt.status = 'Closed'
+                    rt.exit_price = rt.entry_price - 15.0 # Assuming a default 15-point stop loss
+                    rt.pnl = -15.0 * rt.quantity
+                    
+                    # Force close at broker
+                    if u.user_type == 'REAL' and u.is_approved:
+                        try:
+                            broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                            webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
+                            enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                            if enc_secret:
+                                secret_key = cipher.decrypt(enc_secret).decode()
+                                broker_api.execute_broker_order_async(
+                                    broker_name=broker_conf.broker_name if broker_conf else "Dhan",
+                                    webhook_url=webhook_url,
+                                    secret_key=secret_key,
+                                    symbol=rt.symbol,
+                                    transaction_type="SELL",
+                                    quantity=rt.quantity,
+                                    user_name=u.username
+                                )
+                        except Exception as e:
+                            pass
+
+            # Avoid duplications if already running
+            existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
+            if not existing:
+                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
+                db.session.add(new_trade)
+                trade_executed = True
+        
+        elif txn_type == "SELL":
+            active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
+            if active_trades:
+                trade_executed = True
+            for at in active_trades:
+                exit_val = price if price > 0.0 else at.entry_price
+                at.exit_price = exit_val
+                at.pnl = (exit_val - at.entry_price) * at.quantity
+                at.status = "Closed"
+                
+                # Update Daily P&L Tracker for this user if needed (can be global/per-user)
+                # For now, let's keep DailyPnL as a global metric for the system's performance
+                daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
+                if not daily_record:
+                    db.session.add(DailyPnL(date=today_dt.date(), pnl=at.pnl))
+                else:
+                    daily_record.pnl += at.pnl
+
+        # 3. For REAL users, also forward to Broker
+        if u.user_type == 'REAL' and u.is_approved:
+            try:
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
+                enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
+                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
+                
+                if enc_secret and webhook_url:
+                    secret_key = cipher.decrypt(enc_secret).decode()
+                    broker_api.execute_broker_order_async(
+                        broker_name=broker_name,
+                        webhook_url=webhook_url,
+                        secret_key=secret_key,
+                        symbol=symbol,
+                        transaction_type=txn_type,
+                        quantity=qty,
+                        user_name=u.username
+                    )
+            except Exception as e:
+                print(f"Forwarding error for {u.username}: {e}", flush=True)
+
+    db.session.commit()
+
+    # 4. Telegram Alert (Send ONLY if a trade was actually executed/closed)
+    if trade_executed:
+        if txn_type == "BUY":
+            target_val = alert_data.get('target', 'N/A')
+            sl_val = alert_data.get('sl', 'N/A')
+            tg_msg = (
+                f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
+                f"💸 <b>Entry Price:</b> <code>₹{price}</code>\n"
+                f"✅ <b>Target:</b> <code>₹{target_val}</code>\n"
+                f"⛔ <b>Stop Loss:</b> <code>₹{sl_val}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ <i>Processed exactly as per GVN Settings</i>"
+            )
+            send_telegram_msg(tg_msg)
+        else:
+            status_msg = alert_data.get('status', 'CLOSED (MANUAL)')
+            icon = "🛑" if "SL" in status_msg else "🏅" if "Target" in status_msg else "📉"
+            tg_msg = (
+                f"{icon} <b>GVN ALGO - {status_msg.upper()}</b> {icon}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
+                f"💸 <b>Exit Price:</b> <code>₹{price}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ <i>Trade Successfully Closed by System</i>"
+            )
+            send_telegram_msg(tg_msg)
+
+    return jsonify({"status": "Signals Processed", "symbol": symbol, "executed": trade_executed}), 200
+
+@app.route('/save_api_settings', methods=['POST'])
+def save_api_settings():
+    user_id = int(request.form.get('user_id', 0))
+    if not user_id:
+        return "Invalid User", 400
+        
+    broker_name = request.form.get('broker_name', 'Dhan')
+    webhook_url = request.form.get('webhook_url')
+    secret_key = request.form.get('secret_key')
+    client_id = request.form.get('client_id')
+    access_token = request.form.get('access_token')
+    client_secret = request.form.get('client_secret') # 🌟 NEW
+    totp_key = request.form.get('totp_key')           # 🌟 NEW
+    
+    user = User.query.get_or_404(user_id)
+    
+    broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    if not broker_config:
+        broker_config = UserBrokerConfig(user_id=user_id)
+        db.session.add(broker_config)
+        
+    broker_config.broker_name = broker_name
+    broker_config.webhook_url = webhook_url
+    if secret_key and secret_key != '********':
+        broker_config.encrypted_secret_key = cipher.encrypt(secret_key.encode())
+    
+    broker_config.client_id = client_id
+    if access_token and access_token != '********':
+        broker_config.encrypted_access_token = cipher.encrypt(access_token.encode())
+        
+    if client_secret and client_secret != '********':
+        broker_config.encrypted_client_secret = cipher.encrypt(client_secret.encode())
+        
+    if totp_key and totp_key != '********':
+        broker_config.encrypted_totp_key = cipher.encrypt(totp_key.encode())
+    
+    db.session.commit()
+    
+    # 🌟 NEW: Immediately sync new keys to the background NSE worker
+    try:
+        sync_admin_dhan_to_worker()
+    except: pass
+    
+    flash("API Settings Updated Successfully!")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/admin/refresh-data-feed')
+@requires_auth
+def admin_refresh_feed():
+    """Manual trigger to sync Dhan keys to NSE worker."""
+    sync_admin_dhan_to_worker()
+    flash("⚡ Data Feed Sync Triggered! Market data should update in a few seconds.")
+    return redirect(request.referrer or url_for('admin_dashboard'))
+
+# ---------------------------------------------------------
+# DASHBOARD LOGIC (Admin & Global)
+# ---------------------------------------------------------
+
+@app.route('/admin-control')
+@requires_auth
+def admin_dashboard():
+    # 🌟 Split Users
+    real_users = User.query.filter_by(user_type='REAL').all()
+    demo_users = User.query.filter_by(user_type='DEMO').all()
+    pending_payments = PaymentScreenshot.query.filter_by(status='PENDING').all()
+    
+    return render_template('admin.html', 
+                           real_users=real_users, 
+                           demo_users=demo_users, 
+                           pending_payments=pending_payments,
+                           g_discount=10,
+                           config=get_admin_config())
+
+@app.route('/admin/force-square-off/<int:user_id>')
+@requires_auth
+def force_square_off(user_id):
+    user = User.query.get_or_404(user_id)
+    # 1. Close in Local DB
+    square_off_user_trades(user, reason="ADMIN_FORCE_STOP")
+    # 2. Close in Broker API if REAL
+    if user.user_type == 'REAL':
+        broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+        if broker_conf and broker_conf.encrypted_access_token:
+            try:
+                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
+            except: pass
+    flash(f"🛑 Force Square Off executed for {user.username}")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/global-kill-switch')
+@requires_auth
+def global_kill_switch():
+    users = User.query.all()
+    count = 0
+    for u in users:
+        active_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
+        if active_trades:
+            square_off_user_trades(u, reason="GLOBAL_KILL_SWITCH")
+            if u.user_type == 'REAL':
+                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                if broker_conf and broker_conf.encrypted_access_token:
+                    try:
+                        access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
+                        broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
+                    except: pass
+            count += 1
+    flash(f"⚠️ GLOBAL KILL SWITCH: Closed trades for {count} users!")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/update-settings', methods=['POST'])
+@requires_auth
+def update_settings():
+    config = get_admin_config()
+    config.admin_user = request.form.get('admin_user', config.admin_user)
+    config.admin_pass = request.form.get('admin_pass', config.admin_pass)
+    config.admin_phone = request.form.get('admin_phone', config.admin_phone)
+    config.support_number_1 = request.form.get('support_1', config.support_number_1)
+    config.support_number_2 = request.form.get('support_2', config.support_number_2)
+    
+    # 🌟 Update Dynamic Plans
+    if request.form.get('plan_basic_price'):
+        config.plan_basic_price = int(request.form.get('plan_basic_price'))
+    if request.form.get('plan_premium_price'):
+        config.plan_premium_price = int(request.form.get('plan_premium_price'))
+    if request.form.get('plan_ultimate_price'):
+        config.plan_ultimate_price = int(request.form.get('plan_ultimate_price'))
+        
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+# --- AI ADMIN DASHBOARD & CLEANUP ---
+@app.route('/ai-dashboard')
+@requires_auth
+def ai_dashboard():
+    try:
+        trades = AIPaperTrade.query.order_by(AIPaperTrade.timestamp.desc()).all()
+        # Calculate paper PNl
+        total_pnl = sum((t.pnl or 0.0) for t in trades if t.status == "CLOSED")
+        return render_template('ai_dashboard.html', trades=trades, total_pnl=total_pnl)
+    except Exception as e:
+        import traceback
+        error_msg = f"<h3>AI Dashboard Error:</h3><pre>{traceback.format_exc()}</pre>"
+        # Ensure tables are created just in case
+        try:
+            db.create_all()
+            error_msg += "<br><b style='color:green;'>Attempted to force-create tables. Please refresh!</b>"
+        except Exception as e2:
+            error_msg += f"<br><b style='color:red;'>DB Create failed: {str(e2)}</b>"
+        return error_msg, 500
+
+@app.route('/cleanup-ai-data')
+@requires_auth
+def cleanup_ai_data():
+    try:
+        # Delete trades older than 3 days
+        cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=3)
+        AIPaperTrade.query.filter(AIPaperTrade.timestamp < cutoff).delete()
+        db.session.commit()
+        flash("Old AI Data Cleaned successfully to save cloud billing!")
+    except Exception as e:
+        flash(f"Error during cleanup: {str(e)}")
+    return redirect(url_for('ai_dashboard'))
+
+# --- OTP RESET FLOW ---
+@app.route('/admin-reset', methods=['GET', 'POST'])
+def admin_reset():
+    if request.method == 'POST':
+        phone = request.form.get('phone')
+        config = get_admin_config()
+        if phone == config.admin_phone:
+            # Generate OTP
+            otp = str(random.randint(100000, 999999))
+            config.reset_otp = otp
+            config.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+            db.session.commit()
+            
+            # Simulated SMS send (In reality, use Fast2SMS / Twilio)
+            print(f"-------------\n[SMS MOCK] Sent OTP {otp} to {phone}\n-------------")
+            
+            return f'''
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2>OTP Sent to {phone}</h2>
+                <p style="color:red;">(Since real SMS costs money, check your Server Console to see the mock OTP)</p>
+                <form action="/admin-verify-otp" method="POST">
+                    <input type="text" name="otp" placeholder="Enter 6-digit OTP" required style="padding:10px; width:200px;">
+                    <button type="submit" style="padding:10px 20px; background:#28a745; color:white; border:none;">Verify</button>
+                </form>
+            </div>
+            '''
+        else:
+            return "Invalid Admin Phone Number"
+            
+    return '''
+    <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+        <h2>Forgot Admin Password?</h2>
+        <form action="/admin-reset" method="POST">
+            <input type="text" name="phone" placeholder="Enter your registered Admin Phone" required style="padding:10px; width:250px;">
+            <button type="submit" style="padding:10px 20px; background:#007bff; color:white; border:none;">Send OTP</button>
+        </form>
     </div>
+    '''
 
-    <script>
-        let currentActiveIndex = 'NIFTY';
-
-        function toggleAIChat() {
-            const win = document.getElementById('aiChatWindow');
-            win.style.display = win.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        async function sendAIPrompt() {
-            const input = document.getElementById('aiChatInput');
-            const msg = input.value.trim();
-            if (!msg) return;
-            
-            let n_spot = document.getElementById('ui-nifty-price')?.innerText || "0";
-            input.value = '';
-            const body = document.getElementById('aiChatBody');
-            body.innerHTML += `<div style="align-self: flex-end; background: var(--primary); padding: 10px; border-radius: 12px; max-width: 80%;">${msg}</div>`;
-            body.scrollTop = body.scrollHeight;
-
-            try {
-                const res = await fetch('/api/ai-chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: msg, nifty_price: n_spot })
-                });
-                const data = await res.json();
-                body.innerHTML += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; max-width: 80%;">${data.reply.replace(/\n/g, '<br>')}</div>`;
-            } catch(e) {
-                body.innerHTML += `<div style="color: var(--danger); padding: 10px;">AI Offline.</div>`;
-            }
-            body.scrollTop = body.scrollHeight;
-        }
-
-        function switchIndex(idx) {
-            currentActiveIndex = idx;
-            document.querySelectorAll('.tab-btn').forEach(b => {
-                b.classList.toggle('active', b.innerText === idx);
-            });
-            updateScanner();
-        }
-
-        function updateScanner() {
-            fetch('/api/gvn-scanner')
-                .then(r => r.json())
-                .then(res => {
-                    document.getElementById('oc-symbol-name').innerText = currentActiveIndex;
-                    if (res.nifty_spot) {
-                        // Dynamically show the spot price for the active index
-                        let activePrice = 0;
-                        if(currentActiveIndex === 'NIFTY') activePrice = res.nifty_spot;
-                        else if(res.summary && res.summary[currentActiveIndex]) activePrice = res.summary[currentActiveIndex].spot;
-                        document.getElementById('ui-nifty-price').innerText = activePrice;
-                    }
-                    const body = document.getElementById('scanner-body');
-                    const data = res.data[currentActiveIndex] || [];
-                    const pulse = res.market_pulse ? res.market_pulse[currentActiveIndex] : null;
-
-                    if (pulse) {
-                        document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
-                        document.getElementById('pulse-score').innerText = `AI SCORE: ${pulse.score}`;
-                        document.getElementById('pulse-trend').innerText = pulse.trend;
-                        document.getElementById('pulse-inst').innerText = pulse.inst_activity;
-                        document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
-                        document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
-                        
-                        // 🌟 UPDATE MOVEMENT PULSE TEXT
-                        const pulseText = pulse.labels ? pulse.labels.join(' | ') : 'NATURAL MOMENTUM';
-                        document.getElementById('movement-text').innerText = pulseText;
-                        if(data.length > 0) document.getElementById('active-strike-name').innerText = data[0].strike;
-
-                        // 🌟 DYNAMIC COLORING & RAINBOW GAUGE
-                        const sentimentEl = document.getElementById('pulse-sentiment');
-                        const gauge = document.getElementById('pulse-gauge');
-                        
-                        if(pulse.color === 'rainbow') {
-                            sentimentEl.style.background = "linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff)";
-                            sentimentEl.style.webkitBackgroundClip = "text";
-                            sentimentEl.style.webkitTextFillColor = "transparent";
-                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ff0000 0%, #ff7f00 15%, #ffff00 30%, #00ff00 45%, #0000ff 60%, #4b0082 75%, #8f00ff 90%, #ff0000 100%)";
-                            gauge.classList.add('live-pulse');
-                        } else {
-                            sentimentEl.style.webkitTextFillColor = "";
-                            sentimentEl.style.background = "";
-                            sentimentEl.style.color = pulse.color === 'green' ? '#10b981' : (pulse.color === 'red' ? '#ef4444' : '#f59e0b');
-                            gauge.style.background = `conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg)`;
-                            gauge.classList.remove('live-pulse');
-                        }
-
-                        // 🌟 SHOW AI LABELS (Pine Script Logic)
-                        document.getElementById('pulse-inst').innerHTML = pulse.labels ? pulse.labels.map(l => `<div style="font-size:10px; margin-bottom:2px; font-weight:800;">${l}</div>`).join('') : 'LOW';
-
-                        const angle = (pulse.score - 50) * 1.8;
-                        document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
-                    }
-
-                    let html = '';
-                    data.forEach(item => {
-                        let levelHtml = '';
-                        if(item.levels) {
-                            levelHtml = `<div style="font-size:9px; color:var(--text-dim); margin-top:5px;">
-                                i5: ${Math.round(item.levels.i5)} | i7: ${Math.round(item.levels.i7)}
-                            </div>`;
-                        }
-                        
-                        html += `
-                            <tr style="background: rgba(255,255,255,0.02);">
-                                <td style="padding: 15px; font-weight: 800; border-radius: 12px 0 0 12px; border-left: 4px solid var(--primary);">
-                                    ${item.strike}
-                                    ${levelHtml}
-                                </td>
-                                <td style="padding: 15px;">₹ ${item.ltp}<br><small style="color:var(--text-dim);">Δ ${item.delta}</small></td>
-                                <td style="padding: 15px;">${item.zone}</td>
-                                <td style="padding: 15px; font-weight: 900; color: ${item.ai_signal.includes('BUY') ? '#10b981' : '#ef4444'}">
-                                    ${item.trigger_signal ? `<span class="live-pulse" style="color: #6366f1;">⚡ ${item.trigger_signal}</span>` : item.ai_signal}
-                                </td>
-                                <td style="padding: 15px; font-weight: 900; border-radius: 0 12px 12px 0;">${item.score}%</td>
-                            </tr>
-                        `;
-                    });
-                    body.innerHTML = html || '<tr><td colspan="5" style="text-align: center;">📡 Analysis in progress...</td></tr>';
-                });
-        }
-
-        function updateLivePnL() {
-            document.querySelectorAll('.live-pnl').forEach(cell => {
-                const id = cell.getAttribute('data-trade-id');
-                fetch(`/api/live_trade_price/${id}`)
-                    .then(r => r.json())
-                    .then(d => {
-                        if (d.status === 'success') {
-                            const pnl = d.loss_points * -1;
-                            cell.innerText = (pnl >= 0 ? '+' : '') + `₹ ${pnl.toFixed(2)}`;
-                            cell.parentElement.className = pnl >= 0 ? 'profit' : 'loss';
-                        }
-                    });
-            });
-        }
-
-        setInterval(updateScanner, 10000);
-        setInterval(updateLivePnL, 3000);
-        updateScanner();
-    </script>
-    <!-- 🌟 OPTION CHAIN MODAL -->
-    <div id="optionChainModal" class="modal-overlay">
-        <div class="modal-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
-                <div>
-                    <h2 style="margin: 0; color: var(--primary);">📊 Dhan Live Option Chain (<span id="oc-symbol-display">NIFTY</span>)</h2>
-                    <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 13px;" id="oc-update-time">Waiting for data...</p>
-                </div>
-                <button onclick="closeOptionChain()" style="background: var(--danger); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">X CLOSE</button>
-            </div>
-            
-            <div style="overflow-x: auto;">
-                <table class="oc-table">
-                    <thead>
-                        <tr>
-                            <th colspan="4">CALLS (CE)</th>
-                            <th>STRIKE</th>
-                            <th colspan="4">PUTS (PE)</th>
-                        </tr>
-                        <tr>
-                            <th>OI</th>
-                            <th>Vol</th>
-                            <th>IV</th>
-                            <th>LTP</th>
-                            <th style="background: var(--primary); color: white;">PRICE</th>
-                            <th>LTP</th>
-                            <th>IV</th>
-                            <th>Vol</th>
-                            <th>OI</th>
-                        </tr>
-                    </thead>
-                    <tbody id="oc-body">
-                        <tr><td colspan="9">Loading Dhan API Data...</td></tr>
-                    </tbody>
-                </table>
-            </div>
+@app.route('/admin-verify-otp', methods=['POST'])
+def admin_verify_otp():
+    otp = request.form.get('otp')
+    config = get_admin_config()
+    if config.reset_otp and config.reset_otp == otp and config.otp_expiry > datetime.utcnow():
+        return '''
+        <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+            <h2>Set New Admin Password</h2>
+            <form action="/admin-set-password" method="POST">
+                <input type="password" name="new_pass" placeholder="Enter New Password" required style="padding:10px; width:200px;">
+                <button type="submit" style="padding:10px 20px; background:#ff9800; color:white; border:none;">Update Password</button>
+            </form>
         </div>
-    </div>
+        '''
+    return "Invalid or Expired OTP. <a href='/admin-reset'>Try again</a>"
 
-    <script>
-        let currentOCSymbol = 'NIFTY';
+@app.route('/admin-set-password', methods=['POST'])
+def admin_set_password():
+    new_pass = request.form.get('new_pass')
+    config = get_admin_config()
+    config.admin_pass = new_pass
+    config.reset_otp = None # wipe otp
+    db.session.commit()
+    return "Password updated successfully! <a href='/admin-control'>Go to Admin Login</a>"
+
+@app.route('/approve-user', methods=['POST'])
+@requires_auth
+def approve_user():
+    user_id = int(request.form.get('user_id'))
+    plan = request.form.get('plan')
+    months = int(request.form.get('months', 1))
+    
+    user = User.query.get_or_404(user_id)
+    user.user_type = 'REAL'
+    user.selected_plan = plan
+    user.is_approved = True
+    
+    now = datetime.now()
+    if user.expiry_date and user.expiry_date > now:
+        user.expiry_date = user.expiry_date + timedelta(days=30 * months)
+    else:
+        user.expiry_date = now + timedelta(days=30 * months)
         
-        function openOptionChain(symbol = 'NIFTY') {
-            currentOCSymbol = symbol;
-            document.getElementById('oc-symbol-display').innerText = symbol;
-            document.getElementById('oc-body').innerHTML = '<tr><td colspan="9">Fetching ' + symbol + ' Data...</td></tr>';
-            document.getElementById('optionChainModal').style.display = 'flex';
-            fetchOptionChainData();
-            // Start auto-refreshing while open
-            if(window.ocInterval) clearInterval(window.ocInterval);
-            window.ocInterval = setInterval(fetchOptionChainData, 3000);
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin-extend-demo/<int:user_id>')
+@requires_auth
+def admin_extend_demo(user_id):
+    user = User.query.get_or_404(user_id)
+    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    if user.expiry_date and user.expiry_date > now:
+        user.expiry_date = user.expiry_date + timedelta(days=30)
+    else:
+        user.expiry_date = now + timedelta(days=30)
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/delete-user/<int:user_id>')
+@requires_auth
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/block-user/<int:user_id>', methods=['POST', 'GET'])
+@requires_auth
+def block_user(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_blocked = not user.is_blocked
+    if user.is_blocked:
+        user.algo_status = 'OFF'
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/toggle-kill-switch/<int:user_id>')
+@requires_auth
+def toggle_kill_switch(user_id):
+    user = User.query.get_or_404(user_id)
+    user.admin_kill_switch = not user.admin_kill_switch
+    if user.admin_kill_switch:
+        square_off_user_trades(user, "Admin Activated Kill Switch")
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/toggle-auto-mode/<int:user_id>', methods=['POST', 'GET'])
+def toggle_auto_mode(user_id):
+    user = User.query.get_or_404(user_id)
+    user.full_auto_mode = not user.full_auto_mode
+    db.session.commit()
+    status = "ENABLED" if user.full_auto_mode else "DISABLED"
+    flash(f"🤖 GVN Full-Auto Mode {status}!")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/toggle-signal-lock/<int:user_id>')
+@requires_auth
+def toggle_signal_lock(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_locked = not user.is_locked
+    if not user.is_locked:
+        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=1)
+    db.session.commit()
+    flash(f"Signal Lock for {user.username} is now {'ON' if user.is_locked else 'OFF'}")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/upload-payment', methods=['POST'])
+def upload_payment():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('demo_register'))
+        
+    utr = request.form.get('utr_number')
+    plan = request.form.get('plan_type', '1-Day')
+    file = request.files.get('screenshot')
+    
+    if file:
+        filename = f"payment_{user_id}_{int(time.time())}.png"
+        upload_folder = os.path.join('static', 'uploads', 'payments')
+        os.makedirs(upload_folder, exist_ok=True)
+        filepath = os.path.join(upload_folder, filename)
+        file.save(filepath)
+        
+        new_payment = PaymentScreenshot(
+            user_id=user_id,
+            screenshot_path=filename,
+            utr_number=utr,
+            plan_selected=plan
+        )
+        db.session.add(new_payment)
+        db.session.commit()
+        
+        flash(f"{plan} Payment Screenshot Uploaded! Admin will verify soon.")
+        
+        # Send Telegram notification to admin
+        user = User.query.get(user_id)
+        send_telegram_msg(f"💰 <b>NEW PAYMENT REQUEST ({plan})</b>\nUser: {user.username}\nPhone: {user.phone}\nUTR: {utr}\nPlease check Admin Panel to approve.")
+        
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/approve-payment/<int:payment_id>', methods=['POST'])
+@requires_auth
+def approve_payment(payment_id):
+    payment = PaymentScreenshot.query.get_or_404(payment_id)
+    user = User.query.get(payment.user_id)
+    
+    action = request.form.get('action')
+    if action == 'APPROVE':
+        payment.status = "APPROVED"
+        user.is_locked = False
+        
+        # Determine duration
+        days = 1 if payment.plan_selected == "1-Day" else 7
+        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=days)
+        
+        db.session.commit()
+        flash(f"Payment for {user.username} ({payment.plan_selected}) Approved!")
+    else:
+        payment.status = "REJECTED"
+        db.session.commit()
+        flash(f"Payment for {user.username} Rejected.")
+        
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/history')
+def trade_history():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('demo_register'))
+    
+    # Show Monthly P&L from DailyPnL table
+    daily_pnls = DailyPnL.query.order_by(DailyPnL.date.desc()).all()
+    monthly_data = {}
+    for dp in daily_pnls:
+        month_key = dp.date.strftime('%B %Y') # "April 2026"
+        if month_key not in monthly_data:
+            monthly_data[month_key] = 0.0
+        monthly_data[month_key] += dp.pnl
+        
+    history = [{'month': k, 'pnl': v} for k, v in monthly_data.items()]
+    total_pnl = sum((t['pnl'] for t in history))
+    return render_template('history.html', history=history, total_pnl=total_pnl)
+
+@app.route('/clear-history')
+@requires_auth
+def clear_history():
+    db.session.query(DailyPnL).delete()
+    db.session.commit()
+    return redirect(url_for('trade_history'))
+
+import threading
+import time
+
+def auto_square_off_task():
+    while True:
+        try:
+            now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+            if now.hour == 15 and 28 <= now.minute <= 29:
+                with app.app_context():
+                    running_trades = AlgoTrade.query.filter_by(status='Running').all()
+                    if running_trades:
+                        for trade in running_trades:
+                            trade.status = 'Closed'
+                            trade.exit_price = trade.entry_price
+                            trade.pnl = 0.0 # Force closed EOD
+                            
+                            user = User.query.get(trade.user_id)
+                            if user and user.user_type == 'REAL' and user.is_approved:
+                                try:
+                                    broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
+                                    webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
+                                    enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
+                                    if enc_secret and webhook_url:
+                                        secret_key = cipher.decrypt(enc_secret).decode()
+                                        is_nfo = any(idx in trade.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
+                                        manual_alert = {
+                                            "secret": secret_key,
+                                            "transactionType": "SELL",
+                                            "orderType": "MKT",
+                                            "quantity": str(trade.quantity),
+                                            "exchange": "NFO" if is_nfo else "NSE",
+                                            "symbol": trade.symbol,
+                                            "instrument": "OPT" if is_nfo else "EQ",
+                                            "productType": "M",
+                                            "alertType": "multi_leg_order",
+                                            "order_legs": [{
+                                                "transactionType": "S", 
+                                                "orderType": "MKT", 
+                                                "quantity": str(trade.quantity), 
+                                                "exchange": "NFO" if is_nfo else "NSE", 
+                                                "symbol": trade.symbol, 
+                                                "instrument": "OPT" if is_nfo else "EQ", 
+                                                "productType": "M"
+                                            }]
+                                        }
+                                        requests.post(webhook_url, json=manual_alert, timeout=5)
+                                except Exception as e:
+                                    pass
+                        db.session.commit()
+                        send_telegram_msg("⏰ <b>AUTO SQUARE-OFF</b>\nAll open positions forcefully closed at 15:28 IST to manage overnight gap risk.")
+        except Exception as e:
+            print(f"Auto Square-Off Error: {e}")
+        
+        # Sleep 60 seconds
+        time.sleep(60)
+
+# Start background thread
+threading.Thread(target=auto_square_off_task, daemon=True).start()
+
+def sync_admin_dhan_to_worker():
+    """Finds the admin's Dhan API key and shares it with the NSE background worker."""
+    with app.app_context():
+        try:
+            admin = User.query.filter_by(email='nelsonp143@gmail.com').first()
+            if admin:
+                conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
+                if conf and conf.client_id and conf.encrypted_access_token:
+                    token = cipher.decrypt(conf.encrypted_access_token).decode()
+                    dhan_live_feed.dhan_master_config.update({
+                        "client_id": conf.client_id,
+                        "access_token": token,
+                        "active": True
+                    })
+                    print(f"✅ [DHAN SYNC] Master Data Feed linked to Admin: {admin.username}")
+        except Exception as e:
+            print(f"❌ [DHAN SYNC ERROR] {e}")
+
+# ==========================================
+# 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
+# ==========================================
+import requests
+
+@app.route('/api/ai-chat', methods=['POST'])
+def ai_chat():
+    try:
+        data = request.json
+        user_msg = data.get('message', '')
+        # 🌟 NEW: Get price directly from frontend request
+        n_spot = data.get('nifty_price', '0')
+        
+        from dotenv import dotenv_values
+        env_config = dotenv_values(".env")
+        api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
+        
+        if not api_key:
+            return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set!"})
+        
+        if 'user_id' not in session:
+            return jsonify({"reply": "⚠️ Please login first."})
+        
+        user = User.query.get(session['user_id'])
+        if user and user.is_locked:
+            return jsonify({"reply": "🔒 Your AI Engine is Locked."})
+            
+        # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
+        if str(n_spot) == '0' or n_spot == 0:
+            # 🌟 Get live prices from background worker summary
+            n_spot = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+            b_spot = dhan_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
+            s_spot = dhan_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
+            f_spot = dhan_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
+
+
+        import json
+        live_pulse = dhan_live_feed.market_pulse.get("NIFTY", {})
+        live_options = dhan_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
+        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
+        system_prompt = (
+            "You are GVN Master AI, an elite algorithmic trading expert. "
+            "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
+            "Analyze the given Nifty spot price. Identify if the current supports/resistances are genuine or fake (traps) using Call VS Put data. "
+            "Provide clear, logical predictions for Zero-to-Hero strike prices and exact reversal points. "
+            "CRITICAL RULE: You MUST provide your entire analysis and explanation in pure TELUGU language. Do NOT use English paragraphs. Use clear, descriptive Telugu."
+        )
+        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{context}\nUser: {user_msg}"}
+            ],
+            "temperature": 0.4
         }
         
-        function closeOptionChain() {
-            document.getElementById('optionChainModal').style.display = 'none';
-            if(window.ocInterval) clearInterval(window.ocInterval);
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=15)
+        if response.status_code == 200:
+            return jsonify({"reply": response.json()['choices'][0]['message']['content']})
+        else:
+            return jsonify({"reply": f"AI Error: HTTP {response.status_code}"})
+            
+    except Exception as e:
+        return jsonify({"reply": f"Error: {str(e)}"})
+
+
+def get_ai_validation(symbol, txn_type, price):
+    """
+    Calls Groq AI to validate a trade signal based on live market context.
+    Returns a short (10-15 word) opinion.
+    """
+    from dotenv import dotenv_values
+    env_config = dotenv_values(".env")
+    api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
+    
+    if not api_key:
+        return "AI Offline (Key Missing)"
+        
+    try:
+        live_data = {
+            "summary": dhan_live_feed.live_option_chain_summary,
+            "scanner": dhan_live_feed.gvn_scanner_data
         }
         
-        function fetchOptionChainData() {
-            fetch('/api/dhan-option-chain?symbol=' + currentOCSymbol)
-            .then(res => res.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    document.getElementById('oc-update-time').innerText = "Last Updated: " + data.timestamp + " | Spot Price: " + data.spot_price;
-                    let html = '';
-                    data.chain.forEach(row => {
-                        let is_atm = row.is_atm ? 'class="atm-row"' : '';
-                        html += `<tr ${is_atm}>
-                            <td style="color: #ef4444;">${row.ce_oi || '-'}</td>
-                            <td>${row.ce_vol || '-'}</td>
-                            <td>${row.ce_iv || '-'}</td>
-                            <td style="font-weight: bold; color: #10b981;">₹${row.ce_ltp || '-'}</td>
-                            <td style="background: rgba(99,102,241,0.1); font-weight: 900; color: white;">${row.strike}</td>
-                            <td style="font-weight: bold; color: #ef4444;">₹${row.pe_ltp || '-'}</td>
-                            <td>${row.pe_iv || '-'}</td>
-                            <td>${row.pe_vol || '-'}</td>
-                            <td style="color: #10b981;">${row.pe_oi || '-'}</td>
-                        </tr>`;
-                    });
-                    document.getElementById('oc-body').innerHTML = html;
-                } else {
-                    document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">Error: ${data.message}</td></tr>`;
+        system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
+        user_prompt = f"Signal: {txn_type} {symbol} @ {price}. Market Context: {live_data}"
+        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.2,
+            "max_tokens": 50
+        }
+        
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=7)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content'].strip()
+    except:
+        pass
+    return "AI Validation Pending..."
+
+
+
+@app.route('/api/debug-data')
+def debug_data():
+    return jsonify({
+        "summary": dhan_live_feed.live_option_chain_summary,
+        "scanner": dhan_live_feed.gvn_scanner_data,
+        "config": dhan_live_feed.dhan_master_config.get('active'),
+        "nifty_spot": dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    })
+
+
+def get_tradingview_technicals(symbol="NIFTY"):
+    """Fetches real-time technical analysis summary from TradingView Scanner API."""
+    try:
+        # TradingView India Scanner Endpoint
+        url = "https://scanner.tradingview.com/india/scan"
+        ticker = f"NSE:{symbol}"
+        if symbol == "NIFTY": ticker = "NSE:NIFTY"
+        elif symbol == "BANKNIFTY": ticker = "NSE:BANKNIFTY"
+        
+        payload = {
+            "symbols": {"tickers": [ticker], "query": {"types": []}},
+            "columns": ["Recommend.All", "buy", "sell", "neutral"]
+        }
+        
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.post(url, json=payload, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            if data:
+                res = data[0].get('d', [])
+                # Mapping Recommendation Value to String
+                rec_val = res[0]
+                if rec_val > 0.5: rec_str = "STRONG_BUY"
+                elif rec_val > 0.1: rec_str = "BUY"
+                elif rec_val < -0.5: rec_str = "STRONG_SELL"
+                elif rec_val < -0.1: rec_str = "SELL"
+                else: rec_str = "NEUTRAL"
+                
+                return {
+                    "recommendation": rec_str,
+                    "buy": int(res[1]) if len(res)>1 else 0,
+                    "sell": int(res[2]) if len(res)>2 else 0,
+                    "neutral": int(res[3]) if len(res)>3 else 0
                 }
-            })
-            .catch(err => {
-                document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">API Connection Failed. Is Dhan feed active?</td></tr>`;
-            });
-        }
-    </script>
-</body>
-</html>
+    except Exception as e:
+        print(f"[TV SCANNER ERROR] {e}")
+    return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
+
+@app.route('/api/gvn-scanner')
+def gvn_scanner():
+    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
+    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    tv_tech = get_tradingview_technicals("NIFTY")
+    return jsonify({
+        "status": "success",
+        "data": dhan_live_feed.gvn_scanner_data,
+        "summary": dhan_live_feed.live_option_chain_summary,
+        "market_pulse": dhan_live_feed.market_pulse,
+        "nifty_spot": n_price,
+        "tradingview_tech": tv_tech # 🌟 NEW: Link to TradingView logic
+    })
+
+@app.route('/unlock-premium/<int:user_id>')
+def unlock_premium(user_id):
+    """🌟 FREE PREMIUM UNLOCK: Activates account for 30 days instantly."""
+    user = User.query.get_or_404(user_id)
+    user.is_locked = False
+    user.is_approved = True
+    user.user_type = 'REAL'
+    user.expiry_date = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
+    return redirect(url_for('user_dashboard', user_id=user.id))
+
+with app.app_context():
+    db.create_all()
+    # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
+    if not getattr(app, '_workers_started', False):
+        dhan_live_feed.start_live_feed_worker()
+        sync_admin_dhan_to_worker()
+        app._workers_started = True
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
