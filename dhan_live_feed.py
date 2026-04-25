@@ -1,6 +1,6 @@
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 
 # Global memory to store the latest Delta 60 strikes per index
@@ -238,15 +238,29 @@ def fetch_option_chain(symbol="NIFTY"):
     
     if broker == "Shoonya":
         with open("dhan_feed_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [SHOONYA ENGINE] Native Shoonya Fetch Bypass Active...\n")
+            f.write(f"{datetime.now()}: [SHOONYA ENGINE] Native Shoonya Fetch Bypass Active... Fetching Live NSE Data\n")
         
-        # Simulated fallback data for Shoonya to keep UI active
-        import nse_option_chain
-        data = nse_option_chain.fetch_from_dhan_fallback(symbol) # We use fallback or native if implemented
-        if data:
-            data["source"] = "SHOONYA_WEB_SOCKET_SIMULATED"
-            return data
-            
+        # Attempt to fetch real data from NSE website directly (works on local machine)
+        import requests
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "en-US,en;q=0.9"
+            }
+            session = requests.Session()
+            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+            response = session.get(f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}", headers=headers, timeout=5)
+            if response.status_code == 200:
+                nse_data = response.json()
+                nse_data["source"] = "SHOONYA_WEB_SOCKET_SIMULATED (NSE LIVE)"
+                return nse_data
+        except Exception as e:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [SHOONYA ENGINE] NSE Fetch failed: {e}\n")
+                
+        # Simulated fallback data if NSE fails
         return {
             "records": {
                 "underlyingValue": 24000 if symbol == "NIFTY" else (52000 if symbol == "BANKNIFTY" else 0),
