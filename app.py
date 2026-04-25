@@ -1979,7 +1979,8 @@ def gvn_scanner():
         "summary": dhan_live_feed.live_option_chain_summary,
         "market_pulse": dhan_live_feed.market_pulse,
         "nifty_spot": n_price,
-        "tradingview_tech": tv_tech # 🌟 NEW: Link to TradingView logic
+        "tradingview_tech": tv_tech,
+        "deep_scan_signals": dhan_live_feed.auto_trade_signals[:10]  # 🌟 Greeks-based auto-trade signals
     })
 
 @app.route('/unlock-premium/<int:user_id>')
