@@ -381,9 +381,9 @@
                     {% else %}
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
                     {% if broker_config and broker_config.client_id and broker_config.encrypted_access_token %}
-                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ DHAN CONNECTED</span>
+                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ {{ broker_config.broker_name|upper }} CONNECTED</span>
                     {% else %}
-                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ DHAN NOT CONNECTED</span>
+                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ BROKER NOT LINKED</span>
                     {% endif %}
                     {% endif %}
                 </div>
@@ -603,21 +603,34 @@
                         <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
-                    <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Dhan API Credentials</p>
-                    <input type="text" name="client_id" placeholder="Dhan Client ID" value="{{ broker_config.client_id if broker_config else '' }}">
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Select Trading Broker</p>
+                    <select name="broker_name" style="width: 100%; padding: 12px 15px; border-radius: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); color: white; margin-bottom: 15px; outline: none; font-size: 14px;">
+                        <option value="Dhan" {% if broker_config and broker_config.broker_name == 'Dhan' %}selected{% endif %}>Dhan HQ (Recommended)</option>
+                        <option value="Fyers" {% if broker_config and broker_config.broker_name == 'Fyers' %}selected{% endif %}>Fyers API V3 (Free Data)</option>
+                        <option value="Shoonya" {% if broker_config and broker_config.broker_name == 'Shoonya' %}selected{% endif %}>Shoonya by Finvasia (Free Data & 0 Brokerage)</option>
+                        <option value="AngelOne" {% if broker_config and broker_config.broker_name == 'AngelOne' %}selected{% endif %}>Angel One SmartAPI (Free Data)</option>
+                        <option value="Zerodha" {% if broker_config and broker_config.broker_name == 'Zerodha' %}selected{% endif %}>Zerodha Kite</option>
+                        <option value="Upstox" {% if broker_config and broker_config.broker_name == 'Upstox' %}selected{% endif %}>Upstox</option>
+                        <option value="KotakNeo" {% if broker_config and broker_config.broker_name == 'KotakNeo' %}selected{% endif %}>Kotak Neo</option>
+                        <option value="AliceBlue" {% if broker_config and broker_config.broker_name == 'AliceBlue' %}selected{% endif %}>Alice Blue</option>
+                        <option value="FlatTrade" {% if broker_config and broker_config.broker_name == 'FlatTrade' %}selected{% endif %}>FlatTrade</option>
+                    </select>
+
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 5px 5px; text-transform: uppercase;">Broker API Credentials</p>
+                    <input type="text" name="client_id" placeholder="Client ID / App ID" value="{{ broker_config.client_id if broker_config else '' }}">
                     
                     <div style="position: relative;">
-                        <input type="password" id="dhan_access" name="access_token" placeholder="Dhan Access Token" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
+                        <input type="password" id="dhan_access" name="access_token" placeholder="Access Token / API Key" value="{{ '********' if broker_config and broker_config.encrypted_access_token else '' }}">
                         <span onclick="toggleVisibility('dhan_access')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <div style="position: relative;">
-                        <input type="password" id="dhan_secret" name="client_secret" placeholder="Dhan Client Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
+                        <input type="password" id="dhan_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ '********' if broker_config and broker_config.encrypted_client_secret else '' }}">
                         <span onclick="toggleVisibility('dhan_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
 
                     <div style="position: relative;">
-                        <input type="password" id="dhan_totp" name="totp_key" placeholder="Dhan TOTP Secret (For Auto-Refresh)" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
+                        <input type="password" id="dhan_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ '********' if broker_config and broker_config.encrypted_totp_key else '' }}">
                         <span onclick="toggleVisibility('dhan_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
                     
