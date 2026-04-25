@@ -502,21 +502,61 @@
             </div>
         </div>
 
-        <!-- 📍 MARKET MOVEMENT PULSE BOX -->
-        <div class="premium-card" style="border-left: 5px solid var(--accent); margin-top: 25px; padding: 20px; background: rgba(0,0,0,0.3); position: relative;">
+        <!-- 📍 GVN DUAL-PULSE CONFIRMATION BOARD -->
+        <div class="premium-card" style="border-left: 5px solid var(--primary); margin-top: 25px; padding: 25px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9)); position: relative;">
             {% if user.is_locked %}
             <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; border-radius: 16px;"></div>
             {% endif %}
             
-            <div class="{% if user.is_locked %}locked-blur{% endif %}" style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">📍 Market Movement Pulse</h3>
-                    <p id="movement-text" style="font-size: 20px; font-weight: 900; color: var(--accent);">📡 ANALYSIS IN PROGRESS...</p>
+            <div class="{% if user.is_locked %}locked-blur{% endif %}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">🛰️ GVN DUAL-PULSE CONFIRMATION</h3>
+                        <p id="movement-text" style="font-size: 24px; font-weight: 900; color: #fff; margin: 0;">📡 SCANNING ALPHA GRID...</p>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <span id="sync-badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 900; border: 1px solid var(--glass-border);">SYNC: PENDING</span>
+                            <span id="vol-accel-badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 900; border: 1px solid var(--glass-border);">ACCEL: NORMAL</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <div id="ce-pulse-box" style="text-align: center; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); min-width: 110px;">
+                            <small style="color: var(--secondary); font-size: 9px; font-weight: 800; display: block; margin-bottom: 5px;">ACTIVE CALL</small>
+                            <span id="ce-strike-name" style="font-size: 15px; font-weight: 900; color: #fff;">N/A</span>
+                        </div>
+                        <div id="pe-pulse-box" style="text-align: center; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); min-width: 110px;">
+                            <small style="color: var(--danger); font-size: 9px; font-weight: 800; display: block; margin-bottom: 5px;">ACTIVE PUT</small>
+                            <span id="pe-strike-name" style="font-size: 15px; font-weight: 900; color: #fff;">N/A</span>
+                        </div>
+                    </div>
                 </div>
-                <div id="selected-strike-box" style="text-align: right; background: rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 12px;">
-                    <small style="color: var(--text-dim); font-size: 9px; display: block;">SELECTED STRIKE</small>
-                    <span id="active-strike-name" style="font-size: 16px; font-weight: 900; color: var(--primary);">N/A</span>
+            </div>
+        </div>
+
+        <!-- 🖼️ INTEGRATED TRADINGVIEW CHART (PRO SYNC) -->
+        <div class="premium-card" style="padding: 0; height: 500px; overflow: hidden; border: 1px solid var(--primary); box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);">
+            <div id="tv-chart-container" style="height: 100%; width: 100%;">
+                <!-- TradingView Widget BEGIN -->
+                <div class="tradingview-widget-container" style="height:100%;width:100%">
+                  <div id="tradingview_gvn" style="height:100%;width:100%"></div>
+                  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                  <script type="text/javascript">
+                  new TradingView.widget({
+                  "autosize": true,
+                  "symbol": "NSE:NIFTY",
+                  "interval": "1",
+                  "timezone": "Asia/Kolkata",
+                  "theme": "dark",
+                  "style": "1",
+                  "locale": "en",
+                  "toolbar_bg": "#f1f3f6",
+                  "enable_publishing": false,
+                  "hide_side_toolbar": false,
+                  "allow_symbol_change": true,
+                  "container_id": "tradingview_gvn"
+                });
+                  </script>
                 </div>
+                <!-- TradingView Widget END -->
             </div>
         </div>
 
@@ -869,10 +909,24 @@
                         document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
-                        // 🌟 UPDATE MOVEMENT PULSE TEXT
-                        const pulseText = pulse.labels ? pulse.labels.join(' | ') : 'NATURAL MOMENTUM';
-                        document.getElementById('movement-text').innerText = pulseText;
-                        if(data.length > 0) document.getElementById('active-strike-name').innerText = data[0].strike;
+                        // 🌟 UPDATE DUAL-PULSE CONFIRMATION BOARD
+                        document.getElementById('movement-text').innerText = pulse.confirmation || '📡 SCANNING ALPHA GRID...';
+                        document.getElementById('sync-badge').innerText = `SYNC: ${pulse.confirmation ? pulse.confirmation.split(' ')[0] : 'PENDING'}`;
+                        
+                        // Update CE/PE Strikes in Pulse Board
+                        const ce_item = data.find(d => d.strike.includes('CE'));
+                        const pe_item = data.find(d => d.strike.includes('PE'));
+                        
+                        if(ce_item) {
+                            document.getElementById('ce-strike-name').innerText = ce_item.strike.split(' ')[1] || ce_item.strike;
+                            document.getElementById('ce-pulse-box').style.borderColor = ce_item.ltp > (ce_item.levels ? ce_item.levels.i5 : 0) ? 'var(--secondary)' : 'rgba(16, 185, 129, 0.2)';
+                        }
+                        if(pe_item) {
+                            document.getElementById('pe-strike-name').innerText = pe_item.strike.split(' ')[1] || pe_item.strike;
+                            document.getElementById('pe-pulse-box').style.borderColor = pe_item.ltp > (pe_item.levels ? pe_item.levels.i5 : 0) ? 'var(--danger)' : 'rgba(239, 68, 68, 0.2)';
+                        }
+                        
+                        document.getElementById('vol-accel-badge').innerText = `ACCEL: ${pulse.volume || 'NORMAL'}`;
 
                         // 🌟 DYNAMIC COLORING & RAINBOW GAUGE
                         const sentimentEl = document.getElementById('pulse-sentiment');
