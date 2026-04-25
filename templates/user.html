@@ -346,14 +346,14 @@
     <!-- 🔒 SECURITY WATERMARK -->
     <div class="watermark">GVN SECURE - {{ user.phone }}</div>
 
-    {% if user.is_locked %}
-    <div class="lock-overlay">
+    {% if user.is_locked and not user.is_admin %}
+    <div class="lock-overlay" id="mainLockOverlay">
         <div class="premium-card" style="max-width: 450px; padding: 40px; border: 2px solid var(--primary); box-shadow: 0 0 100px rgba(99, 102, 241, 0.4);">
             <div style="font-size: 80px; margin-bottom: 25px;">🔒</div>
             <h1 style="font-weight: 900; margin-bottom: 10px; color: white; letter-spacing: 2px;">ACCESS RESTRICTED</h1>
             <p style="color: var(--text-dim); margin-bottom: 30px; font-size: 14px; line-height: 1.6;">Your GVN AI Master Engine is currently locked. To access live "Zero-to-Hero" signals and i-Level levels, please activate your premium subscription.</p>
             <div style="display: flex; gap: 15px; justify-content: center;">
-                <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="background: var(--secondary);">ACTIVATE NOW</button>
+                <button onclick="document.getElementById('paymentModal').style.display='flex'; document.getElementById('mainLockOverlay').style.display='none';" class="btn-premium" style="background: var(--secondary);">ACTIVATE NOW</button>
                 <a href="https://wa.me/{{ config.support_number_1 }}" class="btn-premium" style="background: rgba(255,255,255,0.1);">SUPPORT</a>
             </div>
         </div>
@@ -717,7 +717,7 @@
     </div>
 
     <!-- 💳 PAYMENT MODAL -->
-    <div id="paymentModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 2000; align-items: center; justify-content: center;">
+    <div id="paymentModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 10000; align-items: center; justify-content: center;">
         <div style="background: #0f172a; border: 1px solid var(--primary); padding: 30px; border-radius: 24px; width: 400px; max-width: 90vw;">
             <h2 style="color: var(--primary); margin-top: 0;">🔓 Unlock Premium</h2>
             <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; margin-bottom: 20px; text-align: center;">
@@ -728,7 +728,7 @@
                 <p style="font-size: 11px; color: #10b981; font-weight: 800;">OR START FREE</p>
                 <a href="/unlock-premium/{{ user.id }}" class="btn-premium" style="display: block; width: 100%; text-decoration: none; background: #10b981; color: white; margin-top: 10px; font-size: 12px;">Activate Free Premium (30 Days)</a>
             </div>
-            <button onclick="document.getElementById('paymentModal').style.display='none'" class="btn-premium" style="width: 100%; background: rgba(255,255,255,0.1);">Close</button>
+            <button onclick="document.getElementById('paymentModal').style.display='none'; document.getElementById('mainLockOverlay').style.display='flex';" class="btn-premium" style="width: 100%; background: rgba(255,255,255,0.1);">Close</button>
         </div>
     </div>
 
