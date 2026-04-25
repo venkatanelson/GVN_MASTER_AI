@@ -632,21 +632,31 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         except: pass
 
     gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
-    
+
     try:
-        ce_oi_total = sum(item.get('oi_change', 0) for item in gvn_scanner_data[symbol] if 'CE' in item['strike'])
-        pe_oi_total = sum(item.get('oi_change', 0) for item in gvn_scanner_data[symbol] if 'PE' in item['strike'])
+        # 🌟 GVN DUAL-PULSE (CROSS-STRIKE) CONFIRMATION
+        confirmation = "📡 SCANNING..."
+        ce_item = next((item for item in gvn_scanner_data[symbol] if 'CE' in item['strike']), None)
+        pe_item = next((item for item in gvn_scanner_data[symbol] if 'PE' in item['strike']), None)
         
-        total_oi_chg = abs(ce_oi_total) + abs(pe_oi_total)
-        score = 50
-        if total_oi_chg > 0:
-            score = 50 + ((pe_oi_total - ce_oi_total) / total_oi_chg * 50)
-            score = max(0, min(100, score))
+        if ce_item and pe_item:
+            ce_above_i5 = ce_item['ltp'] > (ce_item['levels'].get('Level_5', 0))
+            pe_below_i7 = pe_item['ltp'] < (pe_item['levels'].get('Level_7', 0))
             
+            if ce_above_i5 and pe_below_i7:
+                confirmation = "🔥 REAL BREAKOUT (CE Sync)"
+            elif not ce_above_i5 and not pe_below_i7:
+                confirmation = "⚠️ POTENTIAL FAKE (No Sync)"
+            else:
+                confirmation = "⚖️ NEUTRAL GRID"
+        
+        market_pulse[symbol]["confirmation"] = confirmation
+        
         # 🌟 GVN AI ADVANCED ANALYSIS
         update_ai_dashboard(symbol, underlying_value)
         market_pulse["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
-    except: pass
+    except:
+        pass
 
     source = data.get("source", "DHAN_API")
     gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S") + f" ({source})"
