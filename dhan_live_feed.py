@@ -555,11 +555,26 @@ def live_feed_background_worker():
         try:
             if not dhan_master_config.get('active'):
                 try:
-                    import sqlite3
-                    conn = sqlite3.connect('instance/gvn_algo_pro.db')
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password FROM user_broker_config LIMIT 1")
-                    row = cursor.fetchone()
+                    import os
+                    db_url = os.environ.get('DATABASE_URL')
+                    row = None
+                    if db_url:
+                        if db_url.startswith("postgres://"):
+                            db_url = db_url.replace("postgres://", "postgresql://", 1)
+                        import psycopg2
+                        conn = psycopg2.connect(db_url)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password FROM user_broker_config LIMIT 1")
+                        row = cursor.fetchone()
+                        conn.close()
+                    else:
+                        import sqlite3
+                        conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password FROM user_broker_config LIMIT 1")
+                        row = cursor.fetchone()
+                        conn.close()
+
                     if row and row[0] and row[1]:
                         from cryptography.fernet import Fernet
                         cipher = Fernet(b'gvn_secure_key_for_encryption_26')
@@ -573,9 +588,11 @@ def live_feed_background_worker():
                             "active": True
                         })
                         with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
-                            f.write(f"{datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB.\n")
-                    conn.close()
-                except: pass
+                            f.write(f"{datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
+                except Exception as e:
+                    with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
+
 
             with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
