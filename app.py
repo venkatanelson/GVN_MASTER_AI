@@ -590,26 +590,30 @@ with app.app_context():
         db.session.rollback()
 
     # 🌟 NEW: Auto-Migration for Client Secret, TOTP Key & Password
-    try:
-        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BLOB;'))
-        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BLOB;'))
-        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BLOB;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+    for col_name, col_type in [
+        ('encrypted_client_secret', 'BLOB'), 
+        ('encrypted_totp_key', 'BLOB'), 
+        ('encrypted_password', 'BLOB')
+    ]:
         try:
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_client_secret BYTEA;'))
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_totp_key BYTEA;'))
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
+            db.session.execute(db.text(f'ALTER TABLE user_broker_config ADD COLUMN {col_name} {col_type};'))
             db.session.commit()
+            print(f"✅ DB Migration: {col_name} added to user_broker_config.")
         except Exception:
             db.session.rollback()
+            # Try Postgres variant if BLOB fails (though SQLite uses BLOB)
+            try:
+                postgres_type = 'BYTEA' if col_type == 'BLOB' else col_type
+                db.session.execute(db.text(f'ALTER TABLE user_broker_config ADD COLUMN {col_name} {postgres_type};'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 
 @app.route('/')
 def index():
     if 'user_id' in session:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if user:
             return redirect(url_for('user_dashboard', user_id=user.id))
     return render_template('index.html', config=get_admin_config())
@@ -645,7 +649,7 @@ def logout():
 def demo_register():
     # 🌟 Auto-login check
     if 'user_id' in session:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if user:
             return redirect(url_for('user_dashboard', user_id=user.id))
 
@@ -1781,7 +1785,8 @@ def sync_admin_dhan_to_worker():
     """Finds the admin's API key and shares it with the background worker."""
     with app.app_context():
         try:
-            admin = User.query.filter_by(email='nelsonp143@gmail.com').first()
+            # Use a more modern query style
+            admin = db.session.query(User).filter_by(email='nelsonp143@gmail.com').first()
             if admin:
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
                 if conf:
