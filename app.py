@@ -111,18 +111,25 @@ class AdminConfig(db.Model):
 def get_admin_config():
     from sqlalchemy import text
     try:
-        # Check if new columns exist, if not add them
+        # Check if new columns exist
         db.session.execute(text("SELECT plan_basic_price FROM admin_system_config LIMIT 1"))
     except Exception:
         db.session.rollback()
         try:
-            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_basic_price INTEGER DEFAULT 2999"))
-            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_premium_price INTEGER DEFAULT 5999"))
-            db.session.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_ultimate_price INTEGER DEFAULT 9999"))
-            db.session.commit()
-        except Exception as e:
-            print(f"Migration error: {e}")
-            db.session.rollback()
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_basic_price INTEGER DEFAULT 2999"))
+                conn.commit()
+        except: pass
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_premium_price INTEGER DEFAULT 5999"))
+                conn.commit()
+        except: pass
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_ultimate_price INTEGER DEFAULT 9999"))
+                conn.commit()
+        except: pass
 
     config = AdminConfig.query.first()
     if not config:
