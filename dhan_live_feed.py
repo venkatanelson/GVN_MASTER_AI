@@ -254,8 +254,12 @@ def fetch_option_chain(symbol="NIFTY"):
             response = session.get(f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}", headers=headers, timeout=5)
             if response.status_code == 200:
                 nse_data = response.json()
-                nse_data["source"] = "SHOONYA_WEB_SOCKET_SIMULATED (NSE LIVE)"
-                return nse_data
+                if "records" in nse_data:
+                    nse_data["source"] = "SHOONYA_WEB_SOCKET_SIMULATED (NSE LIVE)"
+                    return nse_data
+                else:
+                    with open("dhan_feed_status.log", "a") as f:
+                        f.write(f"{datetime.now()}: [SHOONYA ENGINE] NSE returned invalid JSON keys.\n")
         except Exception as e:
             with open("dhan_feed_status.log", "a") as f:
                 f.write(f"{datetime.now()}: [SHOONYA ENGINE] NSE Fetch failed: {e}\n")
