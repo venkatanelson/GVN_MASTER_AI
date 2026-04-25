@@ -391,13 +391,7 @@
                 </p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <div class="heartbeat" style="margin-right: 15px;">
-                    <div class="dot dot-blue"></div>
-                    <span style="color: #3b82f6;">Dhan API Active</span>
-                </div>
-                <button class="btn-premium" onclick="openOptionChain()" style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 16px;">
-                    📊 Live Option Chain
-                </button>
+                <!-- Cleaned up Dhan API Active & Live Option Chain -->
                 <div style="text-align: right;">
                     <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
                     <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
@@ -508,48 +502,11 @@
             </div>
         </div>
 
-        <!-- 🚀 GVN ZERO-TO-HERO SCANNER -->
-        <div class="premium-card" style="border-top: 6px solid var(--secondary); margin-top: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px;">
-                <h3 style="margin: 0; font-weight: 900; color: var(--secondary);">🎯 GVN AI Zero-to-Hero Scanner</h3>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <button onclick="openOptionChain(currentActiveIndex)" class="btn-premium" style="padding: 8px 16px; background: #10b981; border: none; font-size: 11px;">📊 Live Option Chain</button>
-                    <div class="heartbeat">
-                        <span id="heartbeat-dot" class="dot dot-blue"></span>
-                        <span style="color: #3b82f6;"><span id="oc-symbol-name">NIFTY</span>: <span id="ui-nifty-price">0.00</span></span>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="scanner-container" style="position: relative;">
-                {% if user.is_locked %}
-                <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(10px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 20px;">
-                    <div style="text-align: center; background: #fff; padding: 30px; border-radius: 24px; max-width: 320px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-                        <span style="font-size: 40px;">🔒</span>
-                        <h4 style="color: #000; margin: 15px 0 10px 0;">Scanner Data Locked</h4>
-                        <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">Unlock Premium signals to view live Alpha Grid levels.</p>
-                        <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="width: 100%;">Unlock Now</button>
-                    </div>
-                </div>
-                {% endif %}
-
-                <div style="overflow-x: auto;" class="{% if user.is_locked %}locked-blur{% endif %}">
-                    <table style="width: 100%; border-collapse: separate; border-spacing: 0 10px;">
-                        <thead>
-                            <tr style="text-align: left; color: var(--text-dim); font-size: 11px; text-transform: uppercase;">
-                                <th style="padding: 0 15px;">Option Strike</th>
-                                <th style="padding: 0 15px;">LTP & Delta</th>
-                                <th style="padding: 0 15px;">Grid Zone</th>
-                                <th style="padding: 0 15px;">AI Signal</th>
-                                <th style="padding: 0 15px;">Score %</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scanner-body">
-                            <tr><td colspan="5" style="text-align: center; padding: 40px;">📡 Connecting to GVN Cloud Engine...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <!-- Hidden GVN ZERO-TO-HERO SCANNER elements to prevent JS errors -->
+        <div style="display: none;">
+            <span id="oc-symbol-name">NIFTY</span>
+            <span id="ui-nifty-price">0.00</span>
+            <tbody id="scanner-body"></tbody>
         </div>
 
         <!-- TODAY'S LIVE SIGNALS -->
