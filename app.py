@@ -1156,12 +1156,139 @@ def update_lots():
 # TRADING LOGIC (The Mechanism)
 # ---------------------------------------------------------
 
+# ============================================================
+# 🤖 GVN AI SIGNAL VALIDATOR
+# Validates TradingView level alerts against live option chain
+# FAKE signal → skip | REAL signal → execute trade
+# ============================================================
+def gvn_ai_signal_validator(symbol, txn_type, price):
+    """
+    Returns: (is_valid: bool, reason: str, confidence: int 0-100)
+    Checks:
+      1. Market Hours (9:15–15:25 IST)
+      2. OI Direction  (CE OI vs PE OI)
+      3. ATM Greeks    (Delta 0.30–0.65, Gamma > 0.0003)
+      4. Deep Scan     (Greeks-based auto signals agree)
+      5. Pulse Score   (AI sentiment > 60 for BUY)
+    """
+    try:
+        import datetime as dt
+        now = dt.datetime.now()
+
+        # ── 1. Market Hours Gate ──
+        market_open  = now.replace(hour=9,  minute=15, second=0, microsecond=0)
+        market_close = now.replace(hour=15, minute=25, second=0, microsecond=0)
+        if not (market_open <= now <= market_close):
+            return False, "⏰ Market Closed — trades only 9:15-15:25", 0
+
+        # ── Index Detection ──
+        idx = "NIFTY"
+        if "BANK" in symbol.upper():    idx = "BANKNIFTY"
+        elif "FIN"  in symbol.upper():  idx = "FINNIFTY"
+        elif "SENSEX" in symbol.upper(): idx = "SENSEX"
+
+        summary = dhan_live_feed.live_option_chain_summary.get(idx, {})
+        pulse   = dhan_live_feed.market_pulse.get(idx, {})
+        scanner = dhan_live_feed.gvn_scanner_data.get(idx, [])
+        spot    = summary.get("spot", 0)
+
+        if spot == 0:
+            return False, "⚠️ Spot price 0 — API offline or market closed", 0
+
+        # ── 2. OI Direction (CE vs PE) ──
+        ce_items    = [s for s in scanner if "CE" in s.get("strike", "")]
+        pe_items    = [s for s in scanner if "PE" in s.get("strike", "")]
+        ce_oi_total = sum(s.get("oi", 0) for s in ce_items)
+        pe_oi_total = sum(s.get("oi", 0) for s in pe_items)
+        ce_oi_chg   = sum(s.get("oi_change", 0) for s in ce_items)
+        pe_oi_chg   = sum(s.get("oi_change", 0) for s in pe_items)
+        oi_ratio    = pe_oi_total / (ce_oi_total if ce_oi_total > 0 else 1)
+
+        if txn_type == "BUY":
+            # Bullish: PE OI >= CE OI (put writers absorbing) OR CE OI shrinking
+            oi_direction_ok = (oi_ratio >= 1.0) or (ce_oi_chg < 0)
+        else:
+            # Bearish: CE OI > PE OI (call writers building wall) OR PE OI shrinking
+            oi_direction_ok = (oi_ratio < 1.0) or (pe_oi_chg < 0)
+
+        # ── 3. ATM Greeks (Delta + Gamma) ──
+        atm        = summary.get("atm", 0)
+        atm_ce     = next((s for s in ce_items if str(atm) in s.get("strike", "")), None)
+        atm_pe     = next((s for s in pe_items if str(atm) in s.get("strike", "")), None)
+        greeks_ok  = False
+        greeks_info = "No ATM Greeks data"
+
+        if txn_type == "BUY" and atm_ce:
+            delta = abs(atm_ce.get("delta", 0))
+            gamma = atm_ce.get("gamma", 0)
+            theta = atm_ce.get("theta", 0)
+            greeks_ok  = (0.30 <= delta <= 0.65) and (gamma > 0.0003) and (theta > -8.0)
+            greeks_info = f"CE Δ:{delta:.2f} Γ:{gamma:.4f} Θ:{theta:.2f}"
+        elif txn_type == "SELL" and atm_pe:
+            delta = abs(atm_pe.get("delta", 0))
+            gamma = atm_pe.get("gamma", 0)
+            theta = atm_pe.get("theta", 0)
+            greeks_ok  = (0.30 <= delta <= 0.65) and (gamma > 0.0003) and (theta > -8.0)
+            greeks_info = f"PE Δ:{delta:.2f} Γ:{gamma:.4f} Θ:{theta:.2f}"
+
+        # ── 4. Deep Scan Agreement ──
+        deep_signals = dhan_live_feed.auto_trade_signals
+        deep_agrees  = any(
+            s.get("symbol") == idx and
+            (("CE" in s.get("strike", "") and txn_type == "BUY") or
+             ("PE" in s.get("strike", "") and txn_type == "SELL"))
+            for s in deep_signals[:5]
+        )
+
+        # ── 5. Pulse Score ──
+        pulse_score = pulse.get("score", 50)
+        pulse_ok    = (pulse_score >= 60) if txn_type == "BUY" else (pulse_score <= 40)
+
+        # ── Final Score ──
+        score   = 0
+        reasons = []
+
+        if oi_direction_ok:
+            score += 35; reasons.append("✅ OI OK")
+        else:
+            reasons.append("❌ OI Against")
+
+        if greeks_ok:
+            score += 35; reasons.append(f"✅ Greeks OK ({greeks_info})")
+        else:
+            reasons.append(f"⚠️ Greeks Weak ({greeks_info})")
+
+        if deep_agrees:
+            score += 20; reasons.append("✅ DeepScan Agrees")
+        else:
+            reasons.append("⚠️ DeepScan Mismatch")
+
+        if pulse_ok:
+            score += 10; reasons.append(f"✅ Pulse:{pulse_score}")
+        else:
+            reasons.append(f"⚠️ Pulse:{pulse_score}")
+
+        is_valid   = score >= 60
+        reason_str = " | ".join(reasons)
+
+        try:
+            with open("ai_signal_validation.log", "a", encoding="utf-8") as f:
+                f.write(f"{now}: [{idx}] {txn_type}@{price} Score:{score} Valid:{is_valid} | {reason_str}\n")
+        except: pass
+
+        return is_valid, reason_str, score
+
+    except Exception as e:
+        return True, f"Validator error (bypassed): {str(e)}", 50
+
+
 @app.route('/tv-webhook', methods=['POST'])
 def tv_webhook():
     import json
     # 🌟 GVN WEBHOOK DIAGNOSTICS
     with open("webhook_alerts.log", "a", encoding="utf-8") as f:
         f.write(f"{datetime.now()}: [INCOMING] {request.get_data(as_text=True)}\n")
+
     
     alert_data = request.json
     if not alert_data:
@@ -1206,8 +1333,20 @@ def tv_webhook():
         if u.algo_status == 'OFF' or u.admin_kill_switch:
             continue
 
+        # ── 🤖 GVN AI SIGNAL VALIDATION GATE ──
+        # Validate signal against live option chain before executing
+        if txn_type == "BUY":
+            is_valid, ai_reason, ai_score = gvn_ai_signal_validator(symbol, txn_type, price)
+            if not is_valid:
+                try:
+                    with open("ai_signal_validation.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: [BLOCKED] {symbol} BUY@{price} | Score:{ai_score} | {ai_reason}\n")
+                except: pass
+                continue  # Skip this user — fake signal blocked
+
         # Handle demo/real trade tracking per user
         if txn_type == "BUY":
+
             # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
             # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
             running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
