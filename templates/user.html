@@ -542,14 +542,14 @@
                   <script type="text/javascript">
                   // 🔧 GVN Symbol Map: Correct FREE TradingView symbols for Indian indices
                   const GVN_TV_SYMBOLS = {
-                      'NIFTY':     'NSE:NIFTY50',
-                      'BANKNIFTY': 'NSE:BANKNIFTY',
-                      'FINNIFTY':  'NSE:FINNIFTY',
+                      'NIFTY':     'BSE:NIFTY50',
+                      'BANKNIFTY': 'BSE:BANKNIFTY',
+                      'FINNIFTY':  'BSE:FINNIFTY',
                       'SENSEX':    'BSE:SENSEX'
                   };
 
                   var tvWidgetInstance = null;
-                  function initTV(symbol = 'NSE:NIFTY50') {
+                  function initTV(symbol = 'BSE:NIFTY50') {
                       if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
                       tvWidgetInstance = new TradingView.widget({
                         "autosize": true,
@@ -576,7 +576,7 @@
                   initTV();
 
                   function changeTVSymbol(indexName) {
-                      const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY50';
+                      const sym = GVN_TV_SYMBOLS[indexName] || 'BSE:NIFTY50';
                       if (window.lastTVSym !== sym) {
                           window.lastTVSym = sym;
                           initTV(sym);
