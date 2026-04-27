@@ -2062,10 +2062,10 @@ def get_ai_validation(symbol, txn_type, price):
 @app.route('/api/debug-data')
 def debug_data():
     return jsonify({
-        "summary": dhan_live_feed.live_option_chain_summary,
-        "scanner": dhan_live_feed.gvn_scanner_data,
-        "config": dhan_live_feed.dhan_master_config.get('active'),
-        "nifty_spot": dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+        "summary": shoonya_live_feed.live_option_chain_summary,
+        "scanner": shoonya_live_feed.gvn_scanner_data,
+        "config": shoonya_live_feed.shoonya_master_config.get('active'),
+        "nifty_spot": shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
 
 
@@ -2111,7 +2111,7 @@ def get_tradingview_technicals(symbol="NIFTY"):
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
     """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
-    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    n_price = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     tv_tech = get_tradingview_technicals("NIFTY")
     return jsonify({
         "status": "success",
