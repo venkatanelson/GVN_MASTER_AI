@@ -1503,6 +1503,9 @@ def save_api_settings():
         
     if totp_key and totp_key != '********':
         broker_config.encrypted_totp_key = cipher.encrypt(totp_key.encode())
+        
+    if broker_password and broker_password != '********':
+        broker_config.encrypted_password = cipher.encrypt(broker_password.encode())
     
     db.session.commit()
     
