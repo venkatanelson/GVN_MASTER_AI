@@ -9,5 +9,5 @@ python-dotenv==1.0.0
 dhanhq==2.0.2
 pyotp==2.9.0
 groq==0.13.0
-httpx==0.27.2
+httpx[http2]==0.27.2
 NorenRestApiPy
