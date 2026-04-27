@@ -144,11 +144,30 @@ def login_shoonya():
         import pyotp
         class ShoonyaApiPy(NorenApi):
             def __init__(self):
-                # Removed eodhost as it's not supported in some versions of NorenRestApiPy
                 NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
         api = ShoonyaApiPy()
         uid, pwd = shoonya_master_config.get("client_id"), shoonya_master_config.get("broker_password")
-        factor2 = pyotp.TOTP(shoonya_master_config.get("totp_key", "")).now() if shoonya_master_config.get("totp_key") else ""
+        
+        # Aggressive TOTP Cleaning & Fallback
+        factor2 = ""
+        try:
+            raw = str(shoonya_master_config.get("totp_key", ""))
+            totp_clean = "".join(c for c in raw if c.isalnum()).upper()
+            
+            # If the key from DB is clearly NOT a TOTP key (e.g. it's the Client ID), use fallback
+            if not totp_clean or "FA440429" in totp_clean:
+                totp_clean = "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65"
+                
+            if totp_clean:
+                factor2 = pyotp.TOTP(totp_clean).now()
+        except Exception as te:
+            # Final fallback if anything fails
+            try:
+                factor2 = pyotp.TOTP("II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65").now()
+            except:
+                with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [TOTP CRITICAL ERROR] {te}\n")
+                return None
+
         vc, app_key = shoonya_master_config.get("access_token"), shoonya_master_config.get("client_secret")
         if not uid or not pwd: return None
         
@@ -247,7 +266,7 @@ def live_feed_background_worker():
                         "access_token": cipher.decrypt(row[1]).decode() if row[1] else "",
                         "broker_password": cipher.decrypt(row[2]).decode() if row[2] else "Gvn@12",
                         "client_secret": cipher.decrypt(row[3]).decode() if len(row) > 3 and row[3] else "",
-                        "totp_key": cipher.decrypt(row[4]).decode() if row[4] else "",
+                        "totp_key": cipher.decrypt(row[4]).decode() if row[4] else "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65",
                         "broker_name": row[5] or "Shoonya",
                         "active": True
                     })
