@@ -1983,15 +1983,15 @@ def ai_chat():
         # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
         if str(n_spot) == '0' or n_spot == 0:
             # 🌟 Get live prices from background worker summary
-            n_spot = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-            b_spot = shoonya_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
-            s_spot = shoonya_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
-            f_spot = shoonya_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
+            n_spot = shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+            b_spot = shared_data.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
+            s_spot = shared_data.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
+            f_spot = shared_data.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
 
 
         import json
-        live_pulse = shoonya_live_feed.market_pulse.get("NIFTY", {})
-        live_options = shoonya_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
+        live_pulse = shared_data.market_pulse.get("NIFTY", {})
+        live_options = shared_data.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
@@ -2035,8 +2035,8 @@ def get_ai_validation(symbol, txn_type, price):
         
     try:
         live_data = {
-            "summary": shoonya_live_feed.live_option_chain_summary,
-            "scanner": shoonya_live_feed.gvn_scanner_data
+            "summary": shared_data.live_option_chain_summary,
+            "scanner": shared_data.gvn_scanner_data
         }
         
         system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
@@ -2065,10 +2065,10 @@ def get_ai_validation(symbol, txn_type, price):
 @app.route('/api/debug-data')
 def debug_data():
     return jsonify({
-        "summary": shoonya_live_feed.live_option_chain_summary,
-        "scanner": shoonya_live_feed.gvn_scanner_data,
-        "config": shoonya_live_feed.shoonya_master_config.get('active'),
-        "nifty_spot": shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+        "summary": shared_data.live_option_chain_summary,
+        "scanner": shared_data.gvn_scanner_data,
+        "config": True,
+        "nifty_spot": shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     })
 
 
