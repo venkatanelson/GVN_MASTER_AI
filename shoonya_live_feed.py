@@ -4,6 +4,7 @@ import time
 import threading
 import os
 import requests
+import json
 
 # Global memory for Shoonya Live Feed Engine
 current_delta_60_strikes = {
@@ -153,34 +154,37 @@ def login_shoonya():
         try:
             raw = str(shoonya_master_config.get("totp_key", ""))
             totp_clean = "".join(c for c in raw if c.isalnum()).upper()
-            
-            # If the key from DB is clearly NOT a TOTP key (e.g. it's the Client ID), use fallback
             if not totp_clean or "FA440429" in totp_clean:
                 totp_clean = "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65"
-                
             if totp_clean:
                 factor2 = pyotp.TOTP(totp_clean).now()
-        except Exception as te:
-            # Final fallback if anything fails
-            try:
-                factor2 = pyotp.TOTP("II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65").now()
-            except:
-                with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [TOTP CRITICAL ERROR] {te}\n")
-                return None
+        except:
+            factor2 = pyotp.TOTP("II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65").now()
 
         vc, app_key = shoonya_master_config.get("access_token"), shoonya_master_config.get("client_secret")
         if not uid or not pwd: return None
         
-        ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='12345')
-        if ret and ret.get('stat') == 'Ok':
-            shoonya_api = api
-            with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Successful.\n")
-            return api
-        else:
-            with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
+        # If VC is missing or long (not a UserID), try using UID as VC (Common for Shoonya)
+        if not vc or len(vc) > 20:
+            vc = uid
+
+        # Final protection against empty response crash
+        try:
+            # We must use a real-looking IMEI
+            ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='ABC123456789')
+            if ret and ret.get('stat') == 'Ok':
+                shoonya_api = api
+                with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Successful for {uid}.\n")
+                return api
+            else:
+                with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
+                return None
+        except Exception as inner_e:
+            with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Function Error: {inner_e}. Check VC and Secret.\n")
             return None
+
     except Exception as e:
-        with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Crash: {e}\n")
+        with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] General Crash: {e}\n")
         return None
 
 def fetch_option_chain(symbol="NIFTY"):
