@@ -11,7 +11,7 @@ import random
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
-import dhan_live_feed # 🌟 Custom Dhan API Real-Time Option Engine
+import shoonya_live_feed # 🌟 Custom Shoonya API Real-Time Option Engine
 import broker_api
 import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
@@ -1016,7 +1016,7 @@ def user_dashboard(user_id):
             if strike_match:
                 strike = strike_match.group(1)
                 opt_type = "CE" if "C" in t.symbol.upper() else "PE"
-                live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
+                live_price = shoonya_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
                 if live_price > 0:
                     current_pnl = (live_price - t.entry_price) * t.quantity if t.trade_type == 'BUY' else (t.entry_price - live_price) * t.quantity
 
@@ -1933,11 +1933,11 @@ def sync_admin_dhan_to_worker():
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
                 if conf:
                     token = cipher.decrypt(conf.encrypted_access_token).decode() if conf.encrypted_access_token else ""
-                    pwd = cipher.decrypt(conf.encrypted_password).decode() if conf.encrypted_password else ""
+                    pwd = cipher.decrypt(conf.encrypted_password).decode() if conf.encrypted_password else "Gvn@12"
                     c_secret = cipher.decrypt(conf.encrypted_client_secret).decode() if conf.encrypted_client_secret else ""
                     t_key = cipher.decrypt(conf.encrypted_totp_key).decode() if conf.encrypted_totp_key else ""
 
-                    dhan_live_feed.dhan_master_config.update({
+                    shoonya_live_feed.shoonya_master_config.update({
                         "client_id": conf.client_id,
                         "access_token": token,
                         "broker_password": pwd,
@@ -1982,15 +1982,15 @@ def ai_chat():
         # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
         if str(n_spot) == '0' or n_spot == 0:
             # 🌟 Get live prices from background worker summary
-            n_spot = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-            b_spot = dhan_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
-            s_spot = dhan_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
-            f_spot = dhan_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
+            n_spot = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+            b_spot = shoonya_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
+            s_spot = shoonya_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
+            f_spot = shoonya_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
 
 
         import json
-        live_pulse = dhan_live_feed.market_pulse.get("NIFTY", {})
-        live_options = dhan_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
+        live_pulse = shoonya_live_feed.market_pulse.get("NIFTY", {})
+        live_options = shoonya_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
         context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
@@ -2034,8 +2034,8 @@ def get_ai_validation(symbol, txn_type, price):
         
     try:
         live_data = {
-            "summary": dhan_live_feed.live_option_chain_summary,
-            "scanner": dhan_live_feed.gvn_scanner_data
+            "summary": shoonya_live_feed.live_option_chain_summary,
+            "scanner": shoonya_live_feed.gvn_scanner_data
         }
         
         system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
@@ -2117,12 +2117,12 @@ def gvn_scanner():
     tv_tech = get_tradingview_technicals("NIFTY")
     return jsonify({
         "status": "success",
-        "data": dhan_live_feed.gvn_scanner_data,
-        "summary": dhan_live_feed.live_option_chain_summary,
-        "market_pulse": dhan_live_feed.market_pulse,
+        "data": shoonya_live_feed.gvn_scanner_data,
+        "summary": shoonya_live_feed.live_option_chain_summary,
+        "market_pulse": shoonya_live_feed.market_pulse,
         "nifty_spot": n_price,
         "tradingview_tech": tv_tech,
-        "deep_scan_signals": dhan_live_feed.auto_trade_signals[:10]  # 🌟 Greeks-based auto-trade signals
+        "deep_scan_signals": shoonya_live_feed.auto_trade_signals[:10]  # 🌟 Greeks-based auto-trade signals
     })
 
 @app.route('/unlock-premium/<int:user_id>')
@@ -2143,7 +2143,7 @@ with app.app_context():
     # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
     if not getattr(app, '_workers_started', False):
         sync_admin_dhan_to_worker()
-        dhan_live_feed.start_live_feed_worker()
+        shoonya_live_feed.start_live_feed_worker()
         app._workers_started = True
 
 if __name__ == '__main__':
