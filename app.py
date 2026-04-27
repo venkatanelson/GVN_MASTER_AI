@@ -424,16 +424,14 @@ def gvn_signal_engine():
     """Monitors the GVN Scanner for breakout signals and triggers execution."""
     print("🚀 [GVN SIGNAL ENGINE] Monitoring for Level Breakouts...")
     processed_triggers = set() # To avoid duplicate alerts in the same minute
-    
     while True:
         try:
             with app.app_context():
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-                    scanner_data = dhan_live_feed.gvn_scanner_data.get(symbol, [])
+                    scanner_data = shoonya_live_feed.gvn_scanner_data.get(symbol, [])
                     for item in scanner_data:
                         trigger = item.get('trigger_signal')
                         strike = item.get('strike')
-                        
                         if trigger:
                             trigger_key = f"{strike}_{trigger}_{datetime.now().strftime('%H:%M')}"
                             if trigger_key not in processed_triggers:
