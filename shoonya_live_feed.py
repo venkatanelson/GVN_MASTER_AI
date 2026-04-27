@@ -144,20 +144,25 @@ def login_shoonya():
         import pyotp
         class ShoonyaApiPy(NorenApi):
             def __init__(self):
-                NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/', eodhost='https://api.shoonya.com/chartApi/getdata/')
+                # Removed eodhost as it's not supported in some versions of NorenRestApiPy
+                NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
         api = ShoonyaApiPy()
         uid, pwd = shoonya_master_config.get("client_id"), shoonya_master_config.get("broker_password")
         factor2 = pyotp.TOTP(shoonya_master_config.get("totp_key", "")).now() if shoonya_master_config.get("totp_key") else ""
         vc, app_key = shoonya_master_config.get("access_token"), shoonya_master_config.get("client_secret")
         if not uid or not pwd: return None
+        
         ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='12345')
         if ret and ret.get('stat') == 'Ok':
             shoonya_api = api
             with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Successful.\n")
             return api
+        else:
+            with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
+            return None
     except Exception as e:
-        with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {e}\n")
-    return None
+        with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [SHOONYA API] Crash: {e}\n")
+        return None
 
 def fetch_option_chain(symbol="NIFTY"):
     broker = shoonya_master_config.get("broker_name", "Shoonya")
@@ -168,12 +173,10 @@ def fetch_option_chain(symbol="NIFTY"):
         try:
             tokens = {"NIFTY": "26000", "BANKNIFTY": "26009", "FINNIFTY": "26037", "SENSEX": "1"}
             quote = api.get_quotes("NSE", tokens.get(symbol, "26000"))
-            lp = float(quote.get('lp', 0))
-            
-            # 🛑 NO NSE SCRAPING - ONLY BROKER API 🛑
-            # Since Shoonya native option chain is multi-step, we use a placeholder or return LTP for now.
-            # Real Shoonya Option Chain requires searching symbols and getting quotes for each.
-            return {"records": {"underlyingValue": lp, "expiryDates": [], "data": []}, "source": "SHOONYA_API_ONLY"}
+            if quote and quote.get('stat') == 'Ok':
+                lp = float(quote.get('lp', 0))
+                return {"records": {"underlyingValue": lp, "expiryDates": [], "data": []}, "source": "SHOONYA_API_ONLY"}
+            return None
         except: return None
 
     if broker == "Dhan" and shoonya_master_config.get("active"):
@@ -207,6 +210,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         atm = int(round(underlying_value / (50 if symbol == "NIFTY" else 100)) * (50 if symbol == "NIFTY" else 100))
         live_option_chain_summary[symbol]["atm"] = atm
         live_option_chain_summary["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
+        gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
         update_ai_dashboard(symbol, underlying_value)
 
 def live_feed_background_worker():
@@ -225,7 +229,10 @@ def live_feed_background_worker():
                     conn.close()
                 else:
                     import sqlite3
-                    conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                    if os.path.exists('instance/gvn_algo_pro.db'):
+                        conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                    else:
+                        conn = sqlite3.connect('gvn_algo_pro.db')
                     cursor = conn.cursor()
                     cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password, encrypted_client_secret, encrypted_totp_key, broker_name FROM user_broker_config LIMIT 1")
                     row = cursor.fetchone()
@@ -251,9 +258,8 @@ def live_feed_background_worker():
                     time.sleep(5)
             time.sleep(2)
         except Exception as e:
+            with open("shoonya_feed_status.log", "a") as f: f.write(f"{datetime.datetime.now()}: [WORKER CRASH] {e}\n")
             time.sleep(10)
 
 def start_live_feed_worker():
-    broker = shoonya_master_config.get("broker_name", "Shoonya").upper()
-    print(f"\n==================================================\n🔥 GVN MASTER ALGO: {broker} LIVE FEED ENGINE STARTING...\n==================================================\n")
     threading.Thread(target=live_feed_background_worker, daemon=True).start()
