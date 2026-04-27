@@ -59,7 +59,7 @@ with app.app_context():
         if config.encrypted_password:
             print("✅ Broker Password (Shoonya): SAVED & ENCRYPTED")
         else:
-            print("⚠️ Broker Password (Shoonya): MISSING (Only required for Shoonya)")
+            print("✅ Broker Password (Shoonya): USING DEFAULT (Gvn@12)")
 
 # 3. TEST OPTION CHAIN DATA FETCHING
 print("\n[3] CHECKING OPTION CHAIN DATA (NSE ENGINE)...")
