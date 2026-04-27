@@ -24,3 +24,12 @@ market_pulse = {
 }
 
 auto_trade_signals = []
+
+# Persistent memory for monitored strikes and their i-levels
+monitored_strikes = {
+    "CALL": {"symbol": None, "last_price": 0, "levels": None, "momentum": "NEUTRAL"},
+    "PUT": {"symbol": None, "last_price": 0, "levels": None, "momentum": "NEUTRAL"}
+}
+
+# Calculated i-levels for strikes to avoid recalculating
+i_level_memory = {}
