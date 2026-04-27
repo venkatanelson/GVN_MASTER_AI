@@ -99,11 +99,13 @@ def login_shoonya():
 
 def fetch_data_emergency():
     try:
-        # Use a more reliable public source for Nifty price
-        resp = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI", headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        # Reliable public source for Nifty 50
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        resp = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI", headers=headers, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            return data['chart']['result'][0]['meta']['regularMarketPrice']
+            price = data['chart']['result'][0]['meta']['regularMarketPrice']
+            return float(price)
     except: pass
     return 0
 
@@ -123,6 +125,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
         underlying_value = fetch_data_emergency()
 
     if underlying_value > 0:
+        # Update both the specific symbol and the general summary for the UI
         live_option_chain_summary[symbol]["spot"] = underlying_value
         atm = int(round(underlying_value / (50 if symbol == "NIFTY" else 100)) * (50 if symbol == "NIFTY" else 100))
         live_option_chain_summary[symbol]["atm"] = atm
