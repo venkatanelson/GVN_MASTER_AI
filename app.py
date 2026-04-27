@@ -2111,7 +2111,12 @@ def get_tradingview_technicals(symbol="NIFTY"):
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
     """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
+    # Force a direct fetch from the live feed summary
     n_price = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+    if n_price == 0:
+        # Fallback to check if it's stored in the index directly
+        n_price = shoonya_live_feed.live_option_chain_summary.get('spot', 0)
+    
     tv_tech = get_tradingview_technicals("NIFTY")
     return jsonify({
         "status": "success",
@@ -2120,7 +2125,7 @@ def gvn_scanner():
         "market_pulse": shoonya_live_feed.market_pulse,
         "nifty_spot": n_price,
         "tradingview_tech": tv_tech,
-        "deep_scan_signals": shoonya_live_feed.auto_trade_signals[:10]  # 🌟 Greeks-based auto-trade signals
+        "deep_scan_signals": shoonya_live_feed.auto_trade_signals[:10]
     })
 
 @app.route('/unlock-premium/<int:user_id>')
