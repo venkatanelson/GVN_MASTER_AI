@@ -11,11 +11,14 @@ import random
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
+import time
+import threading
+import sqlite3
+import shared_data
 import shoonya_live_feed # 🌟 Custom Shoonya API Real-Time Option Engine
 import broker_api
 import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
-import threading
 from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
 
 
@@ -428,7 +431,7 @@ def gvn_signal_engine():
         try:
             with app.app_context():
                 for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-                    scanner_data = shoonya_live_feed.gvn_scanner_data.get(symbol, [])
+                    scanner_data = shared_data.gvn_scanner_data.get(symbol, [])
                     for item in scanner_data:
                         trigger = item.get('trigger_signal')
                         strike = item.get('strike')
@@ -2108,24 +2111,21 @@ def get_tradingview_technicals(symbol="NIFTY"):
         print(f"[TV SCANNER ERROR] {e}")
     return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
 
+import shared_data
+
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
-    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
-    # Force a direct fetch from the live feed summary
-    n_price = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-    if n_price == 0:
-        # Fallback to check if it's stored in the index directly
-        n_price = shoonya_live_feed.live_option_chain_summary.get('spot', 0)
-    
+    """Returns the latest Zero-to-Hero scanner data from Shared Memory."""
+    n_price = shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     tv_tech = get_tradingview_technicals("NIFTY")
     return jsonify({
         "status": "success",
-        "data": shoonya_live_feed.gvn_scanner_data,
-        "summary": shoonya_live_feed.live_option_chain_summary,
-        "market_pulse": shoonya_live_feed.market_pulse,
+        "data": shared_data.gvn_scanner_data,
+        "summary": shared_data.live_option_chain_summary,
+        "market_pulse": shared_data.market_pulse,
         "nifty_spot": n_price,
         "tradingview_tech": tv_tech,
-        "deep_scan_signals": shoonya_live_feed.auto_trade_signals[:10]
+        "deep_scan_signals": shared_data.auto_trade_signals[:10]
     })
 
 @app.route('/unlock-premium/<int:user_id>')
