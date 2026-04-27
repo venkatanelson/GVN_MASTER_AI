@@ -2068,7 +2068,8 @@ def debug_data():
         "summary": shared_data.live_option_chain_summary,
         "scanner": shared_data.gvn_scanner_data,
         "config": True,
-        "nifty_spot": shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
+        "nifty_spot": shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0),
+        "monitored_strikes": shared_data.monitored_strikes
     })
 
 
@@ -2112,6 +2113,21 @@ def get_tradingview_technicals(symbol="NIFTY"):
     return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
 
 import shared_data
+
+@app.route('/api/set-monitored-strike', methods=['POST'])
+def set_monitored_strike():
+    data = request.json
+    strike_type = data.get('type') # 'CALL' or 'PUT'
+    symbol = data.get('symbol')
+    
+    if strike_type in ['CALL', 'PUT'] and symbol:
+        shared_data.monitored_strikes[strike_type]['symbol'] = symbol.upper()
+        # Reset memory for this strike to force recalculation of levels
+        if symbol.upper() in shared_data.i_level_memory:
+            del shared_data.i_level_memory[symbol.upper()]
+            
+        return jsonify({"status": "success", "message": f"{strike_type} strike set to {symbol}"})
+    return jsonify({"status": "error", "message": "Invalid strike data"}), 400
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
