@@ -134,6 +134,18 @@ def get_admin_config():
                 conn.commit()
         except: pass
 
+    # Ensure UserBrokerConfig columns exist
+    try:
+        db.session.execute(text("SELECT call_strike FROM user_broker_config LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE user_broker_config ADD COLUMN call_strike VARCHAR(50)"))
+                conn.execute(text("ALTER TABLE user_broker_config ADD COLUMN put_strike VARCHAR(50)"))
+                conn.commit()
+        except: pass
+
     config = AdminConfig.query.first()
     if not config:
         config = AdminConfig()
@@ -242,6 +254,8 @@ class UserBrokerConfig(db.Model):
     encrypted_client_secret = db.Column(db.LargeBinary, nullable=True) # 🌟 NEW for Auto-Refresh
     encrypted_totp_key = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Auto-Refresh
     encrypted_password = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Shoonya/Fyers Password
+    call_strike = db.Column(db.String(50), nullable=True)           # 🌟 NEW: User selected Call Strike
+    put_strike = db.Column(db.String(50), nullable=True)            # 🌟 NEW: User selected Put Strike
 
 
 class AIPaperTrade(db.Model):
@@ -1284,21 +1298,21 @@ def gvn_ai_signal_validator(symbol, txn_type, price):
 
 
 @app.route('/tv-webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def tv_webhook():
     import json
     # 🌟 GVN WEBHOOK DIAGNOSTICS
+    raw_data = request.get_data(as_text=True)
     with open("webhook_alerts.log", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()}: [INCOMING] {request.get_data(as_text=True)}\n")
-
+        f.write(f"{datetime.now()}: [INCOMING] {raw_data}\n")
     
     alert_data = request.json
     if not alert_data:
         # Fallback to parse it manually if it contains dirty text from TradingView (like {{alert_message}})
-        raw_text = request.get_data(as_text=True)
-        if raw_text and "{" in raw_text and "}" in raw_text:
+        if raw_data and "{" in raw_data and "}" in raw_data:
             try:
                 # Extract string between first '{' and last '}'
-                json_str = raw_text[raw_text.find('{'):raw_text.rfind('}')+1]
+                json_str = raw_data[raw_data.find('{'):raw_data.rfind('}')+1]
                 alert_data = json.loads(json_str)
             except Exception as e:
                 return jsonify({"status": "error", "message": f"Invalid JSON format: {str(e)}"}), 400
@@ -1471,6 +1485,8 @@ def save_api_settings():
     client_secret = request.form.get('client_secret') 
     totp_key = request.form.get('totp_key')           
     broker_password = request.form.get('broker_password')
+    call_strike = request.form.get('call_strike')
+    put_strike = request.form.get('put_strike')
     
     user = User.query.get_or_404(user_id)
     
@@ -1507,6 +1523,9 @@ def save_api_settings():
         
     if broker_password and broker_password != '********':
         broker_config.encrypted_password = cipher.encrypt(broker_password.encode())
+    
+    broker_config.call_strike = call_strike
+    broker_config.put_strike = put_strike
     
     db.session.commit()
     
@@ -2134,6 +2153,15 @@ def gvn_scanner():
     """Returns the latest Zero-to-Hero scanner data from Shared Memory."""
     n_price = shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     tv_tech = get_tradingview_technicals("NIFTY")
+    
+    user_id = session.get('user_id')
+    user_strikes = {"CALL": "N/A", "PUT": "N/A"}
+    if user_id:
+        conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+        if conf:
+            user_strikes["CALL"] = conf.call_strike or "N/A"
+            user_strikes["PUT"] = conf.put_strike or "N/A"
+
     return jsonify({
         "status": "success",
         "data": shared_data.gvn_scanner_data,
@@ -2141,7 +2169,8 @@ def gvn_scanner():
         "market_pulse": shared_data.market_pulse,
         "nifty_spot": n_price,
         "tradingview_tech": tv_tech,
-        "deep_scan_signals": shared_data.auto_trade_signals[:10]
+        "deep_scan_signals": shared_data.auto_trade_signals[:10],
+        "user_strikes": user_strikes
     })
 
 @app.route('/unlock-premium/<int:user_id>')
