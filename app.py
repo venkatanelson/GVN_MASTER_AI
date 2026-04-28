@@ -15,7 +15,8 @@ import time
 import threading
 import sqlite3
 import shared_data
-import shoonya_live_feed # 🌟 Custom Shoonya API Real-Time Option Engine
+import shoonya_live_feed 
+import dhan_live_feed # 🌟 Consolidated High-Speed Option Engine
 import broker_api
 import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
@@ -701,6 +702,8 @@ def demo_register():
         demo_capital=capital,
         selected_plan='Demo Trial',
         is_approved=True,
+        is_locked=False,
+        signals_unlocked_until=datetime.utcnow() + timedelta(hours=5, minutes=30, days=30),
         expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=30),
         algo_status='ON'
     )
@@ -1947,8 +1950,15 @@ def sync_admin_dhan_to_worker():
     """Finds the admin's API key and shares it with the background worker."""
     with app.app_context():
         try:
-            # Use a more modern query style
+            # First try hardcoded email
             admin = db.session.query(User).filter_by(email='nelsonp143@gmail.com').first()
+            if not admin:
+                # Then try any user with is_admin flag
+                admin = User.query.filter_by(is_admin=True).first()
+            if not admin:
+                # Finally just take the first user as admin fallback
+                admin = User.query.first()
+                
             if admin:
                 conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
                 if conf:
@@ -1957,7 +1967,7 @@ def sync_admin_dhan_to_worker():
                     c_secret = cipher.decrypt(conf.encrypted_client_secret).decode() if conf.encrypted_client_secret else ""
                     t_key = cipher.decrypt(conf.encrypted_totp_key).decode() if conf.encrypted_totp_key else ""
 
-                    shoonya_live_feed.shoonya_master_config.update({
+                    sync_data = {
                         "client_id": conf.client_id,
                         "access_token": token,
                         "broker_password": pwd,
@@ -1965,7 +1975,11 @@ def sync_admin_dhan_to_worker():
                         "totp_key": t_key,
                         "broker_name": conf.broker_name,
                         "active": True
-                    })
+                    }
+                    # Sync to BOTH for safety
+                    shoonya_live_feed.shoonya_master_config.update(sync_data)
+                    dhan_live_feed.dhan_master_config.update(sync_data)
+                    
                     print(f"✅ [{conf.broker_name.upper()} SYNC] Master Data Feed linked to Admin: {admin.username}")
 
 
@@ -2191,7 +2205,8 @@ with app.app_context():
     # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
     if not getattr(app, '_workers_started', False):
         sync_admin_dhan_to_worker()
-        shoonya_live_feed.start_live_feed_worker()
+        # shoonya_live_feed.start_live_feed_worker() # Bypassing basic engine
+        dhan_live_feed.start_live_feed_worker()     # Starting Advanced Alpha Engine
         app._workers_started = True
 
 if __name__ == '__main__':
