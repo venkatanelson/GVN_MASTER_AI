@@ -6,7 +6,15 @@ import shared_data
 import gvn_levels_engine
 
 # DHAN LIVE FEED ENGINE v2.5
-# 🌟 Dynamic 14-Strike Level Engine Integrated
+# 🌟 Cleaned and Fixed - No Null Bytes
+
+dhan_master_config = {
+    "client_id": None, "access_token": None, "broker_name": "Dhan", "active": False
+}
+
+shoonya_master_config = {
+    "client_id": None, "password": None, "totp_key": None, "broker_name": "Shoonya", "active": False
+}
 
 def fetch_dhan_spot_data(symbol="NIFTY"):
     """
@@ -48,19 +56,13 @@ def process_strike_levels():
                 # 3. Calculate Levels for each strike
                 for symbol in strikes_to_scan:
                     if symbol not in shared_data.strike_level_cache:
-                        # Simulation of 9:15 High/Low extraction
-                        # In production, this pulls from dhan.get_historical_data
                         mock_h = 100.0 
                         mock_l = 50.0
-                        
                         levels = gvn_levels_engine.calculate_master_levels(mock_h, mock_l)
                         if levels:
                             shared_data.strike_level_cache[symbol] = levels
-                            # Also update monitored strikes for UI
-                            st_type = "CALL" if "CE" in symbol else "PUT"
-                            # shared_data.monitored_strikes[st_type] = {"symbol": symbol, "levels": levels}
-                
-            time.sleep(10) # Refresh ATM/Strikes every 10 seconds
+            
+            time.sleep(10)
         except Exception as e:
             print(f"⚠️ [DHAN FEED ERROR] {e}")
             time.sleep(5)
