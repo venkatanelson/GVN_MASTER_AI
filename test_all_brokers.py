@@ -31,6 +31,12 @@ def load_broker_config():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+
+        # First check what columns exist
+        cursor.execute("PRAGMA table_info(user_broker_config)")
+        columns = [col[1] for col in cursor.fetchall()]
+        print(f"🗄️  DB Columns found: {columns}")
+
         cursor.execute("""
             SELECT 
                 client_id,
@@ -53,16 +59,26 @@ def load_broker_config():
         def decrypt(val):
             try:
                 return cipher.decrypt(val).decode() if val else ""
-            except Exception as e:
+            except Exception:
                 return ""
 
+        access_token_dec = decrypt(row[1])
+        client_id_val    = row[0] or ""
+
+        # 🌟 FIX: Shoonya lo client_id DB column lo save kaani situation handle
+        # If client_id is empty but access_token looks like a Shoonya User ID (FA......)
+        broker_name_raw = row[5] or "Dhan"
+        if not client_id_val and "shoonya" in broker_name_raw.lower():
+            print("⚠️  client_id DB lo NULL gaa undi!")
+            client_id_val = input("   Shoonya User ID enter cheyyandi (e.g. FA12345): ").strip()
+
         config = {
-            "client_id":       row[0] or "",
-            "access_token":    decrypt(row[1]),   # Dhan/Zerodha/Upstox/Fyers/Angel access token
-            "password":        decrypt(row[2]),   # Shoonya / Fyers / Angel password
+            "client_id":       client_id_val,
+            "access_token":    access_token_dec,  # Dhan/Upstox/Fyers/Angel token | Shoonya = vendor_code
+            "password":        decrypt(row[2]),   # Shoonya / Angel MPIN
             "client_secret":   decrypt(row[3]),   # Shoonya api_secret / Zerodha api_secret
             "totp_key":        decrypt(row[4]),   # TOTP Secret Key
-            "broker_name":     row[5] or "Dhan",
+            "broker_name":     broker_name_raw,
             "webhook_url":     row[6] or "",
             "tv_secret":       decrypt(row[7]),   # TradingView webhook secret
         }
@@ -120,10 +136,13 @@ def test_shoonya(cfg):
     print(f"📋 TOTP Key     : {totp_key[:6]}... ({len(totp_key)} chars)")
 
     if not all([client_id, vendor_code, password, api_secret]):
-        print("❌ Missing credentials! Dashboard Settings lo fill cheyyandi:")
-        print("   Client ID = Shoonya UserID | Access Token = Vendor Code")
-        print("   Client Secret = API Secret | Password = Shoonya Password")
-        print("   TOTP = 16-char TOTP Secret")
+        print("❌ Missing credentials!")
+        if not client_id:
+            print("   ⚠️  CLIENT ID NULL! Dashboard Settings lo 'Client ID' field lo Shoonya User ID (FA.....) enter cheyyandi")
+        print("   Access Token = Vendor Code (FA440429 format)")
+        print("   Client Secret = API Secret (64 char)")
+        print("   Password = Shoonya Login Password")
+        print("   TOTP = 32-char TOTP Secret")
         return False
 
     totp = get_totp(totp_key)
@@ -142,30 +161,101 @@ def test_shoonya(cfg):
         "imei":       "abs1234",
         "source":     "API"
     }
-
     jData = "jData=" + json.dumps(payload)
 
-    try:
-        url  = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
-        resp = requests.post(url, data=jData, timeout=12)
-        print(f"\n📡 HTTP Status : {resp.status_code}")
-        print(f"📡 Response    : {resp.text[:300]}")
+    # 🌟 Multiple Shoonya API URLs - 502 vaste next try cheyyi
+    shoonya_urls = [
+        "https://api.shoonya.com/NorenWClientTP/QuickAuth",
+        "https://api.shoonya.com/NorenWSTP/QuickAuth",
+        "https://shoonyaapi.com/NorenWClientTP/QuickAuth",
+        "https://api.shoonya.com/NorenWClientTP/QuickAuthenticate",
+    ]
 
-        result = resp.json()
-        if result.get('stat') == 'Ok':
-            token = result.get('susertoken', '')
-            print(f"\n✅ SHOONYA LOGIN SUCCESS!")
-            print(f"   Session Token: {token[:25]}...")
-            print(f"   User Name    : {result.get('uname', 'N/A')}")
-            return True
-        else:
-            print(f"\n❌ Shoonya Login Failed: {result.get('emsg', result)}")
-            print("👉 Solution: Dashboard Settings → credentials re-enter cheyyandi")
-            return False
+    for url in shoonya_urls:
+        print(f"\n🔄 Trying: {url}")
+        try:
+            resp = requests.post(url, data=jData, timeout=12)
+            print(f"📡 HTTP Status : {resp.status_code}")
 
-    except Exception as e:
-        print(f"❌ Connection Error: {e}")
-        return False
+            if resp.status_code == 502:
+                print(f"⚠️  502 Bad Gateway - URL down, next try cheyyatam...")
+                continue
+
+            if resp.status_code == 404:
+                print(f"⚠️  404 Not Found - wrong URL, next try...")
+                continue
+
+            raw = resp.text.strip()
+            print(f"📡 Response    : {raw[:350]}")
+
+            if not raw or raw.startswith('<'):
+                print(f"⚠️  HTML response (not JSON), next URL try...")
+                continue
+
+            result = resp.json()
+            if result.get('stat') == 'Ok':
+                token = result.get('susertoken', '')
+                print(f"\n✅ SHOONYA LOGIN SUCCESS! (URL: {url})")
+                print(f"   Session Token: {token[:25]}...")
+                print(f"   User Name    : {result.get('uname', 'N/A')}")
+                print(f"   Exchange     : {result.get('exarr', 'N/A')}")
+                # Save token for reference
+                try:
+                    with open('shoonya_session.txt', 'w') as f:
+                        f.write(f"token={token}\nurl={url}\nuid={client_id}\n")
+                    print(f"   ✅ Token saved to shoonya_session.txt")
+                except: pass
+                return True
+            else:
+                err = result.get('emsg', str(result))
+                print(f"\n❌ Shoonya Login Failed: {err}")
+                print("   Possible causes:")
+                print("   1. Wrong password - Shoonya login password enter cheyyandi")
+                print("   2. Wrong Client ID - FA........ format")
+                print("   3. TOTP expired - 30 seconds lo expire avutundi, try again")
+                print("   4. API Secret wrong - Shoonya developer portal lo check")
+                return False
+
+        except requests.exceptions.JSONDecodeError:
+            print(f"⚠️  JSON parse error (HTML response), next URL...")
+            continue
+        except requests.exceptions.ConnectionError:
+            print(f"⚠️  Connection refused, next URL...")
+            continue
+        except Exception as e:
+            print(f"⚠️  Error: {e}, next URL...")
+            continue
+
+    print("\n❌ SHOONYA: Anni URLs 502/fail ayyayi!")
+    print("\n" + "━"*55)
+    print("🔴  ROOT CAUSE: SHOONYA API UPDATE (April 2026)")
+    print("━"*55)
+    print("""
+Shoonya has updated its API in April 2026.
+Now your SERVER/PC IP must be WHITELISTED in Shoonya Prism.
+
+👉 SOLUTION - Follow these steps:
+
+STEP 1: Find your PUBLIC IP
+   Open browser → type: https://whatismyip.com
+   Note your IP (e.g., 103.45.67.89)
+
+STEP 2: Whitelist IP in Shoonya Prism
+   Login → https://shoonya.com → Prism (Developer)
+   → My Profile → API Settings → IP Whitelist
+   → Add your IP → Save
+
+STEP 3: If on Render/Cloud:
+   Your cloud IP changes! Set: 0.0.0.0/0 (Allow All)
+   OR use a fixed IP VPS/proxy.
+
+STEP 4: Re-run this test:
+   python test_all_brokers.py
+
+📞 Shoonya Support: 0422-4225555
+""")
+    return False
+
 
 
 # ══════════════════════════════════════════════════════════════
