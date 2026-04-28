@@ -1324,12 +1324,35 @@
             }
         }
 
+        function updateDemoLogs(signals) {
+            const tbody = document.getElementById('demoLogsTable');
+            if (!signals || signals.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No active signals</td></tr>';
+                return;
+            }
+
+            let html = '';
+            signals.reverse().forEach(s => {
+                html += `<tr>
+                    <td>${s.time}</td>
+                    <td><span class="badge bg-primary">${s.strike}</span></td>
+                    <td>₹${s.level}</td>
+                    <td class="text-info">${s.signal}</td>
+                    <td><span class="badge bg-warning text-dark">${s.action}</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
         // Auto-refresh demo logs
         setInterval(() => {
-            if (robotActive) {
-                // Fetch latest signals from backend
-                // updateDemoLogs();
-            }
+            fetch('/api/gvn-scanner')
+            .then(r => r.json())
+            .then(data => {
+                if (robotActive) {
+                    updateDemoLogs(data.demo_signals);
+                }
+            });
         }, 3000);
     </script>
 </body>

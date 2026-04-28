@@ -1980,6 +1980,13 @@ def sync_admin_dhan_to_worker():
                     shoonya_live_feed.shoonya_master_config.update(sync_data)
                     dhan_live_feed.dhan_master_config.update(sync_data)
                     
+                    # 🌟 UPDATE DASHBOARD STATUS
+                    shared_data.broker_connection_status.update({
+                        "connected": True,
+                        "broker_name": conf.broker_name,
+                        "reason": f"Active via Admin: {admin.username}"
+                    })
+                    
                     print(f"✅ [{conf.broker_name.upper()} SYNC] Master Data Feed linked to Admin: {admin.username}")
 
 
@@ -2002,8 +2009,28 @@ def update_robot_status():
     print(f"🤖 [ROBOT] Status changed to: {'ON' if ROBOT_ACTIVE else 'OFF'}")
     return jsonify({"status": "success", "active": ROBOT_ACTIVE})
 
-# ==========================================
-# 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
+# 🚀 TELEGRAM NOTIFICATION ENGINE
+def send_telegram_alert(message):
+    try:
+        # Get bot token and chat id from settings or env
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        if bot_token and chat_id:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
+            requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"❌ [TELEGRAM ERROR] {e}")
+
+def format_gvn_signal(symbol, entry, target, sl, type):
+    icon = "🚀" if "Z_TO_H" in type else "🔥"
+    msg = f"*{icon} GVN MASTER ALGO - NEW ENTRY {icon}*\n\n"
+    msg += f"🎯 *Symbol:* {symbol}\n"
+    msg += f"💰 *Entry Price:* ₹{entry}\n"
+    msg += f"✅ *Target:* ₹{target}\n"
+    msg += f"🛑 *Stop Loss:* ₹{sl}\n\n"
+    msg += f"_⚡ Processed exactly as per GVN Settings_"
+    return msg
 # ==========================================
 import requests
 
@@ -2219,6 +2246,7 @@ def gvn_scanner():
         "nifty_spot": n_price,
         "tradingview_tech": tv_tech,
         "deep_scan_signals": shared_data.auto_trade_signals[:10],
+        "demo_signals": DEMO_SIGNALS,
         "user_strikes": user_strikes
     })
 
