@@ -1,56 +1,90 @@
+import sqlite3
 import os
-from datetime import datetime, timedelta
-from app import db, app, AlgoTrade, DailyPnL
 
-with app.app_context():
-    # Remove duplicate flat trades to clean up dashboard
-    zero_pnl_trades = AlgoTrade.query.filter(AlgoTrade.pnl == 0, AlgoTrade.status == 'Closed').all()
-    for t in zero_pnl_trades:
-        db.session.delete(t)
+# GVN Master DB Fix Script - Adds ALL missing columns
+db_path = 'instance/gvn_algo_pro.db'
 
-    # Fix negative trades to positive as requested (CE 333 -> 394) and (PE 479 -> 566)
-    negative_trades = AlgoTrade.query.filter(AlgoTrade.pnl < 0, AlgoTrade.status == 'Closed').all()
-    for t in negative_trades:
-        if "C22850" in t.symbol:
-            # Reversing the drop to a profit
-            t.exit_price = t.entry_price + 60.5
-            t.pnl = (t.exit_price - t.entry_price) * t.quantity
-            print(f"Fixed {t.symbol} to {t.exit_price} (+{t.pnl})")
-        elif "P23100" in t.symbol:
-            t.exit_price = 566.58
-            t.pnl = (t.exit_price - t.entry_price) * t.quantity
-            print(f"Fixed {t.symbol} to {t.exit_price} (+{t.pnl})")
+if not os.path.exists(db_path):
+    print(f"❌ Database not found at {db_path}. Please run app.py once first.")
+else:
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
 
-    db.session.commit()
+        # ─── user_broker_config columns ───
+        cursor.execute("PRAGMA table_info(user_broker_config)")
+        broker_cols = [col[1] for col in cursor.fetchall()]
+        print(f"📋 Current user_broker_config columns: {broker_cols}")
 
-    # Safely recalculate Today's DailyPnL
-    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    today_date = today_dt.date()
-    # Assuming the app mostly clears history, all_closed_today means total pnl of the DB basically
-    all_closed = AlgoTrade.query.filter_by(status='Closed').all()
-    # Wait, the app recalculates user dashboard P&L based on `t.pnl for t in todays_trades`.
-    # Let's also update the DailyPnL for today
-    
-    # Calculate for each day in case there are multiple
-    from collections import defaultdict
-    daily_totals = defaultdict(float)
-    for t in all_closed:
-        if t.timestamp:
-            t_date = t.timestamp.date()
-            daily_totals[t_date] += t.pnl
+        broker_additions = [
+            ("call_strike",              "VARCHAR(50)"),
+            ("put_strike",               "VARCHAR(50)"),
+            ("client_id",                "VARCHAR(100)"),
+            ("encrypted_access_token",   "BLOB"),
+            ("encrypted_client_secret",  "BLOB"),
+            ("encrypted_totp_key",       "BLOB"),
+            ("encrypted_password",       "BLOB"),
+        ]
+        for col_name, col_type in broker_additions:
+            if col_name not in broker_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE user_broker_config ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                    print(f"✅ Added '{col_name}' to user_broker_config")
+                except Exception as e:
+                    print(f"⚠️  Could not add '{col_name}': {e}")
+            else:
+                print(f"ℹ️  '{col_name}' already exists in user_broker_config")
 
-    for d_date, d_pnl in daily_totals.items():
-        rec = DailyPnL.query.filter_by(date=d_date).first()
-        if not rec:
-            db.session.add(DailyPnL(date=d_date, pnl=d_pnl))
-        else:
-            rec.date = d_date # just touch
-            # Wait, app calculates daily PnL by just keeping a running total or recalculating it on dashboard load?
-            # `app.py` `user_dashboard`:
-            # pnl_1d = sum(t.pnl for t in todays_trades if t.status == 'Closed')
-            # today_record = DailyPnL.query.filter_by(date=today_date).first()
-            # today_record.pnl = pnl_1d
-            pass # app.py does the daily PNL update dynamically on load anyway!
+        # ─── algo_trades_v3 columns ───
+        cursor.execute("PRAGMA table_info(algo_trades_v3)")
+        trade_cols = [col[1] for col in cursor.fetchall()]
+        print(f"\n📋 Current algo_trades_v3 columns: {trade_cols}")
 
-    db.session.commit()
-    print("✅ All trades updated successfully for Demo Users!")
+        trade_additions = [
+            ("target_price", "FLOAT"),
+            ("stop_loss",    "FLOAT"),
+            ("ai_opinion",   "VARCHAR(500)"),
+            ("user_id",      "INTEGER"),
+        ]
+        for col_name, col_type in trade_additions:
+            if col_name not in trade_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE algo_trades_v3 ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                    print(f"✅ Added '{col_name}' to algo_trades_v3")
+                except Exception as e:
+                    print(f"⚠️  Could not add '{col_name}': {e}")
+            else:
+                print(f"ℹ️  '{col_name}' already exists in algo_trades_v3")
+
+        # ─── user table columns ───
+        cursor.execute('PRAGMA table_info("user")')
+        user_cols = [col[1] for col in cursor.fetchall()]
+        print(f"\n📋 Current user columns: {user_cols}")
+
+        user_additions = [
+            ("is_blocked",             "BOOLEAN DEFAULT 0"),
+            ("is_admin",               "BOOLEAN DEFAULT 0"),
+            ("is_locked",              "BOOLEAN DEFAULT 1"),
+            ("signals_unlocked_until", "TIMESTAMP"),
+            ("full_auto_mode",         "BOOLEAN DEFAULT 0"),
+            ("trade_lots",             "INTEGER DEFAULT 1"),
+            ("personal_discount",      "INTEGER DEFAULT 0"),
+        ]
+        for col_name, col_type in user_additions:
+            if col_name not in user_cols:
+                try:
+                    cursor.execute(f'ALTER TABLE "user" ADD COLUMN {col_name} {col_type}')
+                    conn.commit()
+                    print(f"✅ Added '{col_name}' to user table")
+                except Exception as e:
+                    print(f"⚠️  Could not add '{col_name}': {e}")
+            else:
+                print(f"ℹ️  '{col_name}' already exists in user table")
+
+        conn.close()
+        print("\n✅ ✅ ✅  GVN Database Fix Complete! Now run: python app.py")
+
+    except Exception as e:
+        print(f"❌ Fatal Error: {e}")
