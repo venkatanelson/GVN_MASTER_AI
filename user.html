@@ -375,25 +375,29 @@
         <!-- HEADER SECTION -->
         <div class="premium-card header-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
             <div style="flex: 1; min-width: 300px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
                     {% if user.user_type == 'DEMO' %}
                     <span style="background: var(--warning); color: #000; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">DEMO ACCOUNT</span>
                     {% else %}
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
-                    {% if broker_config and broker_config.client_id and broker_config.encrypted_access_token %}
-                    <span style="background: rgba(16, 185, 129, 0.15); color: var(--secondary); border: 1px solid var(--secondary); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">✅ {{ broker_config.broker_name|upper }} CONNECTED</span>
-                    {% else %}
-                    <span style="background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">❌ BROKER NOT LINKED</span>
                     {% endif %}
-                    {% endif %}
+
+                    <!-- 🌟 LIVE BROKER STATUS BADGE — auto-updates every 30s -->
+                    <span id="live-broker-badge" style="padding: 4px 14px; border-radius: 50px; font-size: 11px; font-weight: 900; border: 1px solid var(--glass-border); color: var(--text-dim);">
+                        🔄 CHECKING BROKER...
+                    </span>
+                    <span id="live-data-source" style="padding: 3px 10px; border-radius: 50px; font-size: 10px; font-weight: 800; background: rgba(255,255,255,0.05); color: var(--text-dim);">
+                        DATA: --
+                    </span>
                 </div>
+                <!-- Live reason tooltip shown below -->
+                <div id="broker-reason" style="font-size: 10px; color: var(--text-dim); margin-bottom: 6px; min-height: 14px;"></div>
                 <h1 style="margin: 0; font-size: 28px; font-weight: 900;">Welcome back, {{ user.username }}</h1>
                 <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 14px;">
                     {{ user.email }} | <span style="color: var(--primary); font-weight: 800;">Subscription: {{ remaining_days }} Days Left</span>
                 </p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <!-- Cleaned up Dhan API Active & Live Option Chain -->
                 <div style="text-align: right;">
                     <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
                     <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
@@ -405,6 +409,39 @@
                 <a href="/logout" class="btn-premium" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 12px 16px;">🚪</a>
             </div>
         </div>
+
+        <script>
+        // 🌟 LIVE BROKER STATUS POLLING — every 30 seconds
+        function refreshBrokerStatus() {
+            fetch('/api/broker-status')
+            .then(r => r.json())
+            .then(d => {
+                const badge = document.getElementById('live-broker-badge');
+                const src   = document.getElementById('live-data-source');
+                const rsn   = document.getElementById('broker-reason');
+                if (d.connected) {
+                    badge.innerText = `✅ ${d.broker_name.toUpperCase()} CONNECTED`;
+                    badge.style.background = 'rgba(16,185,129,0.15)';
+                    badge.style.color = '#10b981';
+                    badge.style.borderColor = '#10b981';
+                } else {
+                    badge.innerText = `❌ ${d.broker_name.toUpperCase()} NOT CONNECTED`;
+                    badge.style.background = 'rgba(239,68,68,0.15)';
+                    badge.style.color = '#ef4444';
+                    badge.style.borderColor = '#ef4444';
+                }
+                src.innerText = `DATA: ${d.data_source || '--'} | SPOT: ${d.nifty_spot || '0'}`;
+                rsn.innerText = d.reason || '';
+                rsn.style.color = d.connected ? '#10b981' : '#f59e0b';
+            })
+            .catch(() => {
+                document.getElementById('live-broker-badge').innerText = '⚠️ SERVER OFFLINE';
+            });
+        }
+        refreshBrokerStatus();
+        setInterval(refreshBrokerStatus, 30000);
+        </script>
+
 
         <!-- 🤖 GVN FULL-AUTO COMMAND CENTER -->
         <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2); background: linear-gradient(135deg, rgba(6, 78, 59, 0.1), rgba(2, 6, 23, 0.8));">
@@ -656,6 +693,15 @@
             
             <form action="/save_api_settings" method="POST">
                 <input type="hidden" name="user_id" value="{{ user.id }}">
+                {# 🌟 FIX: Preserve all broker credentials so Strike update doesn't wipe them #}
+                <input type="hidden" name="broker_name" value="{{ broker_config.broker_name if broker_config else 'Dhan' }}">
+                <input type="hidden" name="client_id" value="{{ broker_config.client_id if broker_config and broker_config.client_id else '' }}">
+                <input type="hidden" name="webhook_url" value="{{ broker_config.webhook_url if broker_config else '' }}">
+                <input type="hidden" name="secret_key" value="********">
+                <input type="hidden" name="access_token" value="********">
+                <input type="hidden" name="client_secret" value="********">
+                <input type="hidden" name="totp_key" value="********">
+                <input type="hidden" name="broker_password" value="********">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div>
                         <p style="font-size: 10px; color: var(--secondary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CALL STRIKE (CE)</p>
