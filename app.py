@@ -22,6 +22,10 @@ import pyotp # 🌟 NEW for Auto-Refresh
 from dhanhq import dhanhq
 from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
 
+# 🚀 GVN MASTER BUILD VERSION
+BUILD_VERSION = "2.2.4 (Universal Bypass Ready)"
+BUILD_DATE = "2026-04-28"
+
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -258,6 +262,28 @@ class UserBrokerConfig(db.Model):
     call_strike = db.Column(db.String(50), nullable=True)           # 🌟 NEW: User selected Call Strike
     put_strike = db.Column(db.String(50), nullable=True)            # 🌟 NEW: User selected Put Strike
 
+def get_user_broker_cfg(user_id):
+    """Returns a decrypted config dictionary for the universal broker bypass."""
+    conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    if not conf:
+        return None
+    
+    def dec(val):
+        try:
+            return cipher.decrypt(val).decode() if val else ""
+        except: return ""
+
+    return {
+        "broker_name": conf.broker_name or "Dhan",
+        "client_id": conf.client_id or "",
+        "access_token": dec(conf.encrypted_access_token),
+        "password": dec(conf.encrypted_password),
+        "client_secret": dec(conf.encrypted_client_secret),
+        "totp_key": dec(conf.encrypted_totp_key),
+        "webhook_url": conf.webhook_url or "",
+        "tv_secret": dec(conf.encrypted_secret_key)
+    }
+
 
 class AIPaperTrade(db.Model):
     __tablename__ = 'ai_paper_trades'
@@ -471,10 +497,18 @@ def gvn_signal_engine():
                                 users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON').all()
                                 for user in users:
                                     if not user.is_blocked and not user.admin_kill_switch:
-                                        # Execute via Broker API
-                                        # This would call the order placement logic
                                         print(f"📦 [AUTO-TRADE] Executing for user {user.username}: {strike}")
-                                        # (Existing execution logic here)
+                                        cfg = get_user_broker_cfg(user.id)
+                                        if cfg:
+                                            # Zero-to-Hero Quantity Logic
+                                            qty = user.trade_lots * (50 if "NIFTY" in strike.upper() and "BANK" not in strike.upper() else 15)
+                                            broker_api.execute_broker_order_async(
+                                                cfg=cfg,
+                                                symbol=strike,
+                                                txn_type="BUY" if "BUY" in trigger.upper() else "SELL",
+                                                qty=qty,
+                                                user_name=user.username
+                                            )
 
                 # Cleanup processed_triggers (keep last 100)
                 if len(processed_triggers) > 100:
@@ -892,19 +926,13 @@ def square_off_user_trades(user, reason, manual_price=None):
         
         if user.user_type == 'REAL' and user.is_approved:
             try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
-                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
+                cfg = get_user_broker_cfg(user.id)
+                if cfg:
                     broker_api.execute_broker_order_async(
-                        broker_name=broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
+                        cfg=cfg,
                         symbol=t.symbol,
-                        transaction_type="SELL",
-                        quantity=t.quantity,
+                        txn_type="SELL",
+                        qty=t.quantity,
                         user_name=user.username
                     )
             except Exception as e:
@@ -978,19 +1006,13 @@ def force_close_trade(trade_id):
         # 🌟 Forward SELL to Broker if REAL
         if user.user_type == 'REAL' and user.is_approved:
             try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
-                
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
+                cfg = get_user_broker_cfg(user_id)
+                if cfg:
                     broker_api.execute_broker_order_async(
-                        broker_name="Dhan" if not broker_conf else broker_conf.broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
+                        cfg=cfg,
                         symbol=trade.symbol,
-                        transaction_type="SELL",
-                        quantity=trade.quantity,
+                        txn_type="SELL",
+                        qty=trade.quantity,
                         user_name=user.username
                     )
             except Exception as e:
@@ -1128,7 +1150,9 @@ def user_dashboard(user_id):
                            daily_history=daily_history,
                            pnl_total_30d=pnl_total_30d,
                            parsed_trades=parsed_trades,
-                           config=get_admin_config())
+                           config=get_admin_config(),
+                           build_version=BUILD_VERSION,
+                           cache_id=int(time.time()))
 
 @app.route('/admin/clear-today-trades')
 def clear_today_trades():
@@ -1262,30 +1286,14 @@ def gvn_ai_signal_validator(symbol, txn_type, price):
         pulse_score = pulse.get("score", 50)
         pulse_ok    = (pulse_score >= 60) if txn_type == "BUY" else (pulse_score <= 40)
 
-        # ── Final Score ──
-        score   = 0
-        reasons = []
+        # ── 6. Zero to Hero Momentum Boost ──
+        # If price increased significantly or Rainbow Momentum is present, boost confidence
+        momentum_score = 0
+        if pulse_score > 75 or (ce_oi_chg < -1000000 and txn_type == "BUY"):
+            momentum_score = 20
+            reasons.append("🚀 Zero-to-Hero Momentum Spike!")
 
-        if oi_direction_ok:
-            score += 35; reasons.append("✅ OI OK")
-        else:
-            reasons.append("❌ OI Against")
-
-        if greeks_ok:
-            score += 35; reasons.append(f"✅ Greeks OK ({greeks_info})")
-        else:
-            reasons.append(f"⚠️ Greeks Weak ({greeks_info})")
-
-        if deep_agrees:
-            score += 20; reasons.append("✅ DeepScan Agrees")
-        else:
-            reasons.append("⚠️ DeepScan Mismatch")
-
-        if pulse_ok:
-            score += 10; reasons.append(f"✅ Pulse:{pulse_score}")
-        else:
-            reasons.append(f"⚠️ Pulse:{pulse_score}")
-
+        score += momentum_score
         is_valid   = score >= 60
         reason_str = " | ".join(reasons)
 
@@ -1419,23 +1427,15 @@ def tv_webhook():
                 else:
                     daily_record.pnl += at.pnl
 
-        # 3. For REAL users, also forward to Broker
         if u.user_type == 'REAL' and u.is_approved:
             try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
-                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
+                cfg = get_user_broker_cfg(u.id)
+                if cfg:
                     broker_api.execute_broker_order_async(
-                        broker_name=broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
+                        cfg=cfg,
                         symbol=symbol,
-                        transaction_type=txn_type,
-                        quantity=qty,
+                        txn_type=txn_type,
+                        qty=qty,
                         user_name=u.username
                     )
             except Exception as e:
@@ -1483,11 +1483,11 @@ def save_api_settings():
     broker_name = request.form.get('broker_name', 'Dhan')
     webhook_url = request.form.get('webhook_url')
     secret_key = request.form.get('secret_key')
-    client_id = request.form.get('client_id')
-    access_token = request.form.get('access_token')
-    client_secret = request.form.get('client_secret') 
-    totp_key = request.form.get('totp_key')           
-    broker_password = request.form.get('broker_password')
+    client_id = request.form.get('client_id', '').strip()
+    access_token = request.form.get('access_token', '').strip()
+    client_secret = request.form.get('client_secret', '').strip() 
+    totp_key = request.form.get('totp_key', '').replace(" ", "").strip()           
+    broker_password = request.form.get('broker_password', '').strip()
     call_strike = request.form.get('call_strike')
     put_strike = request.form.get('put_strike')
     
@@ -1987,6 +1987,22 @@ def sync_admin_dhan_to_worker():
             print(f"❌ [DATA SYNC ERROR] {e}")
 
 # ==========================================
+# GLOBAL ROBOT STATE
+ROBOT_ACTIVE = False
+DEMO_SIGNALS = []
+
+def get_robot_status():
+    return ROBOT_ACTIVE
+
+@app.route('/api/robot/status', methods=['POST'])
+def update_robot_status():
+    global ROBOT_ACTIVE
+    data = request.get_json()
+    ROBOT_ACTIVE = data.get('active', False)
+    print(f"🤖 [ROBOT] Status changed to: {'ON' if ROBOT_ACTIVE else 'OFF'}")
+    return jsonify({"status": "success", "active": ROBOT_ACTIVE})
+
+# ==========================================
 # 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
 # ==========================================
 import requests
@@ -1996,9 +2012,12 @@ def ai_chat():
     try:
         data = request.json
         user_msg = data.get('message', '')
-        # 🌟 NEW: Get price directly from frontend request
-        n_spot = data.get('nifty_price', '0')
-        
+        # 🌟 NEW: Get price from request and handle decimal zeros
+        try:
+            n_spot_val = float(data.get('nifty_price', '0'))
+        except:
+            n_spot_val = 0.0
+            
         from dotenv import dotenv_values
         env_config = dotenv_values(".env")
         api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
@@ -2012,20 +2031,27 @@ def ai_chat():
         user = db.session.get(User, session['user_id'])
         if user and user.is_locked:
             return jsonify({"reply": "🔒 Your AI Engine is Locked."})
-            
-        # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
-        if str(n_spot) == '0' or n_spot == 0:
-            # 🌟 Get live prices from background worker summary
-            n_spot = shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-            b_spot = shared_data.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
-            s_spot = shared_data.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
-            f_spot = shared_data.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
 
-
+        # Determine active index from message or current state
+        idx = "NIFTY"
+        msg_upper = user_msg.upper()
+        if "BANK" in msg_upper: idx = "BANKNIFTY"
+        elif "FIN" in msg_upper: idx = "FINNIFTY"
+        elif "SENSEX" in msg_upper: idx = "SENSEX"
+        
+        # 🌟 FALLBACK/REFRESH: Always get latest backend prices for accuracy
+        backend_summary = shared_data.live_option_chain_summary.get(idx, {})
+        current_spot = backend_summary.get('spot', 0)
+        
+        # Use backend price if frontend is 0 or very small
+        if n_spot_val < 1.0:
+            n_spot_val = current_spot
+        
         import json
-        live_pulse = shared_data.market_pulse.get("NIFTY", {})
-        live_options = shared_data.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
-        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
+        live_pulse = shared_data.market_pulse.get(idx, {})
+        live_options = shared_data.gvn_scanner_data.get(idx, [])[:5] # Top 5 active strikes
+        
+        context = f"LIVE MARKET SNAPSHOT - {idx} Spot: {n_spot_val}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data for {idx} to find Operator Traps and Zero-to-Hero setups."
         system_prompt = (
             "You are GVN Master AI, an elite algorithmic trading expert. "
             "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
@@ -2161,6 +2187,15 @@ def set_monitored_strike():
             
         return jsonify({"status": "success", "message": f"{strike_type} strike set to {symbol}"})
     return jsonify({"status": "error", "message": "Invalid strike data"}), 400
+
+@app.route('/api/broker-status')
+def broker_status():
+    """Returns live broker connection status for the dashboard."""
+    status = shared_data.broker_connection_status.copy()
+    # Add nifty spot so dashboard knows if data is flowing
+    status["nifty_spot"] = shared_data.live_option_chain_summary.get("NIFTY", {}).get("spot", 0)
+    return jsonify(status)
+
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
