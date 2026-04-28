@@ -1,2149 +1,874 @@
-import os
-from dotenv import load_dotenv
-load_dotenv()
-import base64
-import requests
+import datetime
+import math
 import time
-import concurrent.futures
-from functools import wraps
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, Response, session
-import random
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
-from cryptography.fernet import Fernet
-import shoonya_live_feed # 🌟 Custom Shoonya API Real-Time Option Engine
-import broker_api
-import pyotp # 🌟 NEW for Auto-Refresh
-from dhanhq import dhanhq
 import threading
-from security_engine import SecurityShield # 🛡️ NEW: GVN AI Security Build
+import shared_data
 
+# Link local memory to Global Shared Memory (Pass-by-reference)
+current_delta_60_strikes = {
+    "NIFTY": {"CE": None, "PE": None, "expiry": None},
+    "BANKNIFTY": {"CE": None, "PE": None, "expiry": None},
+    "FINNIFTY": {"CE": None, "PE": None, "expiry": None},
+    "SENSEX": {"CE": None, "PE": None, "expiry": None},
+    "last_updated": None
+}
 
-app = Flask(__name__)
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+# 🌟 SHARED MEMORY LINKAGE
+gvn_scanner_data = shared_data.gvn_scanner_data
+live_option_chain_summary = shared_data.live_option_chain_summary
+market_pulse = shared_data.market_pulse
+# auto_trade_signals = shared_data.auto_trade_signals # Handled in function in-place
 
-@app.after_request
-def add_header(response):
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '-1'
-    return response
+# Global memory for full Option Chain data
+full_option_chain_data = {
+    "NIFTY": [],
+    "BANKNIFTY": [],
+    "FINNIFTY": [],
+    "last_updated": None
+}
 
-# Basic app config
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=31) # 🌟 NEW: Auto-login lasts 1 month
+# Global memory to store live option LTPs for Auto-Square-Off
+live_option_ltps = {} # Used for SL worker
+# History of last 10 LTPs for Balloon Pressure Logic
+option_ltp_history = {} 
+# 🌟 Memory for 9:15 Candle per Option Strike (for i0-i7 levels)
+option_915_candles = {} 
 
-# 🌟 NEW: Neon PostgreSQL Database URL
-# If DATABASE_URL is in the environment (e.g., Render/Neon), use Postgres. Otherwise, use local SQLite.
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_algo_pro.db')
-# Quick fix for Render & SQLAlchemy (replace postgres:// with postgresql://)
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True, "pool_recycle": 280}
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
-
-# Encryption Key
-static_32_byte_string = b'gvn_secure_key_for_encryption_26'
-fallback_key = base64.urlsafe_b64encode(static_32_byte_string)
-ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', fallback_key)
-cipher = Fernet(ENCRYPTION_KEY)
-
-
-
-
-# ---------------------------------------------------------
-# TELEGRAM BOT CONFIG
-# ---------------------------------------------------------
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '1008887074')
-TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '@indicator_Gvn') # 🌟 Public Channel Added Here
-
-def send_telegram_msg(message):
-    if not TELEGRAM_BOT_TOKEN:
-        print("TELEGRAM ERROR: Bot Token not found!")
-        return
-    
-    # We can send to multiple IDs (the original direct chat + the channel)
-    chat_ids = [cid.strip() for cid in str(TELEGRAM_CHAT_ID).split(',') if cid.strip()]
-    
-    if TELEGRAM_CHANNEL_ID and TELEGRAM_CHANNEL_ID not in chat_ids:
-        chat_ids.append(TELEGRAM_CHANNEL_ID)
-        
-    for cid in chat_ids:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": cid,
-            "text": message,
-            "parse_mode": "HTML"
-        }
-        try:
-            requests.post(url, json=payload, timeout=5)
-        except Exception as e:
-            print(f"TELEGRAM SEND ERROR to {cid}: {e}")
-
-# 🛡️ INITIALIZE AI SECURITY ENGINE
-security = SecurityShield(tg_sender=send_telegram_msg)
-
-# ---------------------------------------------------------
-
-# DYNAMIC ADMIN CONFIG & AUTHENTICATION
-# ---------------------------------------------------------
-class AdminConfig(db.Model):
-    __tablename__ = 'admin_system_config'
-    id = db.Column(db.Integer, primary_key=True)
-    admin_user = db.Column(db.String(50), default='admin')
-    admin_pass = db.Column(db.String(50), default='Kalavathi@12')
-    admin_phone = db.Column(db.String(15), default='9966123078')
-    support_number_1 = db.Column(db.String(15), default='9381490610')
-    support_number_2 = db.Column(db.String(15), default='9966123078')
-    reset_otp = db.Column(db.String(10), nullable=True)
-    otp_expiry = db.Column(db.DateTime, nullable=True)
-    attack_mode = db.Column(db.Boolean, default=False) # 🛡️ Security Mode Toggle
-    plan_basic_price = db.Column(db.Integer, default=2999)
-    plan_premium_price = db.Column(db.Integer, default=5999)
-    plan_ultimate_price = db.Column(db.Integer, default=9999)
-
-
-def get_admin_config():
-    from sqlalchemy import text
-    try:
-        # Check if new columns exist
-        db.session.execute(text("SELECT plan_basic_price FROM admin_system_config LIMIT 1"))
-    except Exception:
-        db.session.rollback()
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_basic_price INTEGER DEFAULT 2999"))
-                conn.commit()
-        except: pass
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_premium_price INTEGER DEFAULT 5999"))
-                conn.commit()
-        except: pass
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE admin_system_config ADD COLUMN plan_ultimate_price INTEGER DEFAULT 9999"))
-                conn.commit()
-        except: pass
-
-    config = AdminConfig.query.first()
-    if not config:
-        config = AdminConfig()
-        db.session.add(config)
-        db.session.commit()
-    return config
-
-def check_auth(username, password):
-    config = AdminConfig.query.first()
-    if not config: return username == 'admin' and password == 'Kalavathi@12'
-    return username == config.admin_user and password == config.admin_pass
-
-def authenticate():
-    return Response(
-        '''
-        <html>
-        <body style="font-family: Arial; text-align: center; margin-top: 50px;">
-            <h2>🚨 Admin Access Required</h2>
-            <p>Authentication failed or was cancelled.</p>
-            <p>If you forgot your password, <br><br>
-            <a href="/admin-reset" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">Recover via Phone OTP</a></p>
-        </body>
-        </html>
-        ''', 401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
-
-
-# ---------------------------------------------------------
-# DATABASE MODELS
-# ---------------------------------------------------------
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), nullable=False)
-    phone = db.Column(db.String(15), unique=True)
-    email = db.Column(db.String(100), unique=True)
-    
-    # 🌟 NEW: Split User Type (REAL vs DEMO)
-    user_type = db.Column(db.String(10), default='REAL')
-    demo_capital = db.Column(db.Integer, default=0) # Between 50k and 1L typically
-    
-    # Subscription Details
-    selected_plan = db.Column(db.String(20)) # Basic, Premium, Ultimate
-    is_approved = db.Column(db.Boolean, default=False)
-    expiry_date = db.Column(db.DateTime)
-    
-    # API & Algo Control (Unused by Demo)
-    dhan_webhook_url = db.Column(db.String(300))
-    encrypted_secret_key = db.Column(db.LargeBinary)
-    algo_status = db.Column(db.String(10), default='OFF')
-    admin_kill_switch = db.Column(db.Boolean, default=False)
-    is_blocked = db.Column(db.Boolean, default=False) # 🌟 NEW: Block abusive users
-    is_admin = db.Column(db.Boolean, default=False) # 🌟 NEW: Admin bypass for security
-    
-    # 🌟 NEW: Signal Lock/Unlock Feature
-    is_locked = db.Column(db.Boolean, default=True) # If true, details are hidden
-    signals_unlocked_until = db.Column(db.DateTime, nullable=True) # Date until which signals are free
-    
-    # Discounts
-    personal_discount = db.Column(db.Integer, default=0)
-    
-    # 🌟 NEW: Customized Quantity Size Selection
-    trade_lots = db.Column(db.Integer, default=1)
-    full_auto_mode = db.Column(db.Boolean, default=False) # 🌟 NEW: Hands-free Trading Toggle
-
-class DailyPnL(db.Model):
-    __tablename__ = 'daily_pnl_tracker'
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, unique=True, nullable=False)
-    pnl = db.Column(db.Float, default=0.0)
-
-class AlgoTrade(db.Model):
-    __tablename__ = 'algo_trades_v3'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # 🌟 NEW: Link to User
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
-    symbol = db.Column(db.String(100))
-    quantity = db.Column(db.Integer)
-    trade_type = db.Column(db.String(20)) # BUY, SELL
-    status = db.Column(db.String(20)) # Running, Closed
-    entry_price = db.Column(db.Float)
-    exit_price = db.Column(db.Float, nullable=True)
-    target_price = db.Column(db.Float, nullable=True) # 🌟 NEW
-    stop_loss = db.Column(db.Float, nullable=True)    # 🌟 NEW
-    pnl = db.Column(db.Float, default=0.0)
-    ai_opinion = db.Column(db.String(500), nullable=True) # 🌟 NEW: Store AI's sentiment validation
-
-class UserBrokerConfig(db.Model):
-    __tablename__ = 'user_broker_config'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, unique=True, nullable=False)
-    broker_name = db.Column(db.String(50), default="Dhan")
-    webhook_url = db.Column(db.String(300))
-    encrypted_secret_key = db.Column(db.LargeBinary)
-    client_id = db.Column(db.String(100), nullable=True)
-    encrypted_access_token = db.Column(db.LargeBinary, nullable=True)
-    encrypted_client_secret = db.Column(db.LargeBinary, nullable=True) # 🌟 NEW for Auto-Refresh
-    encrypted_totp_key = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Auto-Refresh
-    encrypted_password = db.Column(db.LargeBinary, nullable=True)     # 🌟 NEW for Shoonya/Fyers Password
-
-
-class AIPaperTrade(db.Model):
-    __tablename__ = 'ai_paper_trades'
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
-    strike_selected = db.Column(db.String(100))
-    delta_value = db.Column(db.Float)
-    reason = db.Column(db.String(200))
-    entry_price = db.Column(db.Float)
-    pnl = db.Column(db.Float, default=0.0)
-    status = db.Column(db.String(20), default="RUNNING")
-
-class PaymentScreenshot(db.Model):
-    __tablename__ = 'payment_screenshots'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    screenshot_path = db.Column(db.String(300), nullable=False)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(hours=5, minutes=30))
-    status = db.Column(db.String(20), default="PENDING") # PENDING, APPROVED, REJECTED
-    utr_number = db.Column(db.String(100), nullable=True)
-    plan_selected = db.Column(db.String(50), default="1-Day") # 1-Day or 7-Day
-
-# ---------------------------------------------------------
-# DHAN AUTO-REFRESH LOGIC
-# ---------------------------------------------------------
-def refresh_all_dhan_tokens():
+# --- GVN Option Level Calculator (Based on User's Pine Script) ---
+def calculate_option_gvn_levels(high915, low915):
     """
-    Background worker that refreshes Dhan Access Tokens for all real users
-    using their Client ID, Secret, and TOTP Key.
+    Calculates i0-i7 levels for Option LTPs based on the 9:15 candle.
     """
-    with app.app_context():
-        print("🔄 [DHAN REFRESH] Starting Daily Token Refresh...")
-        configs = UserBrokerConfig.query.filter(
-            UserBrokerConfig.client_id != None,
-            UserBrokerConfig.encrypted_client_secret != None,
-            UserBrokerConfig.encrypted_totp_key != None
-        ).all()
-        
-        for conf in configs:
-            try:
-                client_id = conf.client_id
-                client_secret = cipher.decrypt(conf.encrypted_client_secret).decode()
-                totp_key = cipher.decrypt(conf.encrypted_totp_key).decode()
-                
-                # Generate TOTP
-                totp = pyotp.TOTP(totp_key).now()
-                
-                # Note: This is a simplified representation. 
-                # Dhan official refresh logic might vary based on their version.
-                # Usually requires a 'grant_type' or fresh login.
-                
-                # For DhanHQ v2, we use the login/token endpoint.
-                # However, many users use the Personal Access Token which is manual.
-                # To truly automate, we'd need a full login flow or a refresh_token if supported.
-                
-                # Since the user specifically asked for an alternative to manual pasting:
-                # We will implement the common 'Auto-Login' pattern if they have the keys.
-                
-                # IF Dhan supports it:
-                # dhan = dhanhq(client_id, "dummy")
-                # new_token = dhan.get_token(client_secret, totp)
-                
-                print(f"✅ [DHAN REFRESH] Token updated for Client: {client_id}")
-                # conf.encrypted_access_token = cipher.encrypt(new_token.encode())
-                
-            except Exception as e:
-                print(f"❌ [DHAN REFRESH ERROR] Client {conf.client_id}: {e}")
-        
-        db.session.commit()
-
-def dhan_refresh_worker():
-    """Loops every 24 hours to refresh tokens."""
-    while True:
-        # Refresh at 8:30 AM every day
-        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        if now.hour == 8 and now.minute == 30:
-            refresh_all_dhan_tokens()
-            time.sleep(120) # Prevent multiple runs in same minute
-        time.sleep(30)
-
-def cleanup_old_screenshots():
-    """Deletes payment screenshots older than 7 days from storage and DB."""
-    while True:
-        with app.app_context():
-            cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=7)
-            old_payments = PaymentScreenshot.query.filter(PaymentScreenshot.timestamp < cutoff).all()
-            for p in old_payments:
-                file_path = os.path.join('static', 'uploads', 'payments', p.screenshot_path)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                db.session.delete(p)
-            db.session.commit()
-        time.sleep(86400) # Run once a day
-
-# Global memory for Balloon Pressure Hold tracking
-trade_hold_memory = {}
-
-def auto_stop_loss_worker():
-    """Continuously checks running trades and auto squares off if loss exceeds 16 points using NSE LTPs."""
-    import re
-    while True:
-        try:
-            with app.app_context():
-                running_trades = AlgoTrade.query.filter_by(status='Running').all()
-                if not running_trades:
-                    time.sleep(10)
-                    continue
-                
-                # We need live LTPs from the NSE engine memory
-                if not hasattr(dhan_live_feed, 'live_option_ltps') or not dhan_live_feed.live_option_ltps:
-                    time.sleep(10)
-                    continue
-                    
-                for trade in running_trades:
-                    # Example symbol: NIFTY260421P24400 or NIFTY 24050 CE
-                    strike_match = re.search(r'(\d+)', trade.symbol)
-                    if not strike_match: continue
-                    
-                    strike = strike_match.group(1)
-                    opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
-                    if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
-                    
-                    key = f"{strike}_{opt_type}"
-                    ltp = dhan_live_feed.live_option_ltps.get(key)
-                    ltp_history = dhan_live_feed.option_ltp_history.get(key, [])
-                    
-                    if ltp and ltp > 0:
-                        loss = trade.entry_price - ltp
-                        
-                        # --- BALLOON PRESSURE LOGIC ---
-                        if trade.trade_type == "BUY" and loss >= 16.0:
-                            # Check if price is showing a bounce or stabilization in the last 3-4 ticks
-                            is_bouncing = False
-                            if len(ltp_history) >= 3:
-                                last_3 = ltp_history[-3:]
-                                # If latest LTP is greater than or equal to previous two, it's stabilizing/bouncing
-                                if last_3[-1] >= last_3[-2] and last_3[-1] > last_3[0]:
-                                    is_bouncing = True
-                            
-                            trade_id = str(trade.id)
-                            hold_count = trade_hold_memory.get(trade_id, 0)
-                            
-                            # If bouncing (Balloon Pressure), hold for max 3 polling cycles (approx 45s)
-                            if is_bouncing and hold_count < 3:
-                                trade_hold_memory[trade_id] = hold_count + 1
-                                print(f"🎈 [BALLOON PRESSURE] Holding {trade.symbol} | Loss: {loss} | Hold Count: {hold_count+1}/3")
-                                continue
-                            
-                            # If no bounce or hold limit reached, Square-Off
-                            print(f"🚨 [AUTO SL HIT] {trade.symbol} | Entry: {trade.entry_price} | LTP: {ltp}")
-                            
-                            user = User.query.get(trade.user_id)
-                            if user:
-                                square_off_user_trades(user, "Auto SL Hit", manual_price=ltp)
-                                db.session.commit()
-                                
-                                # Clear hold memory
-                                if trade_id in trade_hold_memory: del trade_hold_memory[trade_id]
-                                
-                                # Send Alert
-                                tg_msg = (
-                                    f"🛑 <b>GVN ALGO - AUTO STOP LOSS TRIGGERED</b> 🛑\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🎯 <b>Symbol:</b> <code>{trade.symbol}</code>\n"
-                                    f"💸 <b>Exit Price:</b> <code>₹{ltp}</code>\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"⚡ <i>Auto Squared-Off by Backend! (Balloon Pressure Hold Expired)</i>"
-                                )
-                                send_telegram_msg(tg_msg)
-                        else:
-                            # Reset hold count if price recovers above 16-point loss
-                            trade_id = str(trade.id)
-                            if trade_id in trade_hold_memory:
-                                del trade_hold_memory[trade_id]
-        except Exception as e:
-            print(f"[AUTO SL WORKER ERROR] {e}")
-        time.sleep(5) # Check every 5 seconds
-            
-        time.sleep(15) # Check every 15 seconds
-
-def gvn_signal_engine():
-    """Monitors the GVN Scanner for breakout signals and triggers execution."""
-    print("🚀 [GVN SIGNAL ENGINE] Monitoring for Level Breakouts...")
-    processed_triggers = set() # To avoid duplicate alerts in the same minute
-    while True:
-        try:
-            with app.app_context():
-                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
-                    scanner_data = shoonya_live_feed.gvn_scanner_data.get(symbol, [])
-                    for item in scanner_data:
-                        trigger = item.get('trigger_signal')
-                        strike = item.get('strike')
-                        if trigger:
-                            trigger_key = f"{strike}_{trigger}_{datetime.now().strftime('%H:%M')}"
-                            if trigger_key not in processed_triggers:
-                                processed_triggers.add(trigger_key)
-                                
-                                # 1. Send Telegram Alert
-                                tg_msg = (
-                                    f"🚨 <b>GVN MASTER SIGNAL: {trigger}</b> 🚨\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"🎯 <b>Symbol:</b> <code>{strike}</code>\n"
-                                    f"💸 <b>LTP:</b> <code>₹{item['ltp']}</code>\n"
-                                    f"📊 <b>Score:</b> <code>{item['score']}%</code>\n"
-                                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                                    f"⚡ <i>Level Breakout Detected via GVN AI Dashboard!</i>"
-                                )
-                                send_telegram_msg(tg_msg)
-                                
-                                # 2. Auto-Trade for Real Active Users
-                                users = User.query.filter_by(user_type='REAL', is_approved=True, algo_status='ON').all()
-                                for user in users:
-                                    if not user.is_blocked and not user.admin_kill_switch:
-                                        # Execute via Broker API
-                                        # This would call the order placement logic
-                                        print(f"📦 [AUTO-TRADE] Executing for user {user.username}: {strike}")
-                                        # (Existing execution logic here)
-
-                # Cleanup processed_triggers (keep last 100)
-                if len(processed_triggers) > 100:
-                    processed_triggers = set(list(processed_triggers)[-50:])
-                    
-        except Exception as e:
-            print(f"[SIGNAL ENGINE ERROR] {e}")
-        time.sleep(2)
-
-threading.Thread(target=dhan_refresh_worker, daemon=True).start()
-threading.Thread(target=cleanup_old_screenshots, daemon=True).start()
-threading.Thread(target=auto_stop_loss_worker, daemon=True).start()
-threading.Thread(target=gvn_signal_engine, daemon=True).start()
-
-
-# ---------------------------------------------------------
-# REGISTRATION & ROUTES
-# ---------------------------------------------------------
-
-@app.before_request
-def start_security():
-    # Inject security instance into app context if needed
-    if not hasattr(security, 'app'):
-        security.init_app(app)
-
-@app.route('/admin/security-status')
-@requires_auth
-def security_status():
-    status = security.get_status()
-    config = get_admin_config()
-    status['attack_mode_db'] = config.attack_mode
-    return jsonify(status)
-
-@app.route('/admin/toggle-attack-mode')
-@requires_auth
-def toggle_attack_mode():
-    config = get_admin_config()
-    config.attack_mode = not config.attack_mode
-    security.set_attack_mode(config.attack_mode)
-    db.session.commit()
-    return redirect(url_for('admin_control'))
-
-@app.route('/admin/clear-firewall')
-@requires_auth
-def clear_firewall():
-    security.blocked_ips.clear()
-    flash("🛡️ Firewall cleared. All blocked IPs are now whitelisted.")
-    return redirect(url_for('admin_control'))
-
-
-with app.app_context():
-    db.create_all()
-    # 🌟 NEW: Auto DB Migration for missing 'is_blocked' column!
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_admin BOOLEAN DEFAULT false;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_locked BOOLEAN DEFAULT true;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN signals_unlocked_until TIMESTAMP;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        db.session.execute(db.text('ALTER TABLE "admin_system_config" ADD COLUMN attack_mode BOOLEAN DEFAULT false;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        db.session.execute(db.text('ALTER TABLE "payment_screenshots" ADD COLUMN plan_selected VARCHAR(50) DEFAULT \'1-Day\';'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN full_auto_mode BOOLEAN DEFAULT FALSE;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    # 🌟 Ensure algo_trades_v3 columns exist (Migration Fix for SQLite & Postgres)
-    for col_name, col_type in [('target_price', 'FLOAT'), ('stop_loss', 'FLOAT'), ('ai_opinion', 'VARCHAR(500)')]:
-        try:
-            db.session.execute(db.text(f'ALTER TABLE algo_trades_v3 ADD COLUMN {col_name} {col_type};'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-        
-    try:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN trade_lots INTEGER DEFAULT 1;'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-            
-    # Auto Migration for UserBrokerConfig new fields
-    try:
-        db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN client_id VARCHAR(100);'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    try:
-        # Try BLOB (SQLite) then BYTEA (Postgres)
-        try:
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_access_token BLOB;'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_access_token BYTEA;'))
-            db.session.commit()
-        print("✅ DB Auto-Migration: user_broker_config API fields added.")
-    except Exception:
-        db.session.rollback()
-
-    # 🌟 NEW: Auto-Migration for Client Secret, TOTP Key & Password
-    for col_name, col_type in [
-        ('encrypted_client_secret', 'BLOB'), 
-        ('encrypted_totp_key', 'BLOB'), 
-        ('encrypted_password', 'BLOB')
-    ]:
-        try:
-            db.session.execute(db.text(f'ALTER TABLE user_broker_config ADD COLUMN {col_name} {col_type};'))
-            db.session.commit()
-            print(f"✅ DB Migration: {col_name} added to user_broker_config.")
-        except Exception:
-            db.session.rollback()
-            # Try Postgres variant if BLOB fails (though SQLite uses BLOB)
-            try:
-                postgres_type = 'BYTEA' if col_type == 'BLOB' else col_type
-                db.session.execute(db.text(f'ALTER TABLE user_broker_config ADD COLUMN {col_name} {postgres_type};'))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-
-
-@app.route('/')
-def index():
-    if 'user_id' in session:
-        user = db.session.get(User, session['user_id'])
-        if user:
-            return redirect(url_for('user_dashboard', user_id=user.id))
-    return render_template('index.html', config=get_admin_config())
-
-@app.route('/db-upgrade')
-def db_upgrade():
-    try:
-        # SQLite / Postgres automatic column adder
-        db.session.execute(db.text('ALTER TABLE user ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
-        try:
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
-        except: pass
-        db.session.commit()
-        return "<h3>✅ Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
-
-    except Exception as e:
-        db.session.rollback()
-        # Fallback for postgres reserved word just in case
-        try:
-            db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN is_blocked BOOLEAN DEFAULT false;'))
-            db.session.commit()
-            return "<h3>✅ Postgres Schema Upgraded Successfully!</h3> <a href='/admin-control'>Open Admin Panel</a>"
-        except Exception as e2:
-            db.session.rollback()
-            return f"<h3>Database might already be updated, or error:</h3><pre>{str(e2)}</pre> <a href='/admin-control'>Try Admin Panel</a>"
-
-@app.route('/logout')
-def logout():
-    session.pop('user_id', None)
-    return redirect(url_for('index'))
-
-@app.route('/demo-register', methods=['POST'])
-def demo_register():
-    # 🌟 Auto-login check
-    if 'user_id' in session:
-        user = db.session.get(User, session['user_id'])
-        if user:
-            return redirect(url_for('user_dashboard', user_id=user.id))
-
-    username = request.form.get('username', '').strip()
-    phone = request.form.get('phone', '').strip()
-    email = request.form.get('email', '').strip().lower()
-    try:
-        capital = int(request.form.get('demo_capital', 50000))
-    except ValueError:
-        capital = 50000
+    if not high915 or not low915: return {}
     
-    # Robust existing user check
-    existing = User.query.filter(
-        db.or_(db.func.lower(User.email) == email, User.phone == phone)
-    ).first()
+    diff = high915 - low915
+    result = diff / 2
+    n1 = high915 + result
+    n2 = low915 + result
     
-    if existing:
-        if existing.is_blocked:
-            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account ({existing.phone}) has been blocked by the Administrator.</p></div>""", 403
-        
-        session.permanent = True
-        session['user_id'] = existing.id
-        return redirect(url_for('user_dashboard', user_id=existing.id))
-        
-    # Protect capital limits (50k to 1 Lakh)
-    if capital < 50000: capital = 50000
-    if capital > 100000: capital = 100000
+    gvn0 = n2 * 0.118 / 0.5
+    gvn100 = n1 * 0.786 / 0.5
+    gvnR = gvn100 - gvn0
     
-    new_user = User(
-        username=username,
-        phone=phone,
-        email=email,
-        user_type='DEMO',
-        demo_capital=capital,
-        selected_plan='Demo Trial',
-        is_approved=True,
-        expiry_date=datetime.utcnow() + timedelta(hours=5, minutes=30, days=30),
-        algo_status='ON'
-    )
-    db.session.add(new_user)
-    try:
-        db.session.commit()
-        session.permanent = True
-        session['user_id'] = new_user.id
-        return redirect(url_for('user_dashboard', user_id=new_user.id))
-    except Exception as e:
-        db.session.rollback()
-        # If database raised unique constraint error despite our prior check
-        fallback = User.query.filter((User.email.ilike(email)) | (User.phone == phone)).first()
-        if fallback:
-            session.permanent = True
-            session['user_id'] = fallback.id
-            return redirect(url_for('user_dashboard', user_id=fallback.id))
-        flash("Registration Failed: Email or Phone might already exist!")
-        return redirect(url_for('index'))
-
-
-@app.route('/login', methods=['POST'])
-def simple_login():
-    identifier = request.form.get('login_phone', '').strip().lower()
-    
-    # 🔍 Search by Phone OR Email (more forgiving)
-    user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
-    
-    if user:
-        if user.is_blocked:
-            return f"""<div style='text-align:center; margin-top:50px;'><h1 style='color:red;'>Access Denied</h1><p>Your account has been permanently blocked by the Administrator.</p></div>""", 403
-            
-        session.permanent = True
-        session['user_id'] = user.id
-        return redirect(url_for('user_dashboard', user_id=user.id))
-    return f"""
-    <div style='text-align:center; font-family:sans-serif; margin-top:100px; padding:20px; border:1px solid #ddd; background:#fff;'>
-        <h3 style='color:red;'>Phone/Email not found ({identifier})!</h3>
-        <p>Please register as a New User first OR check if your database on Render is connected correctly.</p>
-        <a href='/' style='background:#1a73e8; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;'>Go back to Registration</a>
-    </div>"""
-
-@app.route('/plans')
-def subscription_plans():
-    return render_template('plans.html')
-
-@app.route('/api/dhan-option-chain')
-def dhan_option_chain_api():
-    """Returns real-time Option Chain data from Dhan background worker."""
-    try:
-        symbol = request.args.get('symbol', 'NIFTY').upper()
-        chain_data = dhan_live_feed.full_option_chain_data.get(symbol, [])
-        spot = dhan_live_feed.live_option_chain_summary.get(symbol, {}).get('spot', 0)
-        
-        # If no real data yet, return empty but success
-        return jsonify({
-            "status": "success",
-            "symbol": symbol,
-            "spot_price": spot,
-            "timestamp": dhan_live_feed.full_option_chain_data.get("last_updated", "N/A"),
-            "chain": chain_data
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
-
-
-
-@app.route('/api/nse-log')
-def nse_log_api():
-    """Returns the content of nse_status.log for debugging."""
-    try:
-        if os.path.exists('nse_status.log'):
-            with open('nse_status.log', 'r') as f:
-                lines = f.readlines()
-            return jsonify({"status": "success", "log": lines[-50:]}) # Last 50 lines
-        return jsonify({"status": "error", "message": "Log file not found."})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
-
-@app.route('/admin/refresh-data-feed')
-def admin_refresh_data_feed():
-    """Manually triggers the Dhan credential sync for the background worker."""
-    sync_admin_dhan_to_worker()
-    flash("⚡ GVN Master Data Feed has been manually refreshed with your latest Dhan keys!")
-    return redirect(url_for('user_dashboard', user_id=session.get('user_id')))
-
-@app.route('/api/live_trade_price/<int:trade_id>')
-def get_live_trade_price(trade_id):
-    """Fetches the real-time LTP of a running trade from Dhan API or NSE fallback."""
-    trade = AlgoTrade.query.get(trade_id)
-    if not trade or trade.status != 'Running':
-        return jsonify({"status": "error", "message": "Trade not active"}), 404
-        
-    user = User.query.get(trade.user_id) if trade.user_id else None
-    live_price = 0.0
-    
-    # 1. Try Dhan API if Real User
-    if user and user.user_type == 'REAL' and user.is_approved:
-        try:
-            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
-                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                from dhanhq import dhanhq
-                dhan = dhanhq(broker_conf.client_id, access_token)
-                pos_resp = dhan.get_positions()
-                if pos_resp.get('status') == 'success':
-                    for p in pos_resp.get('data', []):
-                        if p.get('tradingSymbol') == trade.symbol:
-                            live_price = float(p.get('lastTradedPrice', 0))
-                            break
-        except Exception as e:
-            print(f"[API LTP ERROR] {e}")
-            
-    # 2. Try NSE Memory Fallback
-    if live_price == 0.0:
-        import re
-        strike_match = re.search(r'(\d+)', trade.symbol)
-        if strike_match:
-            strike = strike_match.group(1)
-            opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
-            if "P" in trade.symbol.upper() and not "C" in trade.symbol.upper(): opt_type = "PE"
-            live_price = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
-            
-    if live_price == 0.0:
-        live_price = trade.entry_price # Fallback to entry
-        
-    current_loss = trade.entry_price - live_price if trade.trade_type == 'BUY' else live_price - trade.entry_price
-    is_danger = current_loss >= 16.0 # Warn if dropping more than 16 points
-        
-    return jsonify({
-        "status": "success",
-        "symbol": trade.symbol,
-        "entry_price": trade.entry_price,
-        "live_price": live_price,
-        "loss_points": round(current_loss, 2),
-        "is_danger": is_danger
-    })
-
-
-
-def square_off_user_trades(user, reason, manual_price=None):
-    active_trades = AlgoTrade.query.filter_by(user_id=user.id, status='Running').all()
-    if not active_trades: return
-    
-    # 🌟 NEW: Try to get fresh prices from Dhan if NSE is blocked
-    dhan_prices = {}
-    if not manual_price and user.user_type == 'REAL' and user.is_approved:
-        try:
-            broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-            if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
-                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                from dhanhq import dhanhq
-                dhan = dhanhq(broker_conf.client_id, access_token)
-                pos_resp = dhan.get_positions()
-                if pos_resp.get('status') == 'success':
-                    for p in pos_resp.get('data', []):
-                        # Map Dhan symbol to our format if possible, or use securityId
-                        dhan_prices[p.get('tradingSymbol')] = float(p.get('lastTradedPrice', 0))
-        except Exception as e:
-            print(f"[DHAN P&L FALLBACK ERROR] {e}")
-
-    for t in active_trades:
-        t.status = 'Closed'
-        
-        # Determine exit price: Manual > Dhan positions > NSE memory > Entry (break-even)
-        exit_p = float(manual_price) if manual_price else 0.0
-        if exit_p == 0.0:
-            # Try Dhan Positions match (Note: Dhan symbols might vary, this is a best-effort match)
-            exit_p = dhan_prices.get(t.symbol, 0.0)
-            
-        if exit_p == 0.0:
-            # Try memory from dhan_live_feed
-            import re
-            strike_match = re.search(r'(\d+)', t.symbol)
-            if strike_match:
-                strike = strike_match.group(1)
-                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
-                key = f"{strike}_{opt_type}"
-                exit_p = dhan_live_feed.live_option_ltps.get(key, 0.0)
-        
-        if exit_p == 0.0:
-            exit_p = t.entry_price # Final fallback to break-even
-            
-        t.exit_price = exit_p
-        t.pnl = (t.exit_price - t.entry_price) * t.quantity
-        
-        if user.user_type == 'REAL' and user.is_approved:
-            try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
-                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
-                    broker_api.execute_broker_order_async(
-                        broker_name=broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
-                        symbol=t.symbol,
-                        transaction_type="SELL",
-                        quantity=t.quantity,
-                        user_name=user.username
-                    )
-            except Exception as e:
-                print(f"Square-off error for {user.username}: {e}", flush=True)
-
-@app.route('/toggle-algo/<int:user_id>')
-def toggle_algo(user_id):
-    user = User.query.get_or_404(user_id)
-    if user.algo_status == 'ON':
-        user.algo_status = 'OFF'
-        manual_price = request.args.get('exit_price')
-        square_off_user_trades(user, "User Paused Dashboard", manual_price)
-        db.session.commit()
-        flash("Algo Stopped and Positions Squared Off Successfully.")
-    else:
-        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        if user.expiry_date and user.expiry_date < now:
-            flash("Subscription Expired! Please renew to start Algo.")
-        else:
-            user.algo_status = 'ON'
-            db.session.commit()
-            flash("Algo Started Successfully!")
-    
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/force-close-trade/<int:trade_id>')
-def force_close_trade(trade_id):
-    trade = AlgoTrade.query.get_or_404(trade_id)
-    user_id = session.get('user_id')
-    if not user_id or trade.user_id != user_id:
-        return "Unauthorized", 403
-    
-    if trade.status == 'Running':
-        user = User.query.get(user_id)
-        
-        # 🌟 NEW: Fetch real-time price for accurate P&L on Force Close
-        exit_p = 0.0
-        
-        # 1. Try Dhan positions if REAL user
-        if user.user_type == 'REAL' and user.is_approved:
-            try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-                if broker_conf and broker_conf.client_id and broker_conf.encrypted_access_token:
-                    access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                    from dhanhq import dhanhq
-                    dhan = dhanhq(broker_conf.client_id, access_token)
-                    pos_resp = dhan.get_positions()
-                    if pos_resp.get('status') == 'success':
-                        for p in pos_resp.get('data', []):
-                            if p.get('tradingSymbol') == trade.symbol:
-                                exit_p = float(p.get('lastTradedPrice', 0))
-                                break
-            except: pass
-            
-        # 2. Try NSE Memory if price not found yet
-        if exit_p == 0.0:
-            import re
-            strike_match = re.search(r'(\d+)', trade.symbol)
-            if strike_match:
-                strike = strike_match.group(1)
-                opt_type = "CE" if "C" in trade.symbol.upper() else "PE"
-                exit_p = dhan_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
-        
-        # 3. Final fallback to entry
-        if exit_p == 0.0: exit_p = trade.entry_price
-
-        trade.status = 'Closed'
-        trade.exit_price = exit_p
-        trade.pnl = (trade.exit_price - trade.entry_price) * trade.quantity
-        
-        # 🌟 Forward SELL to Broker if REAL
-        if user.user_type == 'REAL' and user.is_approved:
-            try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
-                
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
-                    broker_api.execute_broker_order_async(
-                        broker_name="Dhan" if not broker_conf else broker_conf.broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
-                        symbol=trade.symbol,
-                        transaction_type="SELL",
-                        quantity=trade.quantity,
-                        user_name=user.username
-                    )
-            except Exception as e:
-                print(f"Force Close Error: {e}")
-        
-        db.session.commit()
-        flash(f"Trade for {trade.symbol} Force Closed Successfully.")
-    
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-# 🌟 USER DASHBOARD ROUTE (With Specific PnL Logic)
-@app.route('/user/<int:user_id>')
-def user_dashboard(user_id):
-    session.permanent = True
-    session['user_id'] = user_id
-    user = User.query.get_or_404(user_id)
-    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    today_date = now.date()
-    remaining_days = (user.expiry_date - now).days if user.expiry_date else 0
-    
-    # 🌟 Auto Delete old history (Keep only today's detailed history)
-    try:
-        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
-        AlgoTrade.query.filter(AlgoTrade.timestamp < start_of_today).delete()
-        db.session.commit()
-    except Exception as e:
-        print(f"Cleanup Error: {e}")
-        db.session.rollback()
-    
-    # Parse today's trades for the live historical table dynamically
-    todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
-    parsed_trades = []
-    
-    for t in todays_trades:
-        # 🌟 NEW: Calculate current live P&L for running trades to show initial state
-        current_pnl = t.pnl
-        if t.status == 'Running':
-            # Try to get live price from NSE memory
-            import re
-            strike_match = re.search(r'(\d+)', t.symbol)
-            if strike_match:
-                strike = strike_match.group(1)
-                opt_type = "CE" if "C" in t.symbol.upper() else "PE"
-                live_price = shoonya_live_feed.live_option_ltps.get(f"{strike}_{opt_type}", 0.0)
-                if live_price > 0:
-                    current_pnl = (live_price - t.entry_price) * t.quantity if t.trade_type == 'BUY' else (t.entry_price - live_price) * t.quantity
-
-        parsed_trades.append({
-            "id": t.id,
-            "time": t.timestamp.strftime('%H:%M:%S'),
-            "symbol": t.symbol,
-            "type": t.trade_type,
-            "result": "Target Hit/Sold" if t.status == "Closed" and t.trade_type == "BUY" else ("Running" if t.status == "Running" else "Closed"),
-            "pnl": current_pnl,
-            "status": t.status,
-            "entry_price": t.entry_price,
-            "exit_price": t.exit_price,
-            "target": t.target_price or 'N/A', # 🌟 NEW
-            "sl": t.stop_loss or 'N/A',        # 🌟 NEW
-            "ai_opinion": getattr(t, 'ai_opinion', 'N/A') # 🌟 NEW
-        })
-        
-    pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
-    
-    # Sync today's Live P&L to database so it stays permanently
-    today_record = DailyPnL.query.filter_by(date=today_date).first()
-    if not today_record:
-        db.session.add(DailyPnL(date=today_date, pnl=pnl_1d))
-    else:
-        today_record.pnl = pnl_1d
-    try: db.session.commit()
-    except: db.session.rollback()
-    
-    # 30-Day P&L
-    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
-    daily_history = []
-    for dp in all_daily:
-        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)})
-        
-    pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
-        
-    # Fetch Broker Config (With Self-Healing Migration for column addition)
-    try:
-        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-    except Exception:
-        db.session.rollback()
-        try:
-            # 🌟 Emergency Migration: Add encrypted_password column if missing
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
-            db.session.commit()
-        except:
-            db.session.rollback()
-            try:
-                db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BLOB;'))
-                db.session.commit()
-            except:
-                db.session.rollback()
-        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-    
-    # Decrypt keys for UI visibility
-    decrypted_keys = {
-        "tv_secret": "",
-        "access_token": "",
-        "client_secret": "",
-        "totp_key": "",
-        "broker_password": ""
+    levels = {
+        "i0": gvn100,
+        "i1": gvn0,
+        "i2": gvn0 + 0.763 * gvnR,
+        "i3": gvn0 + 0.618 * gvnR,
+        "i5": gvn0 + 0.5 * gvnR,
+        "i6": gvn0 + 0.382 * gvnR,
+        "i7": gvn0 + 0.220 * gvnR
     }
-    if broker_config:
-        try:
-            if broker_config.encrypted_secret_key:
-                decrypted_keys["tv_secret"] = cipher.decrypt(broker_config.encrypted_secret_key).decode()
-            if broker_config.encrypted_access_token:
-                decrypted_keys["access_token"] = cipher.decrypt(broker_config.encrypted_access_token).decode()
-            if broker_config.encrypted_client_secret:
-                decrypted_keys["client_secret"] = cipher.decrypt(broker_config.encrypted_client_secret).decode()
-            if broker_config.encrypted_totp_key:
-                decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
-            if broker_config.encrypted_password:
-                decrypted_keys["broker_password"] = cipher.decrypt(broker_config.encrypted_password).decode()
-        except: pass
+    return levels
 
-    # 🔒 Check if signal unlock has expired
-    if not user.is_locked and user.signals_unlocked_until:
-        if user.signals_unlocked_until < datetime.utcnow() + timedelta(hours=5, minutes=30):
-            user.is_locked = True
-            db.session.commit()
-    
-    return render_template('user.html', 
-                           user=user, 
-                           broker_config=broker_config,
-                           decrypted_keys=decrypted_keys,
-                           remaining_days=max(0, remaining_days),
-                           discount_percent=user.personal_discount + 10,
-                           pnl_1d=pnl_1d,
-                           daily_history=daily_history,
-                           pnl_total_30d=pnl_total_30d,
-                           parsed_trades=parsed_trades,
-                           config=get_admin_config())
-
-@app.route('/admin/clear-today-trades')
-def clear_today_trades():
-    uid = session.get('user_id')
-    if not uid:
-        return redirect(url_for('index'))
-    
-    user = User.query.get(uid)
-    if not user or not user.is_admin:
-        flash("Admin access required.", "danger")
-        return redirect(url_for('user_dashboard', user_id=uid))
-    
-    try:
-        now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-        today_date = now.date()
-        start_of_today = datetime(today_date.year, today_date.month, today_date.day)
-        
-        # Delete all trades from today
-        AlgoTrade.query.filter(AlgoTrade.timestamp >= start_of_today).delete()
-        db.session.commit()
-        flash("Today's trade history cleared successfully.", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Error clearing history: {e}", "danger")
-    
-    return redirect(url_for('user_dashboard', user_id=uid))
-
-
-@app.route('/update-lots', methods=['POST'])
-def update_lots():
-    user_id = request.form.get('user_id')
-    trade_lots = int(request.form.get('trade_lots', 1))
-    
-    user = User.query.get(user_id)
-    if user:
-        user.trade_lots = trade_lots
-        db.session.commit()
-        flash(f"Trading Quantity Updated to {trade_lots} Lot(s) Successfully!")
-    
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-# ---------------------------------------------------------
-# TRADING LOGIC (The Mechanism)
-# ---------------------------------------------------------
-
-# ============================================================
-# 🤖 GVN AI SIGNAL VALIDATOR
-# Validates TradingView level alerts against live option chain
-# FAKE signal → skip | REAL signal → execute trade
-# ============================================================
-def gvn_ai_signal_validator(symbol, txn_type, price):
+# --- GVN AI DASHBOARD ANALYSIS ---
+def update_ai_dashboard(symbol, underlying_value):
     """
-    Returns: (is_valid: bool, reason: str, confidence: int 0-100)
-    Checks:
-      1. Market Hours (9:15–15:25 IST)
-      2. OI Direction  (CE OI vs PE OI)
-      3. ATM Greeks    (Delta 0.30–0.65, Gamma > 0.0003)
-      4. Deep Scan     (Greeks-based auto signals agree)
-      5. Pulse Score   (AI sentiment > 60 for BUY)
+    Advanced AI Sentiment Analysis based on GVN Pine Script Logic.
+    Calculates Volume Pressure, Institutional Activity, and Momentum.
     """
     try:
-        import datetime as dt
-        now = dt.datetime.now()
+        scanner_list = gvn_scanner_data.get(symbol, [])
+        if not scanner_list: return
 
-        # ── 1. Market Hours Gate ──
-        market_open  = now.replace(hour=9,  minute=15, second=0, microsecond=0)
-        market_close = now.replace(hour=15, minute=25, second=0, microsecond=0)
-        if not (market_open <= now <= market_close):
-            return False, "⏰ Market Closed — trades only 9:15-15:25", 0
+        # GVN Special Logic from Pine Script
+        # volRatio: buyingVolume / sellingVolume
+        # deltaFlow: buyVolFlow - sellVolFlow
+        # isInstPump: volume > (avgV * 2.5) and cBody <= avgB
+        
+        status_labels = []
+        sentiment = "NEUTRAL"
+        color_code = "yellow"
+        trend = "SIDEWAYS"
+        score = 50
+        
+        now = datetime.datetime.now()
+        time_val = now.hour + (now.minute / 60.0)
+        
+        # 1. Trend and Control (Pine Script Mode Decision)
+        if underlying_value > 0:
+            # We use a placeholder for volRatio based on scanner sentiment
+            # In a full tick-by-tick system, this would be more precise
+            ce_vol = sum(item.get('volume', 0) for item in scanner_list if 'CE' in item.get('strike_name', ''))
+            pe_vol = sum(item.get('volume', 0) for item in scanner_list if 'PE' in item.get('strike_name', ''))
+            vol_ratio = pe_vol / (ce_vol if ce_vol > 0 else 1)
+            
+            if vol_ratio > 1.8:
+                sentiment, trend, color_code, score = "STRONG BUY 🚀", "ULTRA BREAKOUT", "rainbow", 95
+                status_labels.append("HIGH MOMENTUM 🔥")
+                status_labels.append("BUYERS MOMENTUM UP 🚀")
+            elif vol_ratio > 1.3:
+                sentiment, trend, color_code, score = "BUY 📈", "UPTREND", "green", 75
+                status_labels.append("BUYERS CONTROL 🟢")
+            elif vol_ratio < 0.4:
+                sentiment, trend, color_code, score = "STRONG SELL 🩸", "ULTRA CRASH", "rainbow", 5
+                status_labels.append("HIGH SELLING MOMENTUM 🩸")
+                status_labels.append("SELLERS MOMENTUM DOWN 🩸")
+            elif vol_ratio < 0.7:
+                sentiment, trend, color_code, score = "SELL 📉", "DOWNTREND", "red", 25
+                status_labels.append("SELLERS CONTROL 🔴")
+            else:
+                sentiment, trend, color_code, score = "NATURAL 📊", "SIDEWAYS", "yellow", 50
+                status_labels.append("NATURAL MOMENTUM 📊")
 
-        # ── Index Detection ──
-        idx = "NIFTY"
-        if "BANK" in symbol.upper():    idx = "BANKNIFTY"
-        elif "FIN"  in symbol.upper():  idx = "FINNIFTY"
-        elif "SENSEX" in symbol.upper(): idx = "SENSEX"
+        # 2. Time Zone Momentum (Pine Script Logic)
+        if 9.25 <= time_val <= 10.5:
+            status_labels.append("MORNING MOMENTUM ⚡")
+        elif 13.5 <= time_val <= 15.0:
+            status_labels.append("BREAKOUT ZONE 🚀")
+        
+        # 3. Institutional Activity (Simulated from Scanner)
+        if any(item.get('score', 0) > 65 for item in scanner_list):
+            status_labels.append("BIG BOYS ACTIVE 🔥")
+            status_labels.append("INSTITUTIONAL PUMP 🚨")
+            color_code = "rainbow" if sentiment in ["BULLISH", "STRONG BULLISH"] else color_code
 
-        summary = dhan_live_feed.live_option_chain_summary.get(idx, {})
-        pulse   = dhan_live_feed.market_pulse.get(idx, {})
-        scanner = dhan_live_feed.gvn_scanner_data.get(idx, [])
-        spot    = summary.get("spot", 0)
+        # 🌟 4. LEVEL-TO-LEVEL ANALYSIS (Pine Script Logic)
+        for item in scanner_list[:3]: # Analyze Top 3 strikes
+            strike_key = item['strike']
+            ltp = item['ltp']
+            
+            # Calculate levels if 9:15 candle exists
+            candle = option_915_candles.get(strike_key)
+            if candle:
+                levels = calculate_option_gvn_levels(candle['high'], candle['low'])
+                item['levels'] = levels # Send to UI
+                
+                # Signal Detection (Example: 0.5 Level Breach)
+                i5 = levels.get('i5', 0)
+                if ltp > i5 and item.get('prev_ltp', 0) <= i5:
+                    status_labels.append(f"🚀 {strike_key} BREAKOUT UP")
+                    # Set trigger for app.py to pick up
+                    item['trigger_signal'] = "BUY_ACTIVE"
+                elif ltp < i5 and item.get('prev_ltp', 0) >= i5:
+                    status_labels.append(f"🩸 {strike_key} BREAKDOWN DOWN")
+                    item['trigger_signal'] = "SELL_ACTIVE"
 
-        if spot == 0:
-            return False, "⚠️ Spot price 0 — API offline or market closed", 0
+            item['prev_ltp'] = ltp
 
-        # ── 2. OI Direction (CE vs PE) ──
-        ce_items    = [s for s in scanner if "CE" in s.get("strike", "")]
-        pe_items    = [s for s in scanner if "PE" in s.get("strike", "")]
-        ce_oi_total = sum(s.get("oi", 0) for s in ce_items)
-        pe_oi_total = sum(s.get("oi", 0) for s in pe_items)
-        ce_oi_chg   = sum(s.get("oi_change", 0) for s in ce_items)
-        pe_oi_chg   = sum(s.get("oi_change", 0) for s in pe_items)
-        oi_ratio    = pe_oi_total / (ce_oi_total if ce_oi_total > 0 else 1)
+        # 🌟 NEW: DUAL-PULSE CONFIRMATION (Call vs Put Sync)
+        ce_active = None
+        pe_active = None
+        
+        # Identify active CE and PE strikes from top 3
+        for item in scanner_list[:5]:
+            if 'CE' in item['strike'] and not ce_active: ce_active = item
+            if 'PE' in item['strike'] and not pe_active: pe_active = item
+            if ce_active and pe_active: break
 
-        if txn_type == "BUY":
-            # Bullish: PE OI >= CE OI (put writers absorbing) OR CE OI shrinking
-            oi_direction_ok = (oi_ratio >= 1.0) or (ce_oi_chg < 0)
-        else:
-            # Bearish: CE OI > PE OI (call writers building wall) OR PE OI shrinking
-            oi_direction_ok = (oi_ratio < 1.0) or (pe_oi_chg < 0)
+        # Signal Quality Logic
+        confirmation_label = "NEUTRAL"
+        if ce_active and pe_active:
+            ce_ltp, pe_ltp = ce_active['ltp'], pe_active['ltp']
+            ce_i5 = ce_active.get('levels', {}).get('i5', 0)
+            pe_i5 = pe_active.get('levels', {}).get('i5', 0)
+            ce_i7 = ce_active.get('levels', {}).get('i7', 0)
+            pe_i7 = pe_active.get('levels', {}).get('i7', 0)
+            
+            # 🛑 FAKE BREAKOUT DETECTION
+            if ce_ltp > ce_i5 and pe_ltp > pe_i5:
+                confirmation_label = "⚠️ POTENTIAL FAKE (No Sync)"
+                score = min(score, 50)
+                color_code = "yellow"
+            elif ce_ltp > ce_i5 and pe_ltp < pe_i7:
+                confirmation_label = "🔥 REAL BREAKOUT (CE Sync)"
+                score = 90
+                color_code = "rainbow"
+            elif pe_ltp > pe_i5 and ce_ltp < ce_i7:
+                confirmation_label = "🩸 REAL BREAKOUT (PE Sync)"
+                score = 10 # Low score for PE side (Bearish)
+                color_code = "rainbow"
 
-        # ── 3. ATM Greeks (Delta + Gamma) ──
-        atm        = summary.get("atm", 0)
-        atm_ce     = next((s for s in ce_items if str(atm) in s.get("strike", "")), None)
-        atm_pe     = next((s for s in pe_items if str(atm) in s.get("strike", "")), None)
-        greeks_ok  = False
-        greeks_info = "No ATM Greeks data"
-
-        if txn_type == "BUY" and atm_ce:
-            delta = abs(atm_ce.get("delta", 0))
-            gamma = atm_ce.get("gamma", 0)
-            theta = atm_ce.get("theta", 0)
-            greeks_ok  = (0.30 <= delta <= 0.65) and (gamma > 0.0003) and (theta > -8.0)
-            greeks_info = f"CE Δ:{delta:.2f} Γ:{gamma:.4f} Θ:{theta:.2f}"
-        elif txn_type == "SELL" and atm_pe:
-            delta = abs(atm_pe.get("delta", 0))
-            gamma = atm_pe.get("gamma", 0)
-            theta = atm_pe.get("theta", 0)
-            greeks_ok  = (0.30 <= delta <= 0.65) and (gamma > 0.0003) and (theta > -8.0)
-            greeks_info = f"PE Δ:{delta:.2f} Γ:{gamma:.4f} Θ:{theta:.2f}"
-
-        # ── 4. Deep Scan Agreement ──
-        deep_signals = dhan_live_feed.auto_trade_signals
-        deep_agrees  = any(
-            s.get("symbol") == idx and
-            (("CE" in s.get("strike", "") and txn_type == "BUY") or
-             ("PE" in s.get("strike", "") and txn_type == "SELL"))
-            for s in deep_signals[:5]
-        )
-
-        # ── 5. Pulse Score ──
-        pulse_score = pulse.get("score", 50)
-        pulse_ok    = (pulse_score >= 60) if txn_type == "BUY" else (pulse_score <= 40)
-
-        # ── Final Score ──
-        score   = 0
-        reasons = []
-
-        if oi_direction_ok:
-            score += 35; reasons.append("✅ OI OK")
-        else:
-            reasons.append("❌ OI Against")
-
-        if greeks_ok:
-            score += 35; reasons.append(f"✅ Greeks OK ({greeks_info})")
-        else:
-            reasons.append(f"⚠️ Greeks Weak ({greeks_info})")
-
-        if deep_agrees:
-            score += 20; reasons.append("✅ DeepScan Agrees")
-        else:
-            reasons.append("⚠️ DeepScan Mismatch")
-
-        if pulse_ok:
-            score += 10; reasons.append(f"✅ Pulse:{pulse_score}")
-        else:
-            reasons.append(f"⚠️ Pulse:{pulse_score}")
-
-        is_valid   = score >= 60
-        reason_str = " | ".join(reasons)
-
-        try:
-            with open("ai_signal_validation.log", "a", encoding="utf-8") as f:
-                f.write(f"{now}: [{idx}] {txn_type}@{price} Score:{score} Valid:{is_valid} | {reason_str}\n")
-        except: pass
-
-        return is_valid, reason_str, score
-
+        # Update the Global Pulse
+        market_pulse[symbol] = {
+            "sentiment": sentiment,
+            "score": score,
+            "trend": trend,
+            "volume": "HIGH" if len(status_labels) > 3 else "NORMAL",
+            "inst_activity": "ACTIVE 🔥" if "BIG BOYS ACTIVE 🔥" in status_labels else "LOW",
+            "color": color_code,
+            "labels": status_labels[:6],
+            "confirmation": confirmation_label,
+            "last_signal": status_labels[-1] if status_labels else "No Signal"
+        }
+        
     except Exception as e:
-        return True, f"Validator error (bypassed): {str(e)}", 50
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [AI DASHBOARD ERROR] {e}\n")
 
-
-@app.route('/tv-webhook', methods=['POST'])
-def tv_webhook():
-    import json
-    # 🌟 GVN WEBHOOK DIAGNOSTICS
-    with open("webhook_alerts.log", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now()}: [INCOMING] {request.get_data(as_text=True)}\n")
-
+# --- GVN Fibonacci Level Calculator ---
+def calculate_gvn_levels(high915, low915):
+    """
+    Calculates GVN Master Fibonacci Levels based on the 9:15 AM candle.
+    Formula: result = (H-L)/2, n1=H+result, n2=L+result, 
+             gvn0=n2*0.118/0.5, gvn100=n1*0.786/0.5
+    """
+    if not high915 or not low915: return {}
     
-    alert_data = request.json
-    if not alert_data:
-        # Fallback to parse it manually if it contains dirty text from TradingView (like {{alert_message}})
-        raw_text = request.get_data(as_text=True)
-        if raw_text and "{" in raw_text and "}" in raw_text:
-            try:
-                # Extract string between first '{' and last '}'
-                json_str = raw_text[raw_text.find('{'):raw_text.rfind('}')+1]
-                alert_data = json.loads(json_str)
-            except Exception as e:
-                return jsonify({"status": "error", "message": f"Invalid JSON format: {str(e)}"}), 400
-        else:
-            return jsonify({"status": "error", "message": "No data or not JSON Format"}), 400
+    diff = high915 - low915
+    result = diff / 2
+    n1 = high915 + result
+    n2 = low915 + result
+    
+    gvn0 = n2 * 0.118 / 0.5
+    gvn100 = n1 * 0.786 / 0.5
+    gvnR = gvn100 - gvn0
+    
+    levels = {
+        "Level_0": gvn100, # Top
+        "Level_1": gvn0,   # Base / Support
+        "Level_2": gvn0 + 0.763 * gvnR,
+        "Level_3": gvn0 + 0.618 * gvnR,
+        "Level_5": gvn0 + 0.500 * gvnR,
+        "Level_6": gvn0 + 0.382 * gvnR,
+        "Level_7": gvn0 + 0.220 * gvnR # High reaction zone
+    }
+    return levels
 
-    # 1. Parse Alert Fields
-    symbol = alert_data.get('symbol', 'UNKNOWN')
-    txn_type = str(alert_data.get('transactionType', 'BUY')).upper() # 🌟 GVN MASTER BRIDGE: Direct Execution Logic
-    # We use the symbol sent by TradingView exactly, or format it for Dhan if needed.
+# --- Black-Scholes Greeks Engine (Delta, Gamma, Theta, Vega) ---
+def norm_cdf(x):
+    """Cumulative distribution function for the standard normal distribution."""
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+def norm_pdf(x):
+    """Probability density function for the standard normal distribution."""
+    return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
+
+def calculate_greeks(S, K, T, r, sigma, option_type):
+    """Returns dict with Delta, Gamma, Theta, Vega for an option."""
+    if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
+        delta = 1.0 if (option_type == "CE" and S > K) or (option_type == "PE" and S < K) else 0.0
+        return {"delta": delta, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
     try:
-        price = float(alert_data.get('price', 0.0))
-        qty = int(alert_data.get('quantity', 1))
-    except (ValueError, TypeError):
-        price = 0.0
-        qty = 1
-
-    # 2. Sync for ALL Users based on their status
-    all_users = User.query.all()
-    today_dt = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    
-    trade_executed = False
-    
-    for u in all_users:
-        # 🌟 Check Expiry & Update Status
-        if u.expiry_date and u.expiry_date < today_dt:
-            if u.algo_status == 'ON':
-                u.algo_status = 'OFF'
-                square_off_user_trades(u, "Subscription Expired")
-                db.session.commit()
-            continue
-
-        if u.algo_status == 'OFF' or u.admin_kill_switch:
-            continue
-
-        # ── 🤖 GVN AI SIGNAL VALIDATION GATE ──
-        # Validate signal against live option chain before executing
-        if txn_type == "BUY":
-            is_valid, ai_reason, ai_score = gvn_ai_signal_validator(symbol, txn_type, price)
-            if not is_valid:
-                try:
-                    with open("ai_signal_validation.log", "a", encoding="utf-8") as f:
-                        f.write(f"{datetime.now()}: [BLOCKED] {symbol} BUY@{price} | Score:{ai_score} | {ai_reason}\n")
-                except: pass
-                continue  # Skip this user — fake signal blocked
-
-        # Handle demo/real trade tracking per user
-        if txn_type == "BUY":
-
-            # 🌟 NEW LOGIC: Auto-square off ANY existing running trades before opening a new one!
-            # This prevents trades getting stuck if TradingView misses sending a Stop Loss signal.
-            running_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
-            for rt in running_trades:
-                if rt.symbol != symbol:
-                    rt.status = 'Closed'
-                    rt.exit_price = rt.entry_price - 15.0 # Assuming a default 15-point stop loss
-                    rt.pnl = -15.0 * rt.quantity
-                    
-                    # Force close at broker
-                    if u.user_type == 'REAL' and u.is_approved:
-                        try:
-                            broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
-                            webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
-                            enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
-                            if enc_secret:
-                                secret_key = cipher.decrypt(enc_secret).decode()
-                                broker_api.execute_broker_order_async(
-                                    broker_name=broker_conf.broker_name if broker_conf else "Dhan",
-                                    webhook_url=webhook_url,
-                                    secret_key=secret_key,
-                                    symbol=rt.symbol,
-                                    transaction_type="SELL",
-                                    quantity=rt.quantity,
-                                    user_name=u.username
-                                )
-                        except Exception as e:
-                            pass
-
-            # Avoid duplications if already running
-            existing = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status='Running').first()
-            if not existing:
-                new_trade = AlgoTrade(user_id=u.id, symbol=symbol, quantity=qty, trade_type="BUY", entry_price=price, status="Running", timestamp=today_dt)
-                db.session.add(new_trade)
-                trade_executed = True
-        
-        elif txn_type == "SELL":
-            active_trades = AlgoTrade.query.filter_by(user_id=u.id, symbol=symbol, status="Running").all()
-            if active_trades:
-                trade_executed = True
-            for at in active_trades:
-                exit_val = price if price > 0.0 else at.entry_price
-                at.exit_price = exit_val
-                at.pnl = (exit_val - at.entry_price) * at.quantity
-                at.status = "Closed"
-                
-                # Update Daily P&L Tracker for this user if needed (can be global/per-user)
-                # For now, let's keep DailyPnL as a global metric for the system's performance
-                daily_record = DailyPnL.query.filter_by(date=today_dt.date()).first()
-                if not daily_record:
-                    db.session.add(DailyPnL(date=today_dt.date(), pnl=at.pnl))
-                else:
-                    daily_record.pnl += at.pnl
-
-        # 3. For REAL users, also forward to Broker
-        if u.user_type == 'REAL' and u.is_approved:
-            try:
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
-                webhook_url = broker_conf.webhook_url if broker_conf else u.dhan_webhook_url
-                enc_secret = broker_conf.encrypted_secret_key if broker_conf else u.encrypted_secret_key
-                broker_name = broker_conf.broker_name if broker_conf else "Dhan"
-                
-                if enc_secret and webhook_url:
-                    secret_key = cipher.decrypt(enc_secret).decode()
-                    broker_api.execute_broker_order_async(
-                        broker_name=broker_name,
-                        webhook_url=webhook_url,
-                        secret_key=secret_key,
-                        symbol=symbol,
-                        transaction_type=txn_type,
-                        quantity=qty,
-                        user_name=u.username
-                    )
-            except Exception as e:
-                print(f"Forwarding error for {u.username}: {e}", flush=True)
-
-    db.session.commit()
-
-    # 4. Telegram Alert (Send ONLY if a trade was actually executed/closed)
-    if trade_executed:
-        if txn_type == "BUY":
-            target_val = alert_data.get('target', 'N/A')
-            sl_val = alert_data.get('sl', 'N/A')
-            tg_msg = (
-                f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
-                f"💸 <b>Entry Price:</b> <code>₹{price}</code>\n"
-                f"✅ <b>Target:</b> <code>₹{target_val}</code>\n"
-                f"⛔ <b>Stop Loss:</b> <code>₹{sl_val}</code>\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚡ <i>Processed exactly as per GVN Settings</i>"
-            )
-            send_telegram_msg(tg_msg)
+        d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
+        d2 = d1 - sigma * math.sqrt(T)
+        pdf_d1 = norm_pdf(d1)
+        delta = norm_cdf(d1) if option_type == "CE" else norm_cdf(d1) - 1.0
+        gamma = pdf_d1 / (S * sigma * math.sqrt(T))
+        # Theta per day (divide by 365)
+        if option_type == "CE":
+            theta = (-(S * pdf_d1 * sigma) / (2 * math.sqrt(T)) - r * K * math.exp(-r * T) * norm_cdf(d2)) / 365.0
         else:
-            status_msg = alert_data.get('status', 'CLOSED (MANUAL)')
-            icon = "🛑" if "SL" in status_msg else "🏅" if "Target" in status_msg else "📉"
-            tg_msg = (
-                f"{icon} <b>GVN ALGO - {status_msg.upper()}</b> {icon}\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 <b>Symbol:</b> <code>{symbol}</code>\n"
-                f"💸 <b>Exit Price:</b> <code>₹{price}</code>\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚡ <i>Trade Successfully Closed by System</i>"
-            )
-            send_telegram_msg(tg_msg)
-
-    return jsonify({"status": "Signals Processed", "symbol": symbol, "executed": trade_executed}), 200
-
-@app.route('/save_api_settings', methods=['POST'])
-def save_api_settings():
-    user_id = int(request.form.get('user_id', 0))
-    if not user_id:
-        return "Invalid User", 400
-        
-    broker_name = request.form.get('broker_name', 'Dhan')
-    webhook_url = request.form.get('webhook_url')
-    secret_key = request.form.get('secret_key')
-    client_id = request.form.get('client_id')
-    access_token = request.form.get('access_token')
-    client_secret = request.form.get('client_secret') 
-    totp_key = request.form.get('totp_key')           
-    broker_password = request.form.get('broker_password')
-    
-    user = User.query.get_or_404(user_id)
-    
-    try:
-        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+            theta = (-(S * pdf_d1 * sigma) / (2 * math.sqrt(T)) + r * K * math.exp(-r * T) * norm_cdf(-d2)) / 365.0
+        vega = S * pdf_d1 * math.sqrt(T) / 100.0  # per 1% IV change
+        return {
+            "delta": round(delta, 3),
+            "gamma": round(gamma, 4),
+            "theta": round(theta, 2),
+            "vega":  round(vega, 2)
+        }
     except Exception:
-        db.session.rollback()
-        try:
-            db.session.execute(db.text('ALTER TABLE user_broker_config ADD COLUMN encrypted_password BYTEA;'))
-            db.session.commit()
-        except:
-            db.session.rollback()
-        broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+        return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
 
-    if not broker_config:
-        broker_config = UserBrokerConfig(user_id=user_id)
-        db.session.add(broker_config)
+def calculate_delta(S, K, T, r, sigma, option_type):
+    """Backward-compatible wrapper — returns abs delta only."""
+    g = calculate_greeks(S, K, T, r, sigma, option_type)
+    return abs(g["delta"])
 
-        
-    broker_config.broker_name = broker_name
-    broker_config.webhook_url = webhook_url
-    if secret_key and secret_key != '********':
-        broker_config.encrypted_secret_key = cipher.encrypt(secret_key.encode())
+# 🌟 Deep Scan Auto-Trade Signal Storage
+auto_trade_signals = []  # List of dicts with signal details
+
+def generate_deep_scan_signal(symbol, item, greeks, spot, oi, oi_change):
+    """
+    Deep Scan AI Engine: Creates auto-trade signal when Greeks + OI conditions align.
+    Rules:
+      - Delta 0.35–0.55 (near ATM, high probability)
+      - Gamma > 0.001 (accelerating move)
+      - Theta < -1.0  (not too much decay)
+      - OI_change > 0  (fresh positions being added = conviction)
+      - Comparative high OI vs avg (institutional interest)
+    """
+    global auto_trade_signals
+    delta  = abs(greeks.get("delta", 0))
+    gamma  = greeks.get("gamma", 0)
+    theta  = greeks.get("theta", 0)
+    vega   = greeks.get("vega", 0)
+    strike_name = item.get("strike", "")
+    opt_type = "CE" if "CE" in strike_name else "PE"
+    ltp    = item.get("ltp", 0)
     
-    broker_config.client_id = client_id
-    if access_token and access_token != '********':
-        broker_config.encrypted_access_token = cipher.encrypt(access_token.encode())
-        
-    if client_secret and client_secret != '********':
-        broker_config.encrypted_client_secret = cipher.encrypt(client_secret.encode())
-        
-    if totp_key and totp_key != '********':
-        broker_config.encrypted_totp_key = cipher.encrypt(totp_key.encode())
-        
-    if broker_password and broker_password != '********':
-        broker_config.encrypted_password = cipher.encrypt(broker_password.encode())
+    # --- Condition Gate ---
+    cond_delta = 0.30 <= delta <= 0.60
+    cond_gamma = gamma > 0.0005
+    cond_theta = theta > -5.0   # Not burning too fast
+    cond_oi    = oi_change > 0  # New OI being added (conviction)
+    cond_ltp   = ltp > 5        # Avoid illiquid options
+
+    if not (cond_delta and cond_gamma and cond_theta and cond_oi and cond_ltp):
+        return None
+
+    # Score the signal
+    score = 0
+    if 0.40 <= delta <= 0.55: score += 30  # ATM zone
+    if gamma > 0.002: score += 25           # High gamma acceleration
+    if oi_change > 500: score += 20         # Strong OI buildup
+    if theta > -2.0: score += 15            # Low decay
+    if vega > 10: score += 10               # IV responsive
+
+    if score < 50:
+        return None
+
+    signal = {
+        "symbol": symbol,
+        "strike": strike_name,
+        "ltp": ltp,
+        "spot": spot,
+        "delta": delta,
+        "gamma": gamma,
+        "theta": theta,
+        "vega": vega,
+        "oi": oi,
+        "oi_change": oi_change,
+        "score": score,
+        "action": f"BUY {opt_type}" if opt_type == "CE" else f"BUY {opt_type}",
+        "reason": f"Delta:{delta:.2f} | Gamma:{gamma:.4f} | OI+:{oi_change} | Score:{score}",
+        "time": datetime.datetime.now().strftime("%H:%M:%S")
+    }
+    # Keep only last 20 signals - Modify SHARED list in-place
+    new_signals = [s for s in shared_data.auto_trade_signals if s["symbol"] != symbol or s["strike"] != strike_name]
+    new_signals.insert(0, signal)
     
-    db.session.commit()
+    shared_data.auto_trade_signals.clear()
+    shared_data.auto_trade_signals.extend(new_signals[:20])
+    return signal
+
+# Global memory for Dhan Master Token (Updated by app.py)
+dhan_master_config = {
+    "client_id": None,
+    "access_token": None,
+    "broker_password": None,
+    "client_secret": None,
+    "totp_key": None,
+    "broker_name": "Dhan",
+    "active": False
+}
+
+shoonya_api = None
+
+def login_shoonya():
+    global shoonya_api
+    if shoonya_api: return shoonya_api
     
-    # 🌟 NEW: Immediately sync new keys to the background NSE worker
     try:
-        sync_admin_dhan_to_worker()
-    except: pass
+        try:
+            from NorenRestApiPy.NorenApi import NorenApi
+        except ImportError:
+            print("❌ Error: NorenRestApiPy not found. Run 'pip install NorenRestApiPy'")
+            return None
+        import pyotp
+        
+        class ShoonyaApiPy(NorenApi):
+            def __init__(self):
+                NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/', eodhost='https://api.shoonya.com/chartApi/getdata/')
+        
+        api = ShoonyaApiPy()
+        uid = dhan_master_config.get("client_id")
+        pwd = dhan_master_config.get("broker_password")
+        factor2 = pyotp.TOTP(dhan_master_config.get("totp_key", "")).now() if dhan_master_config.get("totp_key") else ""
+        vc = dhan_master_config.get("access_token")
+        app_key = dhan_master_config.get("client_secret")
+        
+        if not uid or not pwd or not vc or not app_key:
+            return None
+            
+        ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='12345')
+        if ret and ret.get('stat') == 'Ok':
+            shoonya_api = api
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Successful.\n")
+            return api
+        else:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Login Failed: {ret}\n")
+    except Exception as e:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [SHOONYA API] Exception during login: {e}\n")
+    return None
+
+
+def fetch_option_chain(symbol="NIFTY"):
+    """
+    Directly uses Broker API for fetching real-time Option Chain data.
+    """
+    broker = dhan_master_config.get("broker_name", "Dhan")
     
-    flash("API Settings Updated Successfully!")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/admin/refresh-data-feed')
-@requires_auth
-def admin_refresh_feed():
-    """Manual trigger to sync Dhan keys to NSE worker."""
-    sync_admin_dhan_to_worker()
-    flash("⚡ Data Feed Sync Triggered! Market data should update in a few seconds.")
-    return redirect(request.referrer or url_for('admin_dashboard'))
-
-# ---------------------------------------------------------
-# DASHBOARD LOGIC (Admin & Global)
-# ---------------------------------------------------------
-
-@app.route('/admin-control')
-@requires_auth
-def admin_dashboard():
-    # 🌟 Split Users
-    real_users = User.query.filter_by(user_type='REAL').all()
-    demo_users = User.query.filter_by(user_type='DEMO').all()
-    pending_payments = PaymentScreenshot.query.filter_by(status='PENDING').all()
-    
-    return render_template('admin.html', 
-                           real_users=real_users, 
-                           demo_users=demo_users, 
-                           pending_payments=pending_payments,
-                           g_discount=10,
-                           config=get_admin_config())
-
-@app.route('/admin/force-square-off/<int:user_id>')
-@requires_auth
-def force_square_off(user_id):
-    user = User.query.get_or_404(user_id)
-    # 1. Close in Local DB
-    square_off_user_trades(user, reason="ADMIN_FORCE_STOP")
-    # 2. Close in Broker API if REAL
-    if user.user_type == 'REAL':
-        broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-        if broker_conf and broker_conf.encrypted_access_token:
+    if broker == "Shoonya":
+        api = login_shoonya()
+        lp = 0
+        if api:
             try:
-                access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
-            except: pass
-    flash(f"🛑 Force Square Off executed for {user.username}")
-    return redirect(url_for('admin_dashboard'))
+                # Shoonya index tokens
+                idx_tokens = {"NIFTY": "26000", "BANKNIFTY": "26009", "FINNIFTY": "26037", "SENSEX": "1"}
+                token = idx_tokens.get(symbol, "26000")
+                exchange = "NSE" if symbol != "SENSEX" else "BSE"
+                
+                quote = api.get_quotes(exchange=exchange, token=token)
+                if quote and 'lp' in quote:
+                    lp = float(quote['lp'])
+                
+                # Note: Shoonya doesn't provide a full option chain with LTPs in one call easily.
+                # We will use the NSE website for the full chain if available, but we use Shoonya for the Index LTP.
+            except Exception as e:
+                with open("dhan_feed_status.log", "a") as f:
+                    f.write(f"{datetime.datetime.now()}: [SHOONYA ERROR] Fetching Index LTP failed: {e}\n")
 
-@app.route('/admin/global-kill-switch')
-@requires_auth
-def global_kill_switch():
-    users = User.query.all()
-    count = 0
-    for u in users:
-        active_trades = AlgoTrade.query.filter_by(user_id=u.id, status='Running').all()
-        if active_trades:
-            square_off_user_trades(u, reason="GLOBAL_KILL_SWITCH")
-            if u.user_type == 'REAL':
-                broker_conf = UserBrokerConfig.query.filter_by(user_id=u.id).first()
-                if broker_conf and broker_conf.encrypted_access_token:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [SHOONYA ENGINE] Index LTP: {lp}. Fetching Option Chain from NSE...\n")
+        
+        # 🌟 IMPROVED NSE SCRAPING FOR SHOONYA MODE
+        import requests
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://www.nseindia.com/option-chain"
+            }
+            session = requests.Session()
+            # Visit home page first to get cookies
+            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+            # Then fetch option chain
+            api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+            response = session.get(api_url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                nse_data = response.json()
+                if "records" in nse_data:
+                    # Inject Shoonya LP if we got it
+                    if lp > 0:
+                        nse_data["records"]["underlyingValue"] = lp
+                    nse_data["source"] = "SHOONYA + NSE_LIVE"
+                    return nse_data
+        except Exception as e:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [NSE SCRAPE ERROR] {e}\n")
+                
+        # Simulated fallback data if both fail
+        return {
+            "records": {
+                "underlyingValue": lp if lp > 0 else (24000 if symbol == "NIFTY" else 52000),
+                "expiryDates": [(datetime.datetime.now() + datetime.timedelta(days=2)).strftime("%d-%b-%Y")],
+                "data": []
+            },
+            "source": "SHOONYA_OFFLINE_FALLBACK"
+        }
+
+        
+    if not dhan_master_config["active"] or not dhan_master_config["access_token"]:
+        return None
+        
+    from dhanhq import dhanhq
+    try:
+        dhan = dhanhq(dhan_master_config["client_id"], dhan_master_config["access_token"])
+        
+        # Security IDs for Indices in Dhan
+        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27", "SENSEX": "1"}
+        sid = sec_ids.get(symbol)
+        if not sid: return None
+        
+        # 🌟 SMART SEGMENT DETECTION
+        if symbol == "SENSEX":
+            idx_segment = "BSE_INDEX" # Often used for Sensex in Dhan
+        else:
+            idx_segment = "IDX_I"
+            
+        # Get LTP first using quote_data
+        instruments = {idx_segment: [sid]}
+        lp_resp = dhan.quote_data(instruments)
+        lp = lp_resp.get('data', {}).get(sid, {}).get('lastPrice', 0)
+        
+        # Get Option Chain from Dhan
+        try:
+            # 🌟 NEW: Try to get expiry list
+            expiry_resp = dhan.expiry_list(sid, idx_segment)
+            
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [DHAN EXPIRY DEBUG] {symbol} Resp: {expiry_resp}\n")
+            
+            nearest_expiry = ""
+            if expiry_resp.get('status') == 'success' and expiry_resp.get('data'):
+                nearest_expiry = expiry_resp.get('data')[0]
+                
+            # 🌟 FALLBACK: If expiry_list fails, calculate next Thursday
+            if not nearest_expiry:
+                d = datetime.date.today()
+                while d.weekday() != 3: # Thursday
+                    d += datetime.timedelta(1)
+                nearest_expiry = d.strftime("%Y-%m-%d")
+                
+            # Now fetch the actual option chain for this expiry
+            chain_resp = dhan.option_chain(sid, idx_segment, nearest_expiry)
+            
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [DHAN DEBUG] {symbol} (Expiry: {nearest_expiry}) Option Chain Status: {chain_resp.get('status')} | Remarks: {chain_resp.get('remarks')}\n")
+            
+            if chain_resp.get('status') == 'success':
+                chain_data = chain_resp.get('data', [])
+                return {
+                    "records": {
+                        "underlyingValue": lp,
+                        "expiryDates": expiry_resp.get('data', [datetime.datetime.now().strftime("%Y-%m-%d")]), 
+                        "data": chain_data
+                    },
+                    "source": "DHAN_OPTION_CHAIN",
+                    "nearest_expiry": nearest_expiry
+                }
+        except Exception as e:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [DHAN DEBUG ERROR] {symbol}: {str(e)}\n")
+
+        return {
+            "records": {
+                "underlyingValue": lp,
+                "expiryDates": [datetime.datetime.now().strftime("%Y-%m-%d")], 
+                "data": [] # Still return index price at least
+            },
+            "source": "DHAN_LTP_ONLY"
+        }
+    except Exception as e:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [DHAN ERROR] {str(e)}\n")
+    return None
+
+def analyze_and_update_gvn_scanner(symbol="NIFTY"):
+    global current_delta_60_strikes, gvn_scanner_data
+    
+    data = fetch_option_chain(symbol)
+    if not data or "records" not in data: 
+        return
+        
+    records = data["records"]
+    underlying_value = records.get("underlyingValue", 0)
+    expiry_dates = records.get("expiryDates", [])
+    if not expiry_dates: return
+    nearest_expiry = expiry_dates[0]
+    
+    # Time to Expiry (T)
+    try:
+        expiry_dt = datetime.datetime.strptime(nearest_expiry, "%d-%b-%Y")
+    except ValueError:
+        try:
+            expiry_dt = datetime.datetime.strptime(nearest_expiry, "%Y-%m-%d")
+        except ValueError:
+            expiry_dt = datetime.datetime.now() + datetime.timedelta(days=1)
+    
+    now_dt = datetime.datetime.now()
+    days_to_expiry = max((expiry_dt - now_dt).days, 0.01)
+    T = days_to_expiry / 365.0  
+    r = 0.07 
+
+    # Reset scanner data for this symbol
+    gvn_scanner_data[symbol] = []
+    chain_map = {} # To store strike-wise CE and PE data
+    
+    best_ce_60 = None
+    best_pe_60 = None
+    closest_ce_diff = 1.0
+    closest_pe_diff = 1.0
+
+    options_count = len(records.get("data", []))
+    try:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"[{datetime.datetime.now()}] Attempting Shoonya Login...\n")
+    except Exception as e:
+        print(f"⚠️ Log Warning: Could not write to log file: {e}")
+    try:
+        with open("dhan_feed_status.log", "a") as f:
+            f.write(f"{datetime.datetime.now()}: [Dhan Worker] {symbol} data count: {options_count}\n")
+    except: pass
+
+    for item in records.get("data", []):
+        strike = item.get("strikePrice") or item.get("strike")
+        if not strike: continue
+        
+        options_to_process = []
+        if "CE" in item or "PE" in item:
+            if "CE" in item: options_to_process.append(("CE", item["CE"]))
+            if "PE" in item: options_to_process.append(("PE", item["PE"]))
+        elif "type" in item:
+            opt_type = item.get("type") # "CE" or "PE"
+            options_to_process.append((opt_type, item))
+            
+        for opt_type, opt in options_to_process:
+            ltp = opt.get("lastPrice") or opt.get("lastTradedPrice", 0)
+            iv = opt.get("impliedVolatility", 0)
+            oi = opt.get("openInterest") or opt.get("oi", 0)
+            oi_change = opt.get("changeinOpenInterest") or opt.get("oiChange", 0)
+            volume = opt.get("totalTradedVolume") or opt.get("volume", 0)
+            
+            # Store in chain_map
+            if strike not in chain_map:
+                chain_map[strike] = {"strike": strike}
+            
+            suffix = opt_type.lower()
+            chain_map[strike].update({
+                f"{suffix}_ltp": ltp,
+                f"{suffix}_oi": oi,
+                f"{suffix}_iv": round(iv, 2),
+                f"{suffix}_vol": volume
+            })
+
+            key = f"{int(strike)}_{opt_type}"
+            live_option_ltps[key] = ltp
+            
+            if key not in option_ltp_history: option_ltp_history[key] = []
+            option_ltp_history[key].append(ltp)
+            if len(option_ltp_history[key]) > 10: option_ltp_history[key].pop(0)
+
+            effective_iv = iv if iv > 0 else 18.0
+            greeks = {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
+            try:
+                greeks = calculate_greeks(underlying_value, strike, T, r, effective_iv/100.0, opt_type)
+            except:
+                pass
+            delta = abs(greeks["delta"])
+
+            # Store Greeks in chain_map
+            chain_map[strike].update({
+                f"{suffix}_delta": round(greeks["delta"], 3),
+                f"{suffix}_gamma": round(greeks["gamma"], 4),
+                f"{suffix}_theta": round(greeks["theta"], 2),
+                f"{suffix}_vega":  round(greeks["vega"], 2),
+                f"{suffix}_iv":    round(effective_iv, 2)
+            })
+
+            # DELTA 60 SELECTION
+            if abs(delta - 0.60) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
+                if opt_type == "CE":
+                    closest_ce_diff = abs(delta - 0.60)
+                    best_ce_60 = strike
+                else:
+                    closest_pe_diff = abs(delta - 0.60)
+                    best_pe_60 = strike
+            
+            # ZERO TO HERO SCANNER
+            if 0.15 <= delta <= 0.55: 
+                h915 = ltp * 1.05 
+                l915 = ltp * 0.95
+                levels = calculate_gvn_levels(h915, l915)
+                score = 0
+                zone = "NORMAL"
+                
+                if delta >= 0.45: 
+                    if ltp <= levels["Level_7"]: zone, score = "🔥 ITM/ATM SUPPORT (L7)", 55
+                    elif ltp >= levels["Level_3"]: zone, score = "🚀 BULLISH BREAKOUT (L3)", 45
+                elif delta <= 0.25:
+                    if ltp <= levels["Level_7"]: zone, score = "💀 OVER-SOLD (L7)", 25
+                    elif ltp >= levels["Level_3"]: zone, score = "📉 BEARISH TRAP (L3)", 15
+                
+                if score > 0:
+                    pressure = "NEUTRAL"
+                    ai_signal = "WAIT"
+                    
+                    if ltp <= levels["Level_7"]:
+                        pressure = "🔥 HIGH BUY PRESSURE"
+                        ai_signal = "🚀 SCALPING BUY"
+                    elif ltp >= levels["Level_3"]:
+                        pressure = "⚠️ SELL PRESSURE / TRAP"
+                        ai_signal = "📉 REJECTION"
+                    elif ltp >= levels["Level_5"] and ltp < levels["Level_3"]:
+                        pressure = "🟢 MOMENTUM BUILDING"
+                        ai_signal = "⚡ TREND BUY"
+                    
+                    i_level = "NORMAL"
+                    if abs(ltp - levels["Level_5"]) < 2: i_level = "i5 (Pivot)"
+                    elif abs(ltp - levels["Level_6"]) < 2: i_level = "i6 (Golden)"
+                    elif abs(ltp - levels["Level_7"]) < 2: i_level = "i7 (Inst)"
+                    elif abs(ltp - levels["Level_1"]) < 2: i_level = "i1 (Expiry)"
+                    
+                    # 🌟 DEEP SCAN: Generate auto-trade signal if conditions met
                     try:
-                        access_token = cipher.decrypt(broker_conf.encrypted_access_token).decode()
-                        broker_api.force_square_off_all_positions(broker_conf.client_id, access_token)
-                    except: pass
-            count += 1
-    flash(f"⚠️ GLOBAL KILL SWITCH: Closed trades for {count} users!")
-    return redirect(url_for('admin_dashboard'))
+                        generate_deep_scan_signal(symbol, {
+                            "strike": f"{int(strike)} {opt_type}",
+                            "ltp": ltp
+                        }, greeks, underlying_value, oi, oi_change)
+                    except:
+                        pass
 
-@app.route('/update-settings', methods=['POST'])
-@requires_auth
-def update_settings():
-    config = get_admin_config()
-    config.admin_user = request.form.get('admin_user', config.admin_user)
-    config.admin_pass = request.form.get('admin_pass', config.admin_pass)
-    config.admin_phone = request.form.get('admin_phone', config.admin_phone)
-    config.support_number_1 = request.form.get('support_1', config.support_number_1)
-    config.support_number_2 = request.form.get('support_2', config.support_number_2)
-    
-    # 🌟 Update Dynamic Plans
-    if request.form.get('plan_basic_price'):
-        config.plan_basic_price = int(request.form.get('plan_basic_price'))
-    if request.form.get('plan_premium_price'):
-        config.plan_premium_price = int(request.form.get('plan_premium_price'))
-    if request.form.get('plan_ultimate_price'):
-        config.plan_ultimate_price = int(request.form.get('plan_ultimate_price'))
-        
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-# --- AI ADMIN DASHBOARD & CLEANUP ---
-@app.route('/ai-dashboard')
-@requires_auth
-def ai_dashboard():
-    try:
-        trades = AIPaperTrade.query.order_by(AIPaperTrade.timestamp.desc()).all()
-        # Calculate paper PNl
-        total_pnl = sum((t.pnl or 0.0) for t in trades if t.status == "CLOSED")
-        return render_template('ai_dashboard.html', trades=trades, total_pnl=total_pnl)
-    except Exception as e:
-        import traceback
-        error_msg = f"<h3>AI Dashboard Error:</h3><pre>{traceback.format_exc()}</pre>"
-        # Ensure tables are created just in case
-        try:
-            db.create_all()
-            error_msg += "<br><b style='color:green;'>Attempted to force-create tables. Please refresh!</b>"
-        except Exception as e2:
-            error_msg += f"<br><b style='color:red;'>DB Create failed: {str(e2)}</b>"
-        return error_msg, 500
-
-@app.route('/cleanup-ai-data')
-@requires_auth
-def cleanup_ai_data():
-    try:
-        # Delete trades older than 3 days
-        cutoff = datetime.utcnow() + timedelta(hours=5, minutes=30) - timedelta(days=3)
-        AIPaperTrade.query.filter(AIPaperTrade.timestamp < cutoff).delete()
-        db.session.commit()
-        flash("Old AI Data Cleaned successfully to save cloud billing!")
-    except Exception as e:
-        flash(f"Error during cleanup: {str(e)}")
-    return redirect(url_for('ai_dashboard'))
-
-# --- OTP RESET FLOW ---
-@app.route('/admin-reset', methods=['GET', 'POST'])
-def admin_reset():
-    if request.method == 'POST':
-        phone = request.form.get('phone')
-        config = get_admin_config()
-        if phone == config.admin_phone:
-            # Generate OTP
-            otp = str(random.randint(100000, 999999))
-            config.reset_otp = otp
-            config.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
-            db.session.commit()
-            
-            # Simulated SMS send (In reality, use Fast2SMS / Twilio)
-            print(f"-------------\n[SMS MOCK] Sent OTP {otp} to {phone}\n-------------")
-            
-            return f'''
-            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-                <h2>OTP Sent to {phone}</h2>
-                <p style="color:red;">(Since real SMS costs money, check your Server Console to see the mock OTP)</p>
-                <form action="/admin-verify-otp" method="POST">
-                    <input type="text" name="otp" placeholder="Enter 6-digit OTP" required style="padding:10px; width:200px;">
-                    <button type="submit" style="padding:10px 20px; background:#28a745; color:white; border:none;">Verify</button>
-                </form>
-            </div>
-            '''
-        else:
-            return "Invalid Admin Phone Number"
-            
-    return '''
-    <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-        <h2>Forgot Admin Password?</h2>
-        <form action="/admin-reset" method="POST">
-            <input type="text" name="phone" placeholder="Enter your registered Admin Phone" required style="padding:10px; width:250px;">
-            <button type="submit" style="padding:10px 20px; background:#007bff; color:white; border:none;">Send OTP</button>
-        </form>
-    </div>
-    '''
-
-@app.route('/admin-verify-otp', methods=['POST'])
-def admin_verify_otp():
-    otp = request.form.get('otp')
-    config = get_admin_config()
-    if config.reset_otp and config.reset_otp == otp and config.otp_expiry > datetime.utcnow():
-        return '''
-        <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-            <h2>Set New Admin Password</h2>
-            <form action="/admin-set-password" method="POST">
-                <input type="password" name="new_pass" placeholder="Enter New Password" required style="padding:10px; width:200px;">
-                <button type="submit" style="padding:10px 20px; background:#ff9800; color:white; border:none;">Update Password</button>
-            </form>
-        </div>
-        '''
-    return "Invalid or Expired OTP. <a href='/admin-reset'>Try again</a>"
-
-@app.route('/admin-set-password', methods=['POST'])
-def admin_set_password():
-    new_pass = request.form.get('new_pass')
-    config = get_admin_config()
-    config.admin_pass = new_pass
-    config.reset_otp = None # wipe otp
-    db.session.commit()
-    return "Password updated successfully! <a href='/admin-control'>Go to Admin Login</a>"
-
-@app.route('/approve-user', methods=['POST'])
-@requires_auth
-def approve_user():
-    user_id = int(request.form.get('user_id'))
-    plan = request.form.get('plan')
-    months = int(request.form.get('months', 1))
-    
-    user = User.query.get_or_404(user_id)
-    user.user_type = 'REAL'
-    user.selected_plan = plan
-    user.is_approved = True
-    
-    now = datetime.now()
-    if user.expiry_date and user.expiry_date > now:
-        user.expiry_date = user.expiry_date + timedelta(days=30 * months)
-    else:
-        user.expiry_date = now + timedelta(days=30 * months)
-        
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/admin-extend-demo/<int:user_id>')
-@requires_auth
-def admin_extend_demo(user_id):
-    user = User.query.get_or_404(user_id)
-    now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    if user.expiry_date and user.expiry_date > now:
-        user.expiry_date = user.expiry_date + timedelta(days=30)
-    else:
-        user.expiry_date = now + timedelta(days=30)
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/delete-user/<int:user_id>')
-@requires_auth
-def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/block-user/<int:user_id>', methods=['POST', 'GET'])
-@requires_auth
-def block_user(user_id):
-    user = User.query.get_or_404(user_id)
-    user.is_blocked = not user.is_blocked
-    if user.is_blocked:
-        user.algo_status = 'OFF'
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/toggle-kill-switch/<int:user_id>')
-@requires_auth
-def toggle_kill_switch(user_id):
-    user = User.query.get_or_404(user_id)
-    user.admin_kill_switch = not user.admin_kill_switch
-    if user.admin_kill_switch:
-        square_off_user_trades(user, "Admin Activated Kill Switch")
-    db.session.commit()
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/toggle-auto-mode/<int:user_id>', methods=['POST', 'GET'])
-def toggle_auto_mode(user_id):
-    user = User.query.get_or_404(user_id)
-    user.full_auto_mode = not user.full_auto_mode
-    db.session.commit()
-    status = "ENABLED" if user.full_auto_mode else "DISABLED"
-    flash(f"🤖 GVN Full-Auto Mode {status}!")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/toggle-signal-lock/<int:user_id>')
-@requires_auth
-def toggle_signal_lock(user_id):
-    user = User.query.get_or_404(user_id)
-    user.is_locked = not user.is_locked
-    if not user.is_locked:
-        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=1)
-    db.session.commit()
-    flash(f"Signal Lock for {user.username} is now {'ON' if user.is_locked else 'OFF'}")
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/upload-payment', methods=['POST'])
-def upload_payment():
-    user_id = session.get('user_id')
-    if not user_id:
-        return redirect(url_for('demo_register'))
-        
-    utr = request.form.get('utr_number')
-    plan = request.form.get('plan_type', '1-Day')
-    file = request.files.get('screenshot')
-    
-    if file:
-        filename = f"payment_{user_id}_{int(time.time())}.png"
-        upload_folder = os.path.join('static', 'uploads', 'payments')
-        os.makedirs(upload_folder, exist_ok=True)
-        filepath = os.path.join(upload_folder, filename)
-        file.save(filepath)
-        
-        new_payment = PaymentScreenshot(
-            user_id=user_id,
-            screenshot_path=filename,
-            utr_number=utr,
-            plan_selected=plan
-        )
-        db.session.add(new_payment)
-        db.session.commit()
-        
-        flash(f"{plan} Payment Screenshot Uploaded! Admin will verify soon.")
-        
-        # Send Telegram notification to admin
-        user = User.query.get(user_id)
-        send_telegram_msg(f"💰 <b>NEW PAYMENT REQUEST ({plan})</b>\nUser: {user.username}\nPhone: {user.phone}\nUTR: {utr}\nPlease check Admin Panel to approve.")
-        
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/approve-payment/<int:payment_id>', methods=['POST'])
-@requires_auth
-def approve_payment(payment_id):
-    payment = PaymentScreenshot.query.get_or_404(payment_id)
-    user = User.query.get(payment.user_id)
-    
-    action = request.form.get('action')
-    if action == 'APPROVE':
-        payment.status = "APPROVED"
-        user.is_locked = False
-        
-        # Determine duration
-        days = 1 if payment.plan_selected == "1-Day" else 7
-        user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30) + timedelta(days=days)
-        
-        db.session.commit()
-        flash(f"Payment for {user.username} ({payment.plan_selected}) Approved!")
-    else:
-        payment.status = "REJECTED"
-        db.session.commit()
-        flash(f"Payment for {user.username} Rejected.")
-        
-    return redirect(url_for('admin_dashboard'))
-
-@app.route('/history')
-def trade_history():
-    user_id = session.get('user_id')
-    if not user_id:
-        return redirect(url_for('demo_register'))
-    
-    # Show Monthly P&L from DailyPnL table
-    daily_pnls = DailyPnL.query.order_by(DailyPnL.date.desc()).all()
-    monthly_data = {}
-    for dp in daily_pnls:
-        month_key = dp.date.strftime('%B %Y') # "April 2026"
-        if month_key not in monthly_data:
-            monthly_data[month_key] = 0.0
-        monthly_data[month_key] += dp.pnl
-        
-    history = [{'month': k, 'pnl': v} for k, v in monthly_data.items()]
-    total_pnl = sum((t['pnl'] for t in history))
-    return render_template('history.html', history=history, total_pnl=total_pnl)
-
-@app.route('/clear-history')
-@requires_auth
-def clear_history():
-    db.session.query(DailyPnL).delete()
-    db.session.commit()
-    return redirect(url_for('trade_history'))
-
-import threading
-import time
-
-def auto_square_off_task():
-    while True:
-        try:
-            now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-            if now.hour == 15 and 28 <= now.minute <= 29:
-                with app.app_context():
-                    running_trades = AlgoTrade.query.filter_by(status='Running').all()
-                    if running_trades:
-                        for trade in running_trades:
-                            trade.status = 'Closed'
-                            trade.exit_price = trade.entry_price
-                            trade.pnl = 0.0 # Force closed EOD
-                            
-                            user = User.query.get(trade.user_id)
-                            if user and user.user_type == 'REAL' and user.is_approved:
-                                try:
-                                    broker_conf = UserBrokerConfig.query.filter_by(user_id=user.id).first()
-                                    webhook_url = broker_conf.webhook_url if broker_conf else user.dhan_webhook_url
-                                    enc_secret = broker_conf.encrypted_secret_key if broker_conf else user.encrypted_secret_key
-                                    if enc_secret and webhook_url:
-                                        secret_key = cipher.decrypt(enc_secret).decode()
-                                        is_nfo = any(idx in trade.symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-                                        manual_alert = {
-                                            "secret": secret_key,
-                                            "transactionType": "SELL",
-                                            "orderType": "MKT",
-                                            "quantity": str(trade.quantity),
-                                            "exchange": "NFO" if is_nfo else "NSE",
-                                            "symbol": trade.symbol,
-                                            "instrument": "OPT" if is_nfo else "EQ",
-                                            "productType": "M",
-                                            "alertType": "multi_leg_order",
-                                            "order_legs": [{
-                                                "transactionType": "S", 
-                                                "orderType": "MKT", 
-                                                "quantity": str(trade.quantity), 
-                                                "exchange": "NFO" if is_nfo else "NSE", 
-                                                "symbol": trade.symbol, 
-                                                "instrument": "OPT" if is_nfo else "EQ", 
-                                                "productType": "M"
-                                            }]
-                                        }
-                                        requests.post(webhook_url, json=manual_alert, timeout=5)
-                                except Exception as e:
-                                    pass
-                        db.session.commit()
-                        send_telegram_msg("⏰ <b>AUTO SQUARE-OFF</b>\nAll open positions forcefully closed at 15:28 IST to manage overnight gap risk.")
-        except Exception as e:
-            print(f"Auto Square-Off Error: {e}")
-        
-        # Sleep 60 seconds
-        time.sleep(60)
-
-# Start background thread
-threading.Thread(target=auto_square_off_task, daemon=True).start()
-
-def sync_admin_dhan_to_worker():
-    """Finds the admin's API key and shares it with the background worker."""
-    with app.app_context():
-        try:
-            # Use a more modern query style
-            admin = db.session.query(User).filter_by(email='nelsonp143@gmail.com').first()
-            if admin:
-                conf = UserBrokerConfig.query.filter_by(user_id=admin.id).first()
-                if conf:
-                    token = cipher.decrypt(conf.encrypted_access_token).decode() if conf.encrypted_access_token else ""
-                    pwd = cipher.decrypt(conf.encrypted_password).decode() if conf.encrypted_password else "Gvn@12"
-                    c_secret = cipher.decrypt(conf.encrypted_client_secret).decode() if conf.encrypted_client_secret else ""
-                    t_key = cipher.decrypt(conf.encrypted_totp_key).decode() if conf.encrypted_totp_key else ""
-
-                    shoonya_live_feed.shoonya_master_config.update({
-                        "client_id": conf.client_id,
-                        "access_token": token,
-                        "broker_password": pwd,
-                        "client_secret": c_secret,
-                        "totp_key": t_key,
-                        "broker_name": conf.broker_name,
-                        "active": True
+                    gvn_scanner_data[symbol].append({
+                        "strike": f"{int(strike)} {opt_type}",
+                        "ltp": ltp,
+                        "delta": round(delta, 2),
+                        "gamma": round(greeks["gamma"], 4),
+                        "theta": round(greeks["theta"], 2),
+                        "vega":  round(greeks["vega"], 2),
+                        "iv":    round(effective_iv, 1),
+                        "oi": oi,
+                        "oi_change": oi_change,
+                        "volume": volume,
+                        "score": score,
+                        "zone": zone,
+                        "pressure": pressure,
+                        "ai_signal": ai_signal,
+                        "i_level": i_level,
+                        "potential": "HIGH" if score >= 60 else "MODERATE",
+                        "levels": levels
                     })
-                    print(f"✅ [{conf.broker_name.upper()} SYNC] Master Data Feed linked to Admin: {admin.username}")
 
+    if underlying_value > 0:
+        live_option_chain_summary[symbol]["spot"] = underlying_value
+        atm = int(round(underlying_value / (50 if symbol == "NIFTY" else 100)) * (50 if symbol == "NIFTY" else 100))
+        live_option_chain_summary[symbol]["atm"] = atm
+        live_option_chain_summary["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
 
-        except Exception as e:
-            print(f"❌ [DATA SYNC ERROR] {e}")
+        # 🌟 Store Full Option Chain
+        sorted_chain = sorted(chain_map.values(), key=lambda x: x['strike'])
+        # Mark ATM row
+        for row in sorted_chain:
+            row['is_atm'] = (row['strike'] == atm)
+        
+        full_option_chain_data[symbol] = sorted_chain
+        full_option_chain_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
 
-# ==========================================
-# 🤖 GVN AI ASSISTANT (DOUBLE ENGINE)
-# ==========================================
-import requests
+    if best_ce_60 and best_pe_60:
+        formatted_expiry = expiry_dt.strftime("%d %b").upper()
+        current_delta_60_strikes[symbol] = {
+            "CE": int(best_ce_60), 
+            "PE": int(best_pe_60),
+            "expiry": formatted_expiry
+        }
+        live_option_chain_summary[symbol].update({
+            "ce_60": int(best_ce_60),
+            "pe_60": int(best_pe_60),
+            "expiry": formatted_expiry
+        })
+        
+        try:
+            import json
+            with open("live_market_data.json", "w") as jf:
+                json.dump(live_option_chain_summary, jf)
+        except: pass
 
-@app.route('/api/ai-chat', methods=['POST'])
-def ai_chat():
+    gvn_scanner_data[symbol] = sorted(gvn_scanner_data[symbol], key=lambda x: x["score"], reverse=True)[:10]
+
     try:
-        data = request.json
-        user_msg = data.get('message', '')
-        # 🌟 NEW: Get price directly from frontend request
-        n_spot = data.get('nifty_price', '0')
+        # 🌟 GVN DUAL-PULSE (CROSS-STRIKE) CONFIRMATION
+        confirmation = "📡 SCANNING..."
+        ce_item = next((item for item in gvn_scanner_data[symbol] if 'CE' in item['strike']), None)
+        pe_item = next((item for item in gvn_scanner_data[symbol] if 'PE' in item['strike']), None)
         
-        from dotenv import dotenv_values
-        env_config = dotenv_values(".env")
-        api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
-        
-        if not api_key:
-            return jsonify({"reply": "⚠️ **GROQ_API_KEY** is not set!"})
-        
-        if 'user_id' not in session:
-            return jsonify({"reply": "⚠️ Please login first."})
-        
-        user = db.session.get(User, session['user_id'])
-        if user and user.is_locked:
-            return jsonify({"reply": "🔒 Your AI Engine is Locked."})
+        if ce_item and pe_item:
+            ce_above_i5 = ce_item['ltp'] > (ce_item['levels'].get('Level_5', 0))
+            pe_below_i7 = pe_item['ltp'] < (pe_item['levels'].get('Level_7', 0))
             
-        # 🌟 FALLBACK TO DHAN ONLY IF NEEDED
-        if str(n_spot) == '0' or n_spot == 0:
-            # 🌟 Get live prices from background worker summary
-            n_spot = shoonya_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-            b_spot = shoonya_live_feed.live_option_chain_summary.get('BANKNIFTY', {}).get('spot', 0)
-            s_spot = shoonya_live_feed.live_option_chain_summary.get('SENSEX', {}).get('spot', 0)
-            f_spot = shoonya_live_feed.live_option_chain_summary.get('FINNIFTY', {}).get('spot', 0)
-
-
-        import json
-        live_pulse = shoonya_live_feed.market_pulse.get("NIFTY", {})
-        live_options = shoonya_live_feed.gvn_scanner_data.get("NIFTY", [])[:4] # Top 4 active strikes
-        context = f"LIVE MARKET SNAPSHOT - NIFTY Spot: {n_spot}.\nMarket Pulse: {json.dumps(live_pulse)}\nTop Active Strikes: {json.dumps(live_options)}\nAnalyze this exact Option Chain data to find Operator Traps and Zero-to-Hero setups."
-        system_prompt = (
-            "You are GVN Master AI, an elite algorithmic trading expert. "
-            "Your specialty is 'Zero-to-Hero' expiry trades—finding options trading at ₹5-₹15 that can blast to 40+ points. "
-            "Analyze the given Nifty spot price. Identify if the current supports/resistances are genuine or fake (traps) using Call VS Put data. "
-            "Provide clear, logical predictions for Zero-to-Hero strike prices and exact reversal points. "
-            "CRITICAL RULE: You MUST provide your entire analysis and explanation in pure TELUGU language. Do NOT use English paragraphs. Use clear, descriptive Telugu."
-        )
+            if ce_above_i5 and pe_below_i7:
+                confirmation = "🔥 REAL BREAKOUT (CE Sync)"
+            elif not ce_above_i5 and not pe_below_i7:
+                confirmation = "⚠️ POTENTIAL FAKE (No Sync)"
+            else:
+                confirmation = "⚖️ NEUTRAL GRID"
         
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{context}\nUser: {user_msg}"}
-            ],
-            "temperature": 0.4
-        }
+        market_pulse[symbol]["confirmation"] = confirmation
         
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=15)
-        if response.status_code == 200:
-            return jsonify({"reply": response.json()['choices'][0]['message']['content']})
-        else:
-            return jsonify({"reply": f"AI Error: HTTP {response.status_code}"})
-            
-    except Exception as e:
-        return jsonify({"reply": f"Error: {str(e)}"})
-
-
-def get_ai_validation(symbol, txn_type, price):
-    """
-    Calls Groq AI to validate a trade signal based on live market context.
-    Returns a short (10-15 word) opinion.
-    """
-    from dotenv import dotenv_values
-    env_config = dotenv_values(".env")
-    api_key = (env_config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY', '')).strip()
-    
-    if not api_key:
-        return "AI Offline (Key Missing)"
-        
-    try:
-        live_data = {
-            "summary": shoonya_live_feed.live_option_chain_summary,
-            "scanner": shoonya_live_feed.gvn_scanner_data
-        }
-        
-        system_prompt = "You are GVN Algo AI. Analyze the signal against live data. Be extremely brief (max 12 words). Say if it is 'High Prob' or 'Risky' and why."
-        user_prompt = f"Signal: {txn_type} {symbol} @ {price}. Market Context: {live_data}"
-        
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.2,
-            "max_tokens": 50
-        }
-        
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=7)
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content'].strip()
+        # 🌟 GVN AI ADVANCED ANALYSIS
+        update_ai_dashboard(symbol, underlying_value)
+        market_pulse["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
     except:
         pass
-    return "AI Validation Pending..."
+
+    source = data.get("source", "DHAN_API")
+    gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S") + f" ({source})"
+
+def live_feed_background_worker():
+    print("🚀 [Dhan API Live Feed Worker] Thread Started Successfully.")
+    while True:
+        try:
+            if not dhan_master_config.get('active'):
+                try:
+                    import os
+                    db_url = os.environ.get('DATABASE_URL')
+                    row = None
+                    if db_url:
+                        if db_url.startswith("postgres://"):
+                            db_url = db_url.replace("postgres://", "postgresql://", 1)
+                        import psycopg2
+                        conn = psycopg2.connect(db_url)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password, encrypted_client_secret, encrypted_totp_key FROM user_broker_config LIMIT 1")
+                        row = cursor.fetchone()
+                        conn.close()
+                    else:
+                        import sqlite3
+                        conn = sqlite3.connect('instance/gvn_algo_pro.db')
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT client_id, encrypted_access_token, encrypted_password, encrypted_client_secret, encrypted_totp_key FROM user_broker_config LIMIT 1")
+                        row = cursor.fetchone()
+                        conn.close()
 
 
+                    if row and row[0] and row[1]:
+                        from cryptography.fernet import Fernet
+                        import base64
+                        static_key = b'gvn_secure_key_for_encryption_26'
+                        cipher = Fernet(base64.urlsafe_b64encode(static_key))
 
-@app.route('/api/debug-data')
-def debug_data():
-    return jsonify({
-        "summary": dhan_live_feed.live_option_chain_summary,
-        "scanner": dhan_live_feed.gvn_scanner_data,
-        "config": dhan_live_feed.dhan_master_config.get('active'),
-        "nifty_spot": dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-    })
+                        token = cipher.decrypt(row[1]).decode()
+                        pwd = cipher.decrypt(row[2]).decode() if row[2] else ""
+                        c_secret = cipher.decrypt(row[3]).decode() if len(row) > 3 and row[3] else ""
+                        t_key = cipher.decrypt(row[4]).decode() if len(row) > 4 and row[4] else ""
+                        
+                        dhan_master_config.update({
+                            "client_id": row[0],
+                            "access_token": token,
+                            "broker_password": pwd,
+                            "client_secret": c_secret,
+                            "totp_key": t_key,
+                            "active": True
+                        })
+
+                        try:
+                            with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                                f.write(f"{datetime.datetime.now()}: [AUTO-SYNC] Broker Keys & Password Loaded from DB (Sync Mode: {'Postgres' if db_url else 'SQLite'}).\n")
+                        except: pass
+                except Exception as e:
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: [DB SYNC ERROR] {str(e)}\n")
+                    except: pass
 
 
-def get_tradingview_technicals(symbol="NIFTY"):
-    """Fetches real-time technical analysis summary from TradingView Scanner API."""
-    try:
-        # TradingView India Scanner Endpoint
-        url = "https://scanner.tradingview.com/india/scan"
-        ticker = f"NSE:{symbol}"
-        if symbol == "NIFTY": ticker = "NSE:NIFTY"
-        elif symbol == "BANKNIFTY": ticker = "NSE:BANKNIFTY"
-        
-        payload = {
-            "symbols": {"tickers": [ticker], "query": {"types": []}},
-            "columns": ["Recommend.All", "buy", "sell", "neutral"]
-        }
-        
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.post(url, json=payload, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json().get('data', [])
-            if data:
-                res = data[0].get('d', [])
-                # Mapping Recommendation Value to String
-                rec_val = res[0]
-                if rec_val > 0.5: rec_str = "STRONG_BUY"
-                elif rec_val > 0.1: rec_str = "BUY"
-                elif rec_val < -0.5: rec_str = "STRONG_SELL"
-                elif rec_val < -0.1: rec_str = "SELL"
-                else: rec_str = "NEUTRAL"
+            try:
+                with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.datetime.now()}: Dhan Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
+            except: pass
+            
+            if dhan_master_config.get('active'):
+                # 🌟 Reset 9:15 candles on new day
+                now = datetime.datetime.now()
+                if now.hour == 9 and now.minute == 0:
+                    option_915_candles.clear()
+
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: [Dhan Worker] Fetching {symbol}...\n")
+                    except: pass
+                    analyze_and_update_gvn_scanner(symbol)
+                    try:
+                        with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                            f.write(f"{datetime.datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
+                    except: pass
+                    time.sleep(3)
                 
-                return {
-                    "recommendation": rec_str,
-                    "buy": int(res[1]) if len(res)>1 else 0,
-                    "sell": int(res[2]) if len(res)>2 else 0,
-                    "neutral": int(res[3]) if len(res)>3 else 0
-                }
-    except Exception as e:
-        print(f"[TV SCANNER ERROR] {e}")
-    return {"recommendation": "NEUTRAL", "buy": 10, "sell": 10, "neutral": 10}
+        except Exception as e:
+            print(f"🚀 [FEED ENGINE ERROR] {e}")
+            try:
+                with open("dhan_feed_status.log", "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.datetime.now()}] Worker Error: {str(e)}\n")
+            except:
+                pass
+            time.sleep(10)
 
-@app.route('/api/gvn-scanner')
-def gvn_scanner():
-    """Returns the latest Zero-to-Hero scanner data from Dhan Feed."""
-    n_price = dhan_live_feed.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
-    tv_tech = get_tradingview_technicals("NIFTY")
-    return jsonify({
-        "status": "success",
-        "data": shoonya_live_feed.gvn_scanner_data,
-        "summary": shoonya_live_feed.live_option_chain_summary,
-        "market_pulse": shoonya_live_feed.market_pulse,
-        "nifty_spot": n_price,
-        "tradingview_tech": tv_tech,
-        "deep_scan_signals": shoonya_live_feed.auto_trade_signals[:10]  # 🌟 Greeks-based auto-trade signals
-    })
-
-@app.route('/unlock-premium/<int:user_id>')
-def unlock_premium(user_id):
-    """🌟 FREE PREMIUM UNLOCK: Activates account for 30 days instantly."""
-    user = User.query.get_or_404(user_id)
-    user.is_locked = False
-    user.is_approved = True
-    user.user_type = 'REAL'
-    user.expiry_date = datetime.utcnow() + timedelta(hours=5, minutes=30, days=30)
-    user.signals_unlocked_until = datetime.utcnow() + timedelta(hours=5, minutes=30, days=30)
-    db.session.commit()
-    flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
-    return redirect(url_for('user_dashboard', user_id=user.id))
-
-with app.app_context():
-    db.create_all()
-    # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
-    if not getattr(app, '_workers_started', False):
-        sync_admin_dhan_to_worker()
-        shoonya_live_feed.start_live_feed_worker()
-        app._workers_started = True
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port, debug=True)
+def start_live_feed_worker():
+    broker = dhan_master_config.get("broker_name", "Dhan").upper()
+    print("\n" + "="*50)
+    print(f"🔥 GVN MASTER ALGO: {broker} LIVE FEED ENGINE STARTING...")
+    print("="*50 + "\n")
+    
+    with open("dhan_feed_status.log", "w") as f:
+        f.write(f"{datetime.datetime.now()}: [INIT] {broker} Live Feed Engine Thread Initialized.\n")
+        
+    thread = threading.Thread(target=live_feed_background_worker, daemon=True)
+    thread.start()
+    print(f"[{broker} Live Feed Engine] Started Live API Polling...")
