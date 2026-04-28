@@ -32,4 +32,16 @@ monitored_strikes = {
 }
 
 # Calculated i-levels for strikes to avoid recalculating
+# Format: { "SYMBOL": { "levels": {...}, "high915": X, "low915": Y } }
 i_level_memory = {}
+strike_level_cache = {}
+
+# 🌟 BROKER CONNECTION STATUS — Updated by dhan_live_feed.py every cycle
+# Dashboard reads this to show ✅ CONNECTED or ❌ NOT CONNECTED
+broker_connection_status = {
+    "connected": False,
+    "broker_name": "None",
+    "reason": "Initializing...",
+    "last_checked": None,
+    "data_source": "NONE"   # "BROKER_LIVE" | "NSE_LIVE" | "OFFLINE_FALLBACK"
+}
