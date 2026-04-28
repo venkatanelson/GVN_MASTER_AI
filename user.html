@@ -469,6 +469,10 @@
                     <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
                     <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
                 </div>
+                <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); padding: 5px 15px; border-radius: 50px;">
+                    <small style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; text-align: center;">LIVE SPOT</small>
+                    <span id="visible-spot-price" style="font-weight: 900; color: #fff; font-size: 18px;">0.00</span>
+                </div>
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: center;">
@@ -643,6 +647,27 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- STRIKE SELECTION -->
+        <div class="premium-card" style="border-left: 5px solid var(--secondary);">
+            <h3 style="margin-bottom: 15px;">🎯 GVN Active Strike Selection</h3>
+            <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 20px;">Type your preferred strikes (e.g., 23950 CE) to monitor them on the AI Pulse board.</p>
+            
+            <form action="/save_api_settings" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <p style="font-size: 10px; color: var(--secondary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CALL STRIKE (CE)</p>
+                        <input type="text" name="call_strike" placeholder="e.g. 23950 CE" value="{{ broker_config.call_strike if broker_config and broker_config.call_strike else '' }}">
+                    </div>
+                    <div>
+                        <p style="font-size: 10px; color: var(--danger); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">PUT STRIKE (PE)</p>
+                        <input type="text" name="put_strike" placeholder="e.g. 24300 PE" value="{{ broker_config.put_strike if broker_config and broker_config.put_strike else '' }}">
+                    </div>
+                </div>
+                <button type="submit" class="btn-premium" style="width: 100%; background: var(--secondary);">Update Active Strikes</button>
+            </form>
         </div>
 
         <!-- SETTINGS -->
@@ -918,25 +943,23 @@
                 .then(r => r.json())
                 .then(res => {
                     // 🌟 Update Monitored Strikes
-                    if (res.monitored_strikes) {
+                    if (res.user_strikes) {
+                        document.getElementById('ce-strike-name').innerText = res.user_strikes.CALL || 'N/A';
+                        document.getElementById('pe-strike-name').innerText = res.user_strikes.PUT || 'N/A';
+                    } else if (res.monitored_strikes) {
                         document.getElementById('ce-strike-name').innerText = res.monitored_strikes.CALL.symbol || 'N/A';
                         document.getElementById('pe-strike-name').innerText = res.monitored_strikes.PUT.symbol || 'N/A';
-                        
-                        // Flash background if momentum is active
-                        if (res.monitored_strikes.CALL.momentum === 'BULLISH') document.getElementById('ce-pulse-box').style.background = 'rgba(16, 185, 129, 0.4)';
-                        else document.getElementById('ce-pulse-box').style.background = 'rgba(16, 185, 129, 0.1)';
-                        
-                        if (res.monitored_strikes.PUT.momentum === 'BULLISH') document.getElementById('pe-pulse-box').style.background = 'rgba(239, 68, 68, 0.4)';
-                        else document.getElementById('pe-pulse-box').style.background = 'rgba(239, 68, 68, 0.1)';
                     }
 
                     document.getElementById('oc-symbol-name').innerText = currentActiveIndex;
-                    if (res.nifty_spot) {
+                    if (res.nifty_spot !== undefined) {
                         // Dynamically show the spot price for the active index
-                        let activePrice = 0;
-                        if(currentActiveIndex === 'NIFTY') activePrice = res.nifty_spot;
-                        else if(res.summary && res.summary[currentActiveIndex]) activePrice = res.summary[currentActiveIndex].spot;
+                        let activePrice = res.nifty_spot;
+                        if(currentActiveIndex !== 'NIFTY') {
+                             if(res.summary && res.summary[currentActiveIndex]) activePrice = res.summary[currentActiveIndex].spot;
+                        }
                         document.getElementById('ui-nifty-price').innerText = activePrice;
+                        document.getElementById('visible-spot-price').innerText = activePrice;
                     }
                     const body = document.getElementById('scanner-body');
                     const data = res.data[currentActiveIndex] || [];
