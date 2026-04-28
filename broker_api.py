@@ -1,199 +1,159 @@
 import requests
+import json
+import hashlib
+import hmac
+import time
 import threading
+import base64
+import pyotp
 from dhanhq import dhanhq
 
-def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity):
-    """
-    Places an order via Dhan's TradingView Webhook Bridge.
-    """
+# ─── UTILS ──────────────────────────────────────────────────
+def sha256_hash(text):
+    return hashlib.sha256(text.encode()).hexdigest()
+
+def get_totp(totp_key):
+    if not totp_key: return ""
     try:
-        # 🌟 SMART: If secret_key is missing, try to extract it from the URL
-        if not secret_key and '/' in webhook_url:
-            secret_key = webhook_url.split('/')[-1]
-            print(f"[DHAN DEBUG] Extracted Secret Key from URL: {secret_key}")
+        return pyotp.TOTP(totp_key).now()
+    except:
+        return ""
 
-        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-        t_type = "B" if transaction_type.upper() == "BUY" else "S"
+# ─── SHOONYA BYPASS ─────────────────────────────────────────
+def shoonya_http_login(cfg):
+    """Direct HTTP Login for Shoonya (Bypasses NorenRestApiPy)"""
+    client_id    = cfg.get("client_id")
+    password     = cfg.get("password")
+    api_secret   = cfg.get("client_secret")
+    vendor_code  = cfg.get("access_token") # access_token field = vendor code
+    totp_key     = cfg.get("totp_key")
 
-        # 🌟 SMART: For NFO Options, Dhan Webhook Bridge often prefers no spaces (e.g., NIFTY25APR22400CE)
-        if is_nfo:
-            # Try to create a condensed symbol for the bridge
-            clean_symbol = symbol.replace(" ", "").upper()
-        else:
-            clean_symbol = symbol.upper()
+    if not all([client_id, password, api_secret, vendor_code]):
+        return None
 
-        payload = {
-            "secret": secret_key,
-            "alertType": "single_order",
-            "transactionType": t_type,
-            "orderType": "MKT",
-            "quantity": str(quantity),
-            "exchange": "NFO" if is_nfo else "NSE",
-            "symbol": clean_symbol,
-            "productType": "M",
-            "validity": "DAY",
-            "price": "0"
-        }
-        
-        resp = requests.post(webhook_url, json=payload, timeout=8)
-        print(f"[DHAN WEBHOOK] Sym: {clean_symbol} | Status: {resp.status_code} | Resp: {resp.text}")
-        
-        if resp.status_code != 200:
-            print(f"❌ [DHAN REJECTION] Broker returned status {resp.status_code}. Check your URL or Secret Key.")
-            
+    totp = get_totp(totp_key)
+    pwd_hash = sha256_hash(password)
+    app_key_hash = sha256_hash(f"{api_secret}|{totp}")
+
+    payload = {
+        "apkversion": "1.0.0", "uid": client_id, "pwd": pwd_hash,
+        "factor2": totp, "vc": vendor_code, "appkey": app_key_hash,
+        "imei": "abs1234", "source": "API"
+    }
+    jData = "jData=" + json.dumps(payload)
+    
+    url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+    try:
+        resp = requests.post(url, data=jData, timeout=10)
+        res = resp.json()
+        if res.get('stat') == 'Ok':
+            return res.get('susertoken')
+    except:
+        pass
+    return None
+
+# ─── DHAN BYPASS (Direct) ───────────────────────────────────
+def dhan_http_test(cfg):
+    """Verifies Dhan token and client ID via direct HTTP"""
+    headers = {
+        "access-token": cfg.get("access_token"),
+        "client-id": cfg.get("client_id"),
+        "Content-Type": "application/json"
+    }
+    try:
+        resp = requests.get("https://api.dhan.co/fundlimit", headers=headers, timeout=10)
         return resp.status_code == 200
-        
-    except Exception as e:
-        print(f"❌ [DHAN WEBHOOK CRITICAL ERROR] {str(e)}")
+    except:
         return False
 
-def place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity, price=0.0):
+# ─── UNIVERSAL ORDER EXECUTION ──────────────────────────────
+def place_order_universal(cfg, symbol, txn_type, qty):
     """
-    Fallback for standard webhooks (Upstox, Zerodha 3rd party bridges)
+    Automatically detects broker and places order using Direct HTTP or Webhook.
     """
+    broker = cfg.get("broker_name", "").lower()
+    success = False
+
+    # 1. SHOONYA
+    if "shoonya" in broker or "finvasia" in broker:
+        token = shoonya_http_login(cfg)
+        if token:
+            # Shoonya Direct Order Placement via HTTP
+            url = "https://api.shoonya.com/NorenWClientTP/PlaceOrder"
+            payload = {
+                "uid": cfg["client_id"], "actid": cfg["client_id"],
+                "exch": "NFO", "tsym": symbol, "qty": str(qty),
+                "prd": "M", "trantype": txn_type.upper()[0], # B or S
+                "prctyp": "MKT", "ret": "DAY"
+            }
+            jData = "jData=" + json.dumps(payload) + f"&jKey={token}"
+            try:
+                resp = requests.post(url, data=jData, timeout=10)
+                success = resp.json().get('stat') == 'Ok'
+            except: pass
+
+    # 2. DHAN (Webhook Priority for Options)
+    elif "dhan" in broker:
+        if cfg.get("webhook_url") and cfg.get("tv_secret"):
+            success = place_dhan_webhook_order(cfg["webhook_url"], cfg["tv_secret"], symbol, txn_type, qty)
+        else:
+            # Fallback to API if configured
+            success = place_dhan_official_api_order(cfg["client_id"], cfg["access_token"], symbol, txn_type, qty)
+
+    # 3. OTHER BROKERS (Generic Webhook)
+    else:
+        if cfg.get("webhook_url") and cfg.get("tv_secret"):
+            success = place_generic_webhook_order(cfg["webhook_url"], cfg["tv_secret"], symbol, txn_type, qty)
+
+    return success
+
+# ─── EXISTING WEBHOOK LOGIC (Optimized) ──────────────────────
+def place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity):
+    try:
+        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
+        clean_symbol = symbol.replace(" ", "").upper()
+        payload = {
+            "secret": secret_key, "alertType": "single_order",
+            "transactionType": "B" if transaction_type.upper() == "BUY" else "S",
+            "orderType": "MKT", "quantity": str(quantity),
+            "exchange": "NFO" if is_nfo else "NSE", "symbol": clean_symbol,
+            "productType": "M", "validity": "DAY", "price": "0"
+        }
+        resp = requests.post(webhook_url, json=payload, timeout=8)
+        return resp.status_code == 200
+    except:
+        return False
+
+def place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity):
     try:
         payload = {
-            "secret": secret_key,
-            "symbol": symbol,
-            "quantity": quantity,
-            "transactionType": transaction_type.upper(),
-            "orderType": "MARKET",
-            "price": price
+            "secret": secret_key, "symbol": symbol, "quantity": quantity,
+            "transactionType": transaction_type.upper(), "orderType": "MARKET"
         }
-        resp = requests.post(webhook_url, json=payload, timeout=5)
-        print(f"[GENERIC BROKER] Symbol: {symbol} | Status: {resp.status_code} | Resp: {resp.text}")
+        resp = requests.post(webhook_url, json=payload, timeout=8)
         return resp.status_code == 200
-    except Exception as e:
-        print(f"[GENERIC BROKER ERROR] Exception: {str(e)}")
+    except:
         return False
 
 def place_dhan_official_api_order(client_id, access_token, symbol, txn_type, qty):
-    """
-    Places an order using the official DhanHQ Python SDK.
-    """
     try:
         dhan = dhanhq(client_id, access_token)
-        # Security IDs for Indices in Dhan
-        sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27", "SENSEX": "14"}
-        sid = sec_ids.get(symbol)
-        if not sid:
-            print("⚠️ [DHAN API WARNING] Symbol not found in mapped index IDs. Only numeric Security IDs or predefined index keys are supported.")
-        
-        is_nfo = any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN", "MIDCP"])
-        
-        # NOTE: Dhan API place_order requires security_id.
-        # If 'symbol' passed is numeric, it works. If it's a text symbol, it might fail.
-        # But for this implementation, we will try to use it as is.
-        exchange_const = getattr(dhan, 'FNO', 'FNO')
         order = dhan.place_order(
-            tag=symbol[:20],  # Dhan tag limits to 20 chars
-            transaction_type=dhan.BUY if txn_type.upper() == "BUY" else dhan.SELL,
-            exchange_segment=exchange_const if is_nfo else dhan.NSE,
-            product_type=dhan.MARGIN,
-            order_type=dhan.MARKET,
-            validity=dhan.DAY,
-            security_id=symbol, 
-            quantity=int(qty),
-            price=0
+            tag="GVN_ALGO", transaction_type=dhan.BUY if txn_type.upper() == "BUY" else dhan.SELL,
+            exchange_segment=dhan.FNO, product_type=dhan.MARGIN, order_type=dhan.MARKET,
+            validity=dhan.DAY, security_id=symbol, quantity=int(qty), price=0
         )
-        print(f"[DHAN API RESP] {order}")
-        if order.get('status') == 'failure':
-            print(f"❌ [DHAN API REJECTION] Reason: {order.get('remarks')}")
-            if "security_id" in str(order.get('remarks', '')).lower():
-                print("💡 TIP: The Dhan Official API requires a numeric Security ID (e.g., '12345'). It cannot process string symbols like 'NIFTY 25 APR 19500 CE' directly.")
-        return order.get('status') == 'success' or order.get('remarks') == 'Order Created'
-    except Exception as e:
-        if "DH-905" in str(e) or "Invalid IP" in str(e):
-            print("⚠️ [DHAN API ALERT] Your API Key is restricted by IP. Please go to Dhan Developer Portal and set 'Access IP' to 'Any' (0.0.0.0/0).")
-        print(f"[DHAN API ERROR] {e}")
+        return order.get('status') == 'success'
+    except:
         return False
 
-def execute_broker_order_async(broker_name, webhook_url, secret_key, symbol, transaction_type, quantity, user_name="User", client_id=None, access_token=None):
-    """
-    Entry point to run the order in a background thread.
-    """
+def execute_broker_order_async(cfg, symbol, txn_type, qty, user_name="User"):
     def run_order():
-        print(f"🚀 [ORDER ENGINE] User: {user_name} | {transaction_type} {quantity} {symbol}")
-        
-        success = False
-        if broker_name.lower() == 'dhan':
-            # Priority 1: Official Dhan API (Requires numeric Security ID)
-            if client_id and access_token and symbol.isdigit():
-                print(f"[DHAN] Attempting Official API for Security ID: {symbol}...")
-                success = place_dhan_official_api_order(client_id, access_token, symbol, transaction_type, quantity)
-            
-            # Priority 2: Webhook Bridge (Best for string symbols like NIFTY25APR22400CE)
-            if not success and webhook_url and secret_key:
-                print(f"[DHAN] Routing to Webhook Bridge for: {symbol}...")
-                success = place_dhan_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
-            elif not success:
-                print(f"⚠️ [DHAN ALERT] No valid API credentials or Webhook configuration found for {user_name}.")
-        else:
-            success = place_generic_webhook_order(webhook_url, secret_key, symbol, transaction_type, quantity)
-            
+        print(f"🚀 [UNIVERSAL EXECUTION] User: {user_name} | {txn_type} {qty} {symbol}")
+        success = place_order_universal(cfg, symbol, txn_type, qty)
         if success:
-            print(f"✅ [SUCCESS] Trade confirmed for {user_name}")
+            print(f"✅ [SUCCESS] Order placed for {user_name}")
         else:
-            print(f"❌ [FAILURE] Trade could not be placed for {user_name}. Check logs.")
+            print(f"❌ [FAILURE] Order failed for {user_name}")
 
     threading.Thread(target=run_order, daemon=True).start()
-def force_square_off_all_positions(client_id, access_token):
-    """
-    Fetches all open positions and squares them off immediately.
-    """
-    try:
-        dhan = dhanhq(client_id, access_token)
-        positions_resp = dhan.get_positions()
-        
-        if positions_resp.get('status') == 'success':
-            positions = positions_resp.get('data', [])
-            closed_count = 0
-            for pos in positions:
-                net_qty = int(pos.get('netQty', 0))
-                if net_qty != 0:
-                    # Square off by placing opposite order
-                    security_id = pos.get('securityId')
-                    exchange = pos.get('exchangeSegment')
-                    product = pos.get('productType')
-                    
-                    txn_type = dhan.SELL if net_qty > 0 else dhan.BUY
-                    qty = abs(net_qty)
-                    
-                    dhan.place_order(
-                        tag="ADMIN_FORCE_EXIT",
-                        transaction_type=txn_type,
-                        exchange_segment=exchange,
-                        product_type=product,
-                        order_type=dhan.MARKET,
-                        validity=dhan.DAY,
-                        security_id=security_id,
-                        quantity=qty,
-                        price=0
-                    )
-                    closed_count += 1
-            print(f"🛑 [ADMIN] Force Closed {closed_count} positions for client {client_id}")
-            return True
-        else:
-            print(f"⚠️ No active positions to close for client {client_id}")
-            return True
-    except Exception as e:
-        print(f"❌ [FORCE SQUARE OFF ERROR] {e}")
-        return False
-
-def get_dhan_ltp(client_id, access_token, security_id, exchange_segment="NSE_FNO"):
-    """
-    Fetches real-time LTP from Dhan HQ for a specific security ID.
-    Note: security_id must be numeric.
-    """
-    try:
-        dhan = dhanhq(client_id, access_token)
-        # exchange_segment mapping
-        seg = dhan.FNO if "FNO" in exchange_segment.upper() else dhan.NSE
-        
-        quote = dhan.get_quote(security_id, seg)
-        if quote.get('status') == 'success':
-            return float(quote.get('data', {}).get('lastTradedPrice', 0.0))
-        return 0.0
-    except Exception as e:
-        print(f"❌ [DHAN LTP ERROR] {e}")
-        return 0.0
