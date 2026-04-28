@@ -5,10 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GVN MASTER ALGO V2.2 PREMIUM 🚀</title>
-    <!-- CACHE BUSTING -->
+    <!-- CACHE BUSTING & LIVE SYNC -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="X-Build-ID" content="{{ cache_id }}">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -382,6 +383,62 @@
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
                     {% endif %}
 
+                    <!-- GVN MASTER ROBOT CONTROL PANEL -->
+                    <div class="card bg-dark border-primary mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>GVN MASTER ROBOT v2.5</h5>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="robotToggle" onchange="toggleRobot(this.checked)">
+                                <label class="form-check-label text-light" for="robotToggle" id="robotStatusText">OFF</label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Scanner</small>
+                                    <span id="scannerStatus" class="badge bg-secondary">IDLE</span>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Execution</small>
+                                    <span id="execStatus" class="badge bg-secondary">PAUSED</span>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Build</small>
+                                    <span class="badge bg-info">v2.5.1</span>
+                                </div>
+                            </div>
+                            
+                            <div id="robotActiveInfo" style="display:none;">
+                                <div class="alert alert-info py-2 small mb-0">
+                                    <i class="fas fa-satellite-dish fa-spin me-2"></i> Monitoring Priority Strikes (Delta 0.59-0.69)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DEMO TRADE LOGS -->
+                    <div class="card bg-dark border-info mb-4">
+                        <div class="card-header bg-info-subtle text-info">
+                            <h6 class="mb-0 small font-weight-bold">DEMO TRADE LOGS (AI SIGNALS)</h6>
+                        </div>
+                        <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-dark table-hover table-sm small mb-0">
+                                <thead class="sticky-top bg-dark">
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Strike</th>
+                                        <th>Level</th>
+                                        <th>Signal</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="demoLogsTable">
+                                    <tr><td colspan="5" class="text-center text-muted py-3">No active signals</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- 🌟 LIVE BROKER STATUS BADGE — auto-updates every 30s -->
                     <span id="live-broker-badge" style="padding: 4px 14px; border-radius: 50px; font-size: 11px; font-weight: 900; border: 1px solid var(--glass-border); color: var(--text-dim);">
                         🔄 CHECKING BROKER...
@@ -394,7 +451,7 @@
                 <div id="broker-reason" style="font-size: 10px; color: var(--text-dim); margin-bottom: 6px; min-height: 14px;"></div>
                 <h1 style="margin: 0; font-size: 28px; font-weight: 900;">Welcome back, {{ user.username }}</h1>
                 <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 14px;">
-                    {{ user.email }} | <span style="color: var(--primary); font-weight: 800;">Subscription: {{ remaining_days }} Days Left</span>
+                    {{ user.email }} | <span style="color: var(--primary); font-weight: 800;">Subscription: {{ remaining_days }} Days Left</span> | <span style="color: #10b981; font-weight: 800;">v{{ build_version }}</span>
                 </p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -1147,13 +1204,13 @@
                         </tr>
                         <tr>
                             <th>OI</th>
-                            <th>Vol</th>
-                            <th>IV</th>
+                            <th>Δ / Θ</th>
+                            <th>i1 / i5 / i7</th>
                             <th>LTP</th>
-                            <th style="background: var(--primary); color: white;">PRICE</th>
+                            <th style="background: var(--primary); color: white;">STRIKE</th>
                             <th>LTP</th>
-                            <th>IV</th>
-                            <th>Vol</th>
+                            <th>i1 / i5 / i7</th>
+                            <th>Δ / Θ</th>
                             <th>OI</th>
                         </tr>
                     </thead>
@@ -1193,16 +1250,26 @@
                     let html = '';
                     data.chain.forEach(row => {
                         let is_atm = row.is_atm ? 'class="atm-row"' : '';
+                        // 🌟 GVN REACTION LOGIC: Highlight if price is at i1 level
+                        let ce_react = (row.ce_ltp && row.ce_gvn_i1 && Math.abs(row.ce_ltp - row.ce_gvn_i1) < 2) ? 'style="background:rgba(16,185,129,0.3);"' : '';
+                        let pe_react = (row.pe_ltp && row.pe_gvn_i1 && Math.abs(row.pe_ltp - row.pe_gvn_i1) < 2) ? 'style="background:rgba(239,68,68,0.3);"' : '';
+
                         html += `<tr ${is_atm}>
-                            <td style="color: #ef4444;">${row.ce_oi || '-'}</td>
-                            <td>${row.ce_vol || '-'}</td>
-                            <td>${row.ce_iv || '-'}</td>
-                            <td style="font-weight: bold; color: #10b981;">₹${row.ce_ltp || '-'}</td>
+                            <td style="color: #ef4444; font-size: 11px;">${row.ce_oi || '-'}</td>
+                            <td style="font-size: 10px;">${row.ce_delta || '0'}<br><span style="color:var(--text-dim);">${row.ce_theta || '0'}</span></td>
+                            <td style="color: var(--primary); font-weight: bold; font-size: 11px;">
+                                ${row.ce_gvn_i1 || '-'}<br>
+                                <span style="color:var(--text-dim); font-size: 9px;">${row.ce_gvn_i5 || '-'} / ${row.ce_gvn_i7 || '-'}</span>
+                            </td>
+                            <td ${ce_react} style="font-weight: bold; color: #10b981;">₹${row.ce_ltp || '-'}</td>
                             <td style="background: rgba(99,102,241,0.1); font-weight: 900; color: white;">${row.strike}</td>
-                            <td style="font-weight: bold; color: #ef4444;">₹${row.pe_ltp || '-'}</td>
-                            <td>${row.pe_iv || '-'}</td>
-                            <td>${row.pe_vol || '-'}</td>
-                            <td style="color: #10b981;">${row.pe_oi || '-'}</td>
+                            <td ${pe_react} style="font-weight: bold; color: #ef4444;">₹${row.pe_ltp || '-'}</td>
+                            <td style="color: var(--primary); font-weight: bold; font-size: 11px;">
+                                ${row.pe_gvn_i1 || '-'}<br>
+                                <span style="color:var(--text-dim); font-size: 9px;">${row.pe_gvn_i5 || '-'} / ${row.pe_gvn_i7 || '-'}</span>
+                            </td>
+                            <td style="font-size: 10px;">${row.pe_delta || '0'}<br><span style="color:var(--text-dim);">${row.pe_theta || '0'}</span></td>
+                            <td style="color: #10b981; font-size: 11px;">${row.pe_oi || '-'}</td>
                         </tr>`;
                     });
                     document.getElementById('oc-body').innerHTML = html;
@@ -1214,6 +1281,56 @@
                 document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">API Connection Failed. Is Dhan feed active?</td></tr>`;
             });
         }
+    </script>
+    <script>
+        let robotActive = false;
+
+        function toggleRobot(active) {
+            robotActive = active;
+            const statusText = document.getElementById('robotStatusText');
+            const infoBox = document.getElementById('robotActiveInfo');
+            const scannerBadge = document.getElementById('scannerStatus');
+            const execBadge = document.getElementById('execStatus');
+
+            if (active) {
+                statusText.innerText = "RUNNING";
+                statusText.classList.add('text-success');
+                infoBox.style.display = "block";
+                scannerBadge.className = "badge bg-success";
+                scannerBadge.innerText = "SCANNING";
+                execBadge.className = "badge bg-warning text-dark";
+                execBadge.innerText = "READY";
+                
+                // Notify backend
+                fetch('/api/robot/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({active: true})
+                });
+            } else {
+                statusText.innerText = "OFF";
+                statusText.classList.remove('text-success');
+                infoBox.style.display = "none";
+                scannerBadge.className = "badge bg-secondary";
+                scannerBadge.innerText = "IDLE";
+                execBadge.className = "badge bg-secondary";
+                execBadge.innerText = "PAUSED";
+
+                fetch('/api/robot/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({active: false})
+                });
+            }
+        }
+
+        // Auto-refresh demo logs
+        setInterval(() => {
+            if (robotActive) {
+                // Fetch latest signals from backend
+                // updateDemoLogs();
+            }
+        }, 3000);
     </script>
 </body>
 </html>
