@@ -179,6 +179,10 @@ def update_ai_dashboard(symbol, underlying_value):
                 score = 10 # Low score for PE side (Bearish)
                 color_code = "rainbow"
 
+        # Initialize if missing
+        if symbol not in market_pulse:
+            market_pulse[symbol] = {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"}
+            
         # Update the Global Pulse
         market_pulse[symbol] = {
             "sentiment": sentiment,
@@ -347,7 +351,8 @@ shoonya_api = None
 
 def login_shoonya():
     global shoonya_api
-    if shoonya_api: return shoonya_api
+    # 🌟 Reset stale login on each call (market hours can invalidate token)
+    shoonya_api = None
     
     try:
         try:
@@ -359,19 +364,38 @@ def login_shoonya():
         
         class ShoonyaApiPy(NorenApi):
             def __init__(self):
-                NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/', eodhost='https://api.shoonya.com/chartApi/getdata/')
+                # 🌟 FIX: Correct host = NorenWClientTP (HTTP) | websocket = NorenWSTP (WSS)
+                try:
+                    NorenApi.__init__(self,
+                        host='https://api.shoonya.com/NorenWClientTP/',
+                        websocket='wss://api.shoonya.com/NorenWSTP/')
+                except TypeError:
+                    # Older library needs eodhost param
+                    NorenApi.__init__(self,
+                        host='https://api.shoonya.com/NorenWClientTP/',
+                        websocket='wss://api.shoonya.com/NorenWSTP/',
+                        eodhost='https://api.shoonya.com/chartApi/getdata/')
         
         api = ShoonyaApiPy()
         uid = dhan_master_config.get("client_id")
         pwd = dhan_master_config.get("broker_password")
-        factor2 = pyotp.TOTP(dhan_master_config.get("totp_key", "")).now() if dhan_master_config.get("totp_key") else ""
-        vc = dhan_master_config.get("access_token")
-        app_key = dhan_master_config.get("client_secret")
+        totp_key = dhan_master_config.get("totp_key", "")
+        factor2 = pyotp.TOTP(totp_key).now() if totp_key else ""
+        vc = dhan_master_config.get("access_token")   # Vendor Code for Shoonya
+        app_key = dhan_master_config.get("client_secret")  # API Secret
         
-        if not uid or not pwd or not vc or not app_key:
+        if not uid or not pwd:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Missing uid or password. Cannot login.\n")
+            return None
+        
+        # vc and app_key are required for Shoonya login
+        if not vc or not app_key:
+            with open("dhan_feed_status.log", "a") as f:
+                f.write(f"{datetime.datetime.now()}: [SHOONYA API] Missing vendor_code or api_secret. Check Settings.\n")
             return None
             
-        ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='12345')
+        ret = api.login(userid=uid, password=pwd, twoFA=factor2, vendor_code=vc, api_secret=app_key, imei='abs1234')
         if ret and ret.get('stat') == 'Ok':
             shoonya_api = api
             with open("dhan_feed_status.log", "a") as f:
@@ -744,6 +768,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY"):
 
     try:
         # 🌟 GVN DUAL-PULSE (CROSS-STRIKE) CONFIRMATION
+        if symbol not in market_pulse:
+             market_pulse[symbol] = {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"}
+             
         confirmation = "📡 SCANNING..."
         ce_item = next((item for item in gvn_scanner_data[symbol] if 'CE' in item['strike']), None)
         pe_item = next((item for item in gvn_scanner_data[symbol] if 'PE' in item['strike']), None)
