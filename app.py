@@ -224,6 +224,29 @@ from gvn_master_orchestrator import get_orchestrator
 def init_gvn():
     with app.app_context():
         db.create_all()
+        # Migration for PostgreSQL/SQLite to add missing columns
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                # User table migrations
+                columns = [
+                    ('user', 'is_locked', 'BOOLEAN DEFAULT FALSE'),
+                    ('user', 'full_auto_mode', 'BOOLEAN DEFAULT FALSE'),
+                    ('user', 'trade_lots', 'INTEGER DEFAULT 1'),
+                    ('user', 'user_type', "VARCHAR(20) DEFAULT 'PAPER'"),
+                    ('user_broker_config', 'call_strike', 'VARCHAR(20)'),
+                    ('user_broker_config', 'put_strike', 'VARCHAR(20)')
+                ]
+                for table, col, col_type in columns:
+                    try:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                        conn.commit()
+                        print(f"✅ Added column {col} to {table}")
+                    except Exception:
+                        pass # Column likely exists
+        except Exception as e:
+            print(f"⚠️ Migration Error: {e}")
+
         # Check if admin user exists by phone number to avoid duplicate key error
         existing_user = User.query.filter_by(phone="9966123078").first()
         if not existing_user:
