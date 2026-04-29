@@ -11,3 +11,6 @@ pyotp==2.9.0
 groq==0.13.0
 httpx[http2]==0.27.2
 NorenRestApiPy
+scipy==1.11.4
+numpy==1.24.3
+pandas==2.0.3
