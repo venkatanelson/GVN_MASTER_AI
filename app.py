@@ -212,20 +212,44 @@ def logout():
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
+    session.permanent = True
     session['user_id'] = user_id
     user = User.query.get_or_404(user_id)
     now = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_date = now.date()
     
+    # 🌟 Detailed Trades for Today
     todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
     pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
     
+    # 🌟 30-Day P&L History Logic
+    all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
+    daily_history = []
+    for dp in all_daily:
+        daily_history.append({'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)})
+    pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
+    
+    # 🌟 Broker Config & Decrypted Keys
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    decrypted_keys = {"tv_secret": "", "access_token": "", "client_secret": "", "totp_key": "", "broker_password": ""}
+    if broker_config:
+        try:
+            if broker_config.encrypted_secret_key: decrypted_keys["tv_secret"] = cipher.decrypt(broker_config.encrypted_secret_key).decode()
+            if broker_config.encrypted_access_token: decrypted_keys["access_token"] = cipher.decrypt(broker_config.encrypted_access_token).decode()
+            if broker_config.encrypted_client_secret: decrypted_keys["client_secret"] = cipher.decrypt(broker_config.encrypted_client_secret).decode()
+            if broker_config.encrypted_totp_key: decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
+            if broker_config.encrypted_password: decrypted_keys["broker_password"] = cipher.decrypt(broker_config.encrypted_password).decode()
+        except: pass
     
     return render_template('user.html', 
                            user=user, 
                            broker_config=broker_config,
+                           decrypted_keys=decrypted_keys,
                            remaining_days=max(0, (user.expiry_date - now).days if user.expiry_date else 0),
                            pnl_1d=pnl_1d,
+                           pnl_total_30d=pnl_total_30d,
+                           daily_history=daily_history,
+                           discount_percent=user.personal_discount + 10,
                            parsed_trades=todays_trades,
                            config=get_admin_config(),
                            build_version=BUILD_VERSION)
