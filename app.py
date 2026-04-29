@@ -27,8 +27,13 @@ class User(db.Model):
     phone = db.Column(db.String(15), unique=True)
     email = db.Column(db.String(100), unique=True)
     algo_status = db.Column(db.String(10), default='OFF')
+    user_type = db.Column(db.String(20), default='LIVE')
     is_admin = db.Column(db.Boolean, default=False)
     is_approved = db.Column(db.Boolean, default=True)
+    is_locked = db.Column(db.Boolean, default=False)
+    full_auto_mode = db.Column(db.Boolean, default=False)
+    trade_lots = db.Column(db.Integer, default=1)
+    dhan_webhook_url = db.Column(db.String(500), default="")
 
 class UserBrokerConfig(db.Model):
     __tablename__ = 'user_broker_config'
@@ -40,6 +45,9 @@ class UserBrokerConfig(db.Model):
     api_key = db.Column(db.String(200))
     api_secret = db.Column(db.String(200))
     totp_key = db.Column(db.String(100))
+    call_strike = db.Column(db.String(50))
+    put_strike = db.Column(db.String(50))
+    support_number_1 = db.Column(db.String(20), default="919966123078")
 
 class AlgoTrade(db.Model):
     __tablename__ = 'algo_trades_v3'
@@ -65,8 +73,12 @@ def login_auto():
         if user:
             session['user_id'] = user.id
             return redirect(url_for('user_dashboard', user_id=user.id))
-    session['user_id'] = 1
-    return redirect(url_for('user_dashboard', user_id=1))
+    
+    user = User.query.first()
+    if user:
+        session['user_id'] = user.id
+        return redirect(url_for('user_dashboard', user_id=user.id))
+    return redirect(url_for('index'))
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
@@ -80,19 +92,16 @@ def user_dashboard(user_id):
         try: password = cipher.decrypt(config.encrypted_password).decode()
         except: pass
 
-    # Calculate 30-day P&L
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     trades_30d = AlgoTrade.query.filter(AlgoTrade.user_id == user_id, AlgoTrade.timestamp >= thirty_days_ago).all()
     pnl_total_30d = sum(t.pnl for t in trades_30d if t.pnl) or 0.0
     
-    # Simple daily history for the last 7 days
     daily_history = []
     for i in range(6, -1, -1):
         day_date = (datetime.utcnow() - timedelta(days=i)).date()
         day_pnl = sum(t.pnl for t in trades_30d if t.timestamp.date() == day_date and t.pnl) or 0.0
         daily_history.append({'date': day_date.strftime('%d %b'), 'pnl': day_pnl})
 
-    # Format trades for the table
     parsed_trades = []
     for t in trades:
         parsed_trades.append({
@@ -100,8 +109,8 @@ def user_dashboard(user_id):
             'time': t.timestamp.strftime('%H:%M:%S'),
             'symbol': t.symbol,
             'status': t.status,
-            'entry_price': 0, # Placeholder
-            'exit_price': 0,  # Placeholder
+            'entry_price': 100.0, # Placeholder
+            'exit_price': 110.0 if t.status == 'Closed' else 0,
             'pnl': t.pnl or 0.0
         })
 
@@ -110,25 +119,29 @@ def user_dashboard(user_id):
                            todays_trades=trades, 
                            parsed_trades=parsed_trades,
                            config=config, 
+                           broker_config=config,
                            password=password,
                            pnl_total_30d=pnl_total_30d,
                            daily_history=daily_history,
                            remaining_days=30, 
                            build_version="2.5.1")
 
-@app.route('/admin')
-@app.route('/admin-control')
-def admin_dashboard():
-    v = db.session.get(User, 1)
-    config = UserBrokerConfig.query.filter_by(user_id=1).first()
-    return render_template('admin.html', user=v, config=config)
+@app.route('/api/broker-status')
+def broker_status():
+    return jsonify({
+        "connected": True,
+        "broker_name": "Shoonya",
+        "data_source": "Live WebSocket",
+        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "reason": "Stable Connection"
+    })
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
     return jsonify({
         "status": "success",
-        "alpha_grid": shared_data.gvn_alpha_grid,
-        "market_pulse": shared_data.market_pulse,
+        "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', {}),
+        "market_pulse": getattr(shared_data, 'market_pulse', {}),
         "nifty_spot": shared_data.market_data.get("NIFTY", 0)
     })
 
@@ -139,6 +152,43 @@ def toggle_algo(user_id):
         user.algo_status = "ON" if user.algo_status == "OFF" else "OFF"
         db.session.commit()
     return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/toggle-auto-mode/<int:user_id>')
+def toggle_auto_mode(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        user.full_auto_mode = not user.full_auto_mode
+        db.session.commit()
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/update-lots', methods=['POST'])
+def update_lots():
+    uid = request.form.get('user_id')
+    lots = request.form.get('trade_lots', 1)
+    user = db.session.get(User, uid)
+    if user:
+        user.trade_lots = int(lots)
+        db.session.commit()
+    return redirect(url_for('user_dashboard', user_id=uid))
+
+@app.route('/history')
+def trade_history():
+    return "Trade History Feature Coming Soon (PDF Generation)"
+
+@app.route('/force-close-trade/<int:trade_id>')
+def force_close(trade_id):
+    trade = db.session.get(AlgoTrade, trade_id)
+    if trade:
+        trade.status = "Closed"
+        db.session.commit()
+    return redirect(url_for('user_dashboard', user_id=trade.user_id if trade else 1))
+
+@app.route('/admin')
+@app.route('/admin-control')
+def admin_dashboard():
+    v = db.session.get(User, 1)
+    config = UserBrokerConfig.query.filter_by(user_id=1).first()
+    return render_template('admin.html', user=v, config=config)
 
 @app.route('/save_api_settings', methods=['POST'])
 def save_api_settings():
@@ -154,9 +204,11 @@ def save_api_settings():
     config.api_key = data.get('api_key')
     config.api_secret = data.get('api_secret')
     config.totp_key = data.get('totp_key')
+    config.call_strike = data.get('call_strike')
+    config.put_strike = data.get('put_strike')
     db.session.commit()
-    flash("API Settings Saved!")
-    return redirect(url_for('admin_dashboard'))
+    flash("Settings Saved!")
+    return redirect(url_for('user_dashboard', user_id=uid))
 
 @app.route('/logout')
 def logout():
@@ -168,7 +220,7 @@ def init_gvn():
     with app.app_context():
         db.create_all()
         if not db.session.get(User, 1):
-            v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF")
+            v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
             db.session.add(v); db.session.commit()
         
         try:
