@@ -224,54 +224,65 @@ from gvn_master_orchestrator import get_orchestrator
 def init_gvn():
     with app.app_context():
         db.create_all()
-        # Migration for PostgreSQL/SQLite to add missing columns
+        # Robust Migration logic
         try:
-            from sqlalchemy import text
-            with db.engine.connect() as conn:
-                # User table migrations
-                columns = [
-                    ('user', 'is_locked', 'BOOLEAN DEFAULT FALSE'),
-                    ('user', 'full_auto_mode', 'BOOLEAN DEFAULT FALSE'),
-                    ('user', 'trade_lots', 'INTEGER DEFAULT 1'),
-                    ('user', 'user_type', "VARCHAR(20) DEFAULT 'PAPER'"),
-                    ('user_broker_config', 'call_strike', 'VARCHAR(20)'),
-                    ('user_broker_config', 'put_strike', 'VARCHAR(20)'),
-                    ('user_broker_config', 'support_number_1', 'VARCHAR(20)')
+            from sqlalchemy import inspect, text
+            inspector = inspect(db.engine)
+            
+            # Tables and their required columns
+            required_columns = {
+                'user': [
+                    ('is_locked', 'BOOLEAN DEFAULT FALSE'),
+                    ('full_auto_mode', 'BOOLEAN DEFAULT FALSE'),
+                    ('trade_lots', 'INTEGER DEFAULT 1'),
+                    ('user_type', "VARCHAR(20) DEFAULT 'PAPER'")
+                ],
+                'user_broker_config': [
+                    ('call_strike', 'VARCHAR(20)'),
+                    ('put_strike', 'VARCHAR(20)'),
+                    ('support_number_1', 'VARCHAR(20)')
                 ]
-                for table, col, col_type in columns:
-                    try:
-                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
-                        conn.commit()
-                        print(f"✅ Added column {col} to {table}")
-                    except Exception:
-                        pass # Column likely exists
-        except Exception as e:
-            print(f"⚠️ Migration Error: {e}")
-
-        # Check if admin user exists by phone number to avoid duplicate key error
-        existing_user = User.query.filter_by(phone="9966123078").first()
-        if not existing_user:
-            v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
-            db.session.add(v)
-            db.session.commit()
-        
-        # Initialize Orchestrator with admin config if available
-        config = UserBrokerConfig.query.filter_by(user_id=1).first()
-        if config:
-            broker_cfg = {
-                "broker_name": config.broker_name,
-                "client_id": config.client_id,
-                "api_key": config.api_key,
-                "access_token": config.api_secret, # Using secret as token placeholder
-                "webhook_url": "https://gvn-algo-terminal.onrender.com/webhook", # Placeholder
-                "quantity": 50
             }
-            orchestrator = get_orchestrator(broker_cfg)
-            try:
-                orchestrator.initialize_system()
+
+            with db.engine.connect() as conn:
+                for table, cols in required_columns.items():
+                    existing_cols = [c['name'] for c in inspector.get_columns(table)]
+                    for col, col_type in cols:
+                        if col not in existing_cols:
+                            try:
+                                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                                conn.commit()
+                                print(f"✅ Migrated: Added {col} to {table}")
+                            except Exception as e:
+                                print(f"❌ Failed to add {col}: {e}")
+        except Exception as e:
+            print(f"⚠️ Migration System Error: {e}")
+
+        # Check for admin user
+        try:
+            existing_user = User.query.filter_by(phone="9966123078").first()
+            if not existing_user:
+                v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
+                db.session.add(v)
+                db.session.commit()
+            
+            # Initialize Orchestrator
+            config = UserBrokerConfig.query.filter_by(user_id=1).first()
+            if config:
+                broker_cfg = {
+                    "broker_name": config.broker_name,
+                    "client_id": config.client_id,
+                    "api_key": config.api_key,
+                    "access_token": config.api_secret, 
+                    "totp_key": config.totp_key,
+                    "password": cipher.decrypt(config.encrypted_password).decode() if config.encrypted_password else None
+                }
+                from gvn_master_orchestrator import get_orchestrator
+                orch = get_orchestrator()
+                orch.start(broker_cfg)
                 print("🚀 GVN Master Orchestrator Started Successfully!")
-            except Exception as e:
-                print(f"⚠️ Orchestrator Init Failed: {e}")
+        except Exception as e:
+            print(f"❌ Initialization Error: {e}")
 
         try:
             import shoonya_live_feed
