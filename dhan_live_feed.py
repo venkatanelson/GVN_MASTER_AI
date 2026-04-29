@@ -22,7 +22,13 @@ def fetch_dhan_spot_data(symbol="NIFTY"):
     """
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        ticker = "%5ENSEI" if symbol == "NIFTY" else "%5ENSEBANK"
+        tickers = {
+            "NIFTY": "%5ENSEI",
+            "BANKNIFTY": "%5ENSEBANK",
+            "FINNIFTY": "NIFTY_FIN_SERVICE.NS",
+            "SENSEX": "%5EBSESN"
+        }
+        ticker = tickers.get(symbol, "%5ENSEI")
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         resp = requests.get(url, headers=headers, timeout=5)
         if resp.status_code == 200:
@@ -34,35 +40,57 @@ def fetch_dhan_spot_data(symbol="NIFTY"):
 
 def process_strike_levels():
     """
-    Background worker to calculate GVN levels for 14 active strikes around ATM.
+    Background worker to calculate GVN levels for active strikes around ATM.
+    Populates shared_data.gvn_scanner_data for the Dashboard.
     """
-    print("🛰️ [GVN SCANNER] Initializing 14-Strike Dynamic Monitor...")
+    print("🛰️ [GVN SCANNER] Initializing Dynamic Multi-Index Monitor...")
     while True:
         try:
-            # 1. Sync Nifty Spot
-            spot = fetch_dhan_spot_data("NIFTY")
-            if spot > 0:
-                shared_data.live_option_chain_summary["NIFTY"]["spot"] = spot
-                shared_data.live_option_chain_summary["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]:
+                # 1. Sync Spot Price
+                spot = fetch_dhan_spot_data(symbol)
+                if spot > 0:
+                    shared_data.live_option_chain_summary[symbol]["spot"] = spot
+                    shared_data.live_option_chain_summary[symbol]["atm"] = int(round(spot / 50) * 50) if symbol == "NIFTY" else int(round(spot / 100) * 100)
+                    shared_data.live_option_chain_summary["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
 
-                # 2. Identify 14 Strikes around ATM (Step 50 for Nifty)
-                atm = int(round(spot / 50) * 50)
-                strikes_to_scan = []
-                for i in range(-3, 4): # -150 to +150 range
-                    strike_price = atm + (i * 50)
-                    strikes_to_scan.append(f"NIFTY{strike_price}CE")
-                    strikes_to_scan.append(f"NIFTY{strike_price}PE")
-
-                # 3. Calculate Levels for each strike
-                for symbol in strikes_to_scan:
-                    if symbol not in shared_data.strike_level_cache:
-                        mock_h = 100.0 
-                        mock_l = 50.0
-                        levels = gvn_levels_engine.calculate_master_levels(mock_h, mock_l)
-                        if levels:
-                            shared_data.strike_level_cache[symbol] = levels
+                    # 2. Identify Strikes around ATM
+                    step = 50 if symbol == "NIFTY" else 100
+                    atm = int(round(spot / step) * step)
+                    
+                    scanner_list = []
+                    # Scan 2 strikes ITM and 2 strikes OTM for each side
+                    for i in range(-2, 3):
+                        strike_price = atm + (i * step)
+                        for opt_type in ["CE", "PE"]:
+                            strike_symbol = f"{symbol} {strike_price} {opt_type}"
+                            
+                            # 3. Calculate Levels (Using Mock High/Low for now, replace with 9:15 data later)
+                            mock_h = strike_price * 0.01 + 50 # Example mock
+                            mock_l = strike_price * 0.01
+                            levels = gvn_levels_engine.calculate_master_levels(mock_h, mock_l)
+                            
+                            # Determine basic signal for UI
+                            ltp = mock_l + 10 # Mock LTP
+                            ai_signal = "WAIT"
+                            if levels:
+                                if ltp > levels['i5']: ai_signal = "🚀 BUY"
+                                elif ltp < levels['i7']: ai_signal = "📉 SELL"
+                            
+                            scanner_list.append({
+                                "strike": strike_symbol,
+                                "ltp": round(ltp, 2),
+                                "delta": 0.50, # Mock
+                                "zone": "ALPHA ZONE",
+                                "ai_signal": ai_signal,
+                                "score": 75,
+                                "levels": levels
+                            })
+                    
+                    shared_data.gvn_scanner_data[symbol] = scanner_list
             
-            time.sleep(10)
+            shared_data.gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
+            time.sleep(5) # Refresh every 5 seconds
         except Exception as e:
             print(f"⚠️ [DHAN FEED ERROR] {e}")
             time.sleep(5)
