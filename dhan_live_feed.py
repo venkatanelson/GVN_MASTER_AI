@@ -69,6 +69,19 @@ def process_strike_levels():
                     step = 50 if symbol == "NIFTY" else 100
                     atm = int(round(spot / step) * step)
                     
+                    # 🌟 AUTO-SYNC MONITORED STRIKES (Keep them near ATM)
+                    if symbol == "NIFTY":
+                        curr_ce = shared_data.monitored_strikes["CALL"].get("symbol", "")
+                        # If current strike is empty or too far (>150 pts), auto-update to ATM
+                        try:
+                            curr_val = int(''.join(filter(str.isdigit, str(curr_ce)))) if curr_ce else 0
+                            if not curr_ce or abs(curr_val - atm) > 150:
+                                shared_data.monitored_strikes["CALL"]["symbol"] = f"NIFTY {atm} CE"
+                                shared_data.monitored_strikes["PUT"]["symbol"] = f"NIFTY {atm} PE"
+                        except:
+                            shared_data.monitored_strikes["CALL"]["symbol"] = f"NIFTY {atm} CE"
+                            shared_data.monitored_strikes["PUT"]["symbol"] = f"NIFTY {atm} PE"
+
                     scanner_list = []
                     # Scan 2 strikes ITM and 2 strikes OTM for each side
                     for i in range(-2, 3):
