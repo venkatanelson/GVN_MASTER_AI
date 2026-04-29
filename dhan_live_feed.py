@@ -114,6 +114,22 @@ def process_strike_levels():
                     shared_data.gvn_scanner_data[symbol] = scanner_list
             
             shared_data.gvn_scanner_data["last_updated"] = datetime.datetime.now().strftime("%H:%M:%S")
+            
+            # 🌟 PERSIST TO FILE (Bridge for Multi-Process Gunicorn on Render)
+            try:
+                import json
+                persist_data = {
+                    "summary": shared_data.live_option_chain_summary,
+                    "scanner": shared_data.gvn_scanner_data,
+                    "strikes": shared_data.monitored_strikes,
+                    "pulse": shared_data.market_pulse,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+                with open("live_market_data.json", "w") as f:
+                    json.dump(persist_data, f)
+            except Exception as pe:
+                print(f"❌ [PERSIST ERROR] {pe}")
+
             time.sleep(5) # Refresh every 5 seconds
         except Exception as e:
             print(f"⚠️ [DHAN FEED ERROR] {e}")
