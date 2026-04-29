@@ -9,13 +9,13 @@ import json
 import base64
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text, func
+from sqlalchemy import text, func, or_
 from cryptography.fernet import Fernet
 import shared_data
 import gvn_levels_engine
 
 app = Flask(__name__)
-app.secret_key = 'gvn_master_venkat_final_stable_v3'
+app.secret_key = 'gvn_master_venkat_final_stable_v4'
 
 # Database Configuration
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_master_algo.db')
@@ -30,7 +30,7 @@ class User(db.Model):
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80))
-    email = db.Column(db.String(120))
+    email = db.Column(db.String(120), unique=True)
     algo_status = db.Column(db.String(10), default='OFF')
 
 class AlgoTrade(db.Model):
@@ -74,21 +74,22 @@ def run_setup():
     with app.app_context():
         try:
             db.create_all()
-            # Ensure User 'Venkat'
-            v = User.query.filter_by(username='Venkat').first()
+            # 🌟 Robust User Sync: by username OR email
+            v = User.query.filter(or_(User.username == 'Venkat', User.email == 'nelsonp143@gmail.com')).first()
             if not v:
                 v = User(username='Venkat', email='nelsonp143@gmail.com')
                 db.session.add(v)
-                db.session.commit()
+            else:
+                v.username = 'Venkat' # Ensure correct name
+            db.session.commit()
+            print(f"✅ User Ready: {v.username}")
 
-            # P&L Recovery Logic (Safer Version)
+            # P&L Recovery Logic
             legacy_tables = ["algo_trades_v3", "user_dashboard_trades"]
             for table in legacy_tables:
                 try:
-                    # Check if table exists
                     count_res = db.session.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
                     if count_res and count_res[0] > 0:
-                        # Fetch legacy data
                         legacy_data = db.session.execute(text(f"SELECT pnl FROM {table} WHERE pnl IS NOT NULL")).fetchall()
                         for row in legacy_data:
                             new_trade = AlgoTrade(user_id=v.id, symbol='RECOVERY', pnl=row[0], status='Closed', timestamp=datetime.utcnow())
@@ -106,24 +107,18 @@ run_setup()
 def index():
     v = User.query.filter_by(username='Venkat').first()
     if v: return redirect(url_for('user_dashboard', user_id=v.id))
-    return "Setup in progress... Please refresh."
+    return "User setup failed. Please check logs."
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
     user = User.query.get_or_404(user_id)
     trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(50).all()
-    
-    # Calculate 1D PnL
     today = datetime.utcnow().date()
     pnl_1d = sum(t.pnl for t in trades if t.timestamp.date() == today)
-    
-    # Calculate 30D PnL
     daily = DailyPnL.query.filter_by(user_id=user_id).order_by(DailyPnL.date.desc()).limit(30).all()
     pnl_30d = sum(d.pnl for d in daily)
-    
     md = MarketData.query.filter_by(symbol='NIFTY').first()
     spot = md.price if md else 0.0
-    
     return render_template('user.html', user=user, todays_trades=trades, pnl_1d=pnl_1d, pnl_total_30d=pnl_30d, spot_price=spot)
 
 @app.route('/api/broker-status')
