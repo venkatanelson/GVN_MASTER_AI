@@ -148,7 +148,7 @@ def logout():
 with app.app_context():
     import shoonya_live_feed
     db.create_all()
-    if not User.query.get(1):
+    if not db.session.get(User, 1):
         db.session.add(User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, is_approved=True))
         db.session.commit()
     shoonya_live_feed.start_live_feed_worker()
