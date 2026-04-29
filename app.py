@@ -235,6 +235,24 @@ def gvn_signal_engine():
             time.sleep(2)
         except Exception: time.sleep(5)
 
+@app.route('/debug/db-check')
+def db_check():
+    try:
+        conn = db.engine.connect()
+        cursor = conn.execute(db.text("SELECT name FROM sqlite_master WHERE type='table';"))
+        tables = [row[0] for row in cursor]
+        results = {}
+        for table in tables:
+            try:
+                count_res = conn.execute(db.text(f"SELECT COUNT(*) FROM {table}"))
+                count = count_res.fetchone()[0]
+                results[table] = count
+            except: results[table] = "Error"
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        return str(e)
+
 if __name__ == '__main__':
     if not getattr(app, '_workers_started', False):
         threading.Thread(target=gvn_signal_engine, daemon=True).start()
