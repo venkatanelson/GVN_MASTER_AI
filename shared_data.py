@@ -1,47 +1,29 @@
-# Shared Data Memory for GVN Algo
-# This ensures that all modules see the same live price data
+# shared_data.py - Master Memory for GVN Algo
 
-live_option_chain_summary = {
-    "NIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
-    "BANKNIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
-    "FINNIFTY": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
-    "SENSEX": {"spot": 0, "atm": 0, "ce_60": 0, "pe_60": 0, "expiry": ""},
-    "last_updated": None
+# Live Market Data
+market_data = {
+    "NIFTY": 0.0,
+    "BANKNIFTY": 0.0,
+    "FINNIFTY": 0.0
 }
 
+# GVN Alpha Grid - Holds 14 strikes with levels
+gvn_alpha_grid = []
+
+# Pulse Data
+market_pulse = {
+    "trend": "SIDEWAYS",
+    "strength": "NORMAL",
+    "inst_activity": "QUIET",
+    "zone": "DULL ZONE",
+    "vol_ratio": 1.0
+}
+
+# Scanner Data
 gvn_scanner_data = {
     "NIFTY": [],
-    "BANKNIFTY": [],
-    "FINNIFTY": [],
-    "SENSEX": [],
-    "last_updated": None
+    "BANKNIFTY": []
 }
 
-market_pulse = {
-    "NIFTY": {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"},
-    "BANKNIFTY": {"sentiment": "NEUTRAL", "score": 50, "trend": "SIDEWAYS", "volume": "NORMAL", "inst_activity": "LOW"},
-    "last_updated": None
-}
-
-auto_trade_signals = []
-
-# Persistent memory for monitored strikes and their i-levels
-monitored_strikes = {
-    "CALL": {"symbol": None, "last_price": 0, "levels": None, "momentum": "NEUTRAL"},
-    "PUT": {"symbol": None, "last_price": 0, "levels": None, "momentum": "NEUTRAL"}
-}
-
-# Calculated i-levels for strikes to avoid recalculating
-# Format: { "SYMBOL": { "levels": {...}, "high915": X, "low915": Y } }
-i_level_memory = {}
-strike_level_cache = {}
-
-# 🌟 BROKER CONNECTION STATUS — Updated by dhan_live_feed.py every cycle
-# Dashboard reads this to show ✅ CONNECTED or ❌ NOT CONNECTED
-broker_connection_status = {
-    "connected": False,
-    "broker_name": "None",
-    "reason": "Initializing...",
-    "last_checked": None,
-    "data_source": "NONE"   # "BROKER_LIVE" | "NSE_LIVE" | "OFFLINE_FALLBACK"
-}
+# Broker Connection Status
+broker_connected = False
