@@ -80,7 +80,41 @@ def user_dashboard(user_id):
         try: password = cipher.decrypt(config.encrypted_password).decode()
         except: pass
 
-    return render_template('user.html', user=user, todays_trades=trades, config=config, password=password)
+    # Calculate 30-day P&L
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    trades_30d = AlgoTrade.query.filter(AlgoTrade.user_id == user_id, AlgoTrade.timestamp >= thirty_days_ago).all()
+    pnl_total_30d = sum(t.pnl for t in trades_30d if t.pnl) or 0.0
+    
+    # Simple daily history for the last 7 days
+    daily_history = []
+    for i in range(6, -1, -1):
+        day_date = (datetime.utcnow() - timedelta(days=i)).date()
+        day_pnl = sum(t.pnl for t in trades_30d if t.timestamp.date() == day_date and t.pnl) or 0.0
+        daily_history.append({'date': day_date.strftime('%d %b'), 'pnl': day_pnl})
+
+    # Format trades for the table
+    parsed_trades = []
+    for t in trades:
+        parsed_trades.append({
+            'id': t.id,
+            'time': t.timestamp.strftime('%H:%M:%S'),
+            'symbol': t.symbol,
+            'status': t.status,
+            'entry_price': 0, # Placeholder
+            'exit_price': 0,  # Placeholder
+            'pnl': t.pnl or 0.0
+        })
+
+    return render_template('user.html', 
+                           user=user, 
+                           todays_trades=trades, 
+                           parsed_trades=parsed_trades,
+                           config=config, 
+                           password=password,
+                           pnl_total_30d=pnl_total_30d,
+                           daily_history=daily_history,
+                           remaining_days=30, 
+                           build_version="2.5.1")
 
 @app.route('/admin')
 @app.route('/admin-control')
