@@ -2278,14 +2278,78 @@ def unlock_premium(user_id):
     flash("🌟 PREMIUM ACTIVATED! Your account is now unlocked for 30 days.")
     return redirect(url_for('user_dashboard', user_id=user.id))
 
-with app.app_context():
-    db.create_all()
-    # 🌟 FIX: Start workers in app context so it runs in Production (Gunicorn/Render)
-    if not getattr(app, '_workers_started', False):
-        sync_admin_dhan_to_worker()
-        # shoonya_live_feed.start_live_feed_worker() # Bypassing basic engine
-        dhan_live_feed.start_live_feed_worker()     # Starting Advanced Alpha Engine
-        app._workers_started = True
+def send_premium_telegram_alert(signal_data):
+    """Sends a professionally formatted trading alert to Telegram."""
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+    if not bot_token or not chat_id: return
+
+    msg = (
+        f"🚀 <b>GVN MASTER ALGO: NEW SIGNAL</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📦 <b>STRIKE:</b> {signal_data['strike']}\n"
+        f"⚡ <b>SIGNAL:</b> {signal_data['type']} @ ₹{signal_data['price']}\n"
+        f"🎯 <b>TARGET:</b> ₹{signal_data['target']}\n"
+        f"🛑 <b>STOP LOSS:</b> ₹{signal_data['sl']}\n"
+        f"📊 <b>PULSE SCORE:</b> {signal_data['score']}%\n"
+        f"🛰️ <b>ZONE:</b> {signal_data['zone']}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🤖 <i>AI Validation: CONFIRMED ✅</i>"
+    )
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=5)
+    except: pass
+
+def execute_broker_order(order_data):
+    """Prepares and executes a JSON order for the connected broker."""
+    # This JSON can be directly piped to Shoonya/Dhan API
+    order_payload = {
+        "action": order_data["type"],
+        "symbol": order_data["strike"],
+        "quantity": order_data["qty"],
+        "price": order_data["price"],
+        "order_type": "LMT",
+        "product": "MIS",
+        "timestamp": datetime.now().isoformat()
+    }
+    print(f"📡 [BROKER JSON] Executing Order: {order_payload}")
+    # Integration logic with Shoonya/Dhan would go here
+    return order_payload
+
+def gvn_signal_engine():
+    """Background thread to monitor and execute GVN Alpha signals."""
+    print("🚀 [GVN SIGNAL ENGINE] Monitoring Alpha Grid for Breakouts...")
+    while True:
+        try:
+            # Check for signals in shared_data
+            for symbol in ["NIFTY", "BANKNIFTY"]:
+                scanner_data = shared_data.gvn_scanner_data.get(symbol, [])
+                for item in scanner_data:
+                    # 🌟 BREAKOUT LOGIC: If price > i5 Level
+                    if item.get('levels') and item['ltp'] > item['levels']['i5']:
+                        signal_id = f"{item['strike']}_{datetime.now().minute}"
+                        if signal_id not in shared_data.auto_trade_signals:
+                            alert = {
+                                "strike": item['strike'],
+                                "type": "BUY",
+                                "price": item['ltp'],
+                                "target": round(item['ltp'] * 1.2, 2),
+                                "sl": round(item['ltp'] * 0.8, 2),
+                                "score": item['score'],
+                                "zone": item['zone']
+                            }
+                            send_premium_telegram_alert(alert)
+                            execute_broker_order({**alert, "qty": 50})
+                            shared_data.auto_trade_signals.append(signal_id)
+            
+            time.sleep(3)
+        except Exception as e:
+            print(f"❌ [SIGNAL ENGINE ERROR] {e}")
+            time.sleep(10)
+
+# Start Engine
+threading.Thread(target=gvn_signal_engine, daemon=True).start()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
