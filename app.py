@@ -268,7 +268,7 @@ def init_gvn():
             
             # Initialize Orchestrator
             config = UserBrokerConfig.query.filter_by(user_id=1).first()
-            if config:
+            if config and config.client_id:
                 broker_cfg = {
                     "broker_name": config.broker_name,
                     "client_id": config.client_id,
@@ -279,8 +279,14 @@ def init_gvn():
                 }
                 from gvn_master_orchestrator import get_orchestrator
                 orch = get_orchestrator()
-                orch.start(broker_cfg)
-                print("🚀 GVN Master Orchestrator Started Successfully!")
+                if orch:
+                    try:
+                        orch.start(broker_cfg)
+                        print("🚀 GVN Master Orchestrator Started Successfully!")
+                    except Exception as e:
+                        print(f"❌ Orchestrator Start Failed: {e}")
+                else:
+                    print("❌ Error: Could not create Orchestrator instance.")
         except Exception as e:
             print(f"❌ Initialization Error: {e}")
 
