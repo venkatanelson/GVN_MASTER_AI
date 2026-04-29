@@ -127,7 +127,12 @@ with app.app_context():
             uid = active_user.id
             for table in legacy_tables:
                 try:
+                    # 1. Restore to Trades History
                     conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status, timestamp) SELECT {uid}, 'Legacy Recovery', pnl, 'Closed', datetime('now') FROM {table} WHERE pnl IS NOT NULL"))
+                    
+                    # 2. Restore to Daily P&L (to show in the 30-day box and chart)
+                    conn.execute(db.text(f"INSERT INTO daily_pnl (user_id, pnl, date) SELECT {uid}, SUM(pnl), date('now') FROM {table} WHERE pnl IS NOT NULL GROUP BY date('now')"))
+                    
                     conn.commit()
                     print(f"✅ [RECOVERY] Restored data from {table} for User {uid}")
                 except: pass
