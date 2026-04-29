@@ -4,7 +4,7 @@ import shared_data
 import gvn_levels_engine
 import gvn_ai_engine
 import random
-from app import app, db, UserBrokerConfig, cipher
+# Removed top-level app import to prevent circular import error
 
 # SHOONYA LIVE FEED v4.5 (AUTO-PERSISTENT CONNECTION)
 
@@ -31,6 +31,7 @@ def trigger_alpha_grid_calculation(spot):
 
 def process_shoonya_feed():
     print("🛰️ [SHOONYA FEED] Starting Master AI Engine...")
+    from app import app, db, UserBrokerConfig, User, cipher
     
     # 🌟 AUTO-CONNECT LOGIC
     with app.app_context():
@@ -67,6 +68,12 @@ def process_shoonya_feed():
                 
             time.sleep(1)
         except: time.sleep(5)
+
+def start_live_feed_worker():
+    import threading
+    thread = threading.Thread(target=process_shoonya_feed, daemon=True)
+    thread.start()
+    print("🛰️ [SHOONYA] Live Feed Worker Started in Background Thread.")
 
 if __name__ == "__main__":
     process_shoonya_feed()
