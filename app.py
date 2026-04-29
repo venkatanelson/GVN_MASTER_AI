@@ -111,19 +111,43 @@ def get_admin_config():
 
 # --- MIGRATIONS ---
 def run_migrations():
+    """Super robust migration to handle table renaming and column additions."""
     with app.app_context():
         try:
             conn = db.engine.connect()
-            user_cols = [("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"), ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"), ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BLOB"), ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT 0"), ("is_blocked", "BOOLEAN DEFAULT 0"), ("is_admin", "BOOLEAN DEFAULT 0"), ("is_locked", "BOOLEAN DEFAULT 1"), ("signals_unlocked_until", "DATETIME"), ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT 0")]
+            # 🌟 1. Check if old table 'algo_trades_v3' exists and rename to 'algo_trade'
+            try:
+                conn.execute(db.text("ALTER TABLE algo_trades_v3 RENAME TO algo_trade"))
+                conn.commit()
+                print("✅ [MIGRATION] Renamed algo_trades_v3 to algo_trade")
+            except: pass
+
+            # 🌟 2. Ensure all columns exist in 'user' table
+            user_cols = [
+                ("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"),
+                ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"),
+                ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BLOB"),
+                ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT 0"),
+                ("is_blocked", "BOOLEAN DEFAULT 0"), ("is_admin", "BOOLEAN DEFAULT 0"),
+                ("is_locked", "BOOLEAN DEFAULT 1"), ("signals_unlocked_until", "DATETIME"),
+                ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT 0")
+            ]
             for col, ctype in user_cols:
-                try: conn.execute(db.text(f"ALTER TABLE user ADD COLUMN {col} {ctype}")); conn.commit()
+                try: 
+                    conn.execute(db.text(f"ALTER TABLE user ADD COLUMN {col} {ctype}"))
+                    conn.commit()
                 except: pass
+            
+            # 🌟 3. Ensure all columns exist in 'algo_trade' table
             trade_cols = [("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")]
             for col, ctype in trade_cols:
-                try: conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}")); conn.commit()
+                try: 
+                    conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}"))
+                    conn.commit()
                 except: pass
+                
             conn.close()
-            print("✅ [DATABASE] Migrations Completed.")
+            print("✅ [DATABASE] Migrations Completed Successfully.")
         except Exception as e: print(f"⚠️ [MIGRATION WARNING] {e}")
 
 # --- CORE ROUTES ---
