@@ -19,7 +19,7 @@ import dhan_live_feed
 import broker_api
 
 # 🚀 GVN MASTER BUILD VERSION
-BUILD_VERSION = "2.2.4 (Universal Bypass Ready)"
+BUILD_VERSION = "2.2.5 (Recovery & Master Sync)"
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
@@ -105,26 +105,29 @@ cipher = Fernet(ENCRYPTION_KEY)
 
 def get_admin_config():
     config = AdminConfig.query.first()
-    if not config:
-        config = AdminConfig(); db.session.add(config); db.session.commit()
+    if not config: config = AdminConfig(); db.session.add(config); db.session.commit()
     return config
 
-# --- MIGRATIONS (Runs on App Load for Render) ---
+# --- MIGRATIONS & RECOVERY ---
 with app.app_context():
     db.create_all()
     try:
         conn = db.engine.connect()
-        # Rename old table if exists
-        try: conn.execute(db.text("ALTER TABLE algo_trades_v3 RENAME TO algo_trade")); conn.commit()
-        except: pass
-        
-        # Add columns to user table
+        # 🛡️ RECOVERY: Merge old data if tables exist
+        tables_to_sync = [("algo_trades_v3", "algo_trade"), ("daily_pnl_old", "daily_pnl")]
+        for old, new in tables_to_sync:
+            try:
+                conn.execute(db.text(f"INSERT INTO {new} SELECT * FROM {old} WHERE id NOT IN (SELECT id FROM {new})"))
+                conn.commit()
+                print(f"✅ [RECOVERY] Synced data from {old} to {new}")
+            except: pass
+            
+        # Add columns for robustness
         user_cols = [("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"), ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"), ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BYTEA" if "postgres" in db_url else "BLOB"), ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT FALSE"), ("is_blocked", "BOOLEAN DEFAULT FALSE"), ("is_admin", "BOOLEAN DEFAULT FALSE"), ("is_locked", "BOOLEAN DEFAULT TRUE"), ("signals_unlocked_until", "TIMESTAMP"), ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT FALSE")]
         for col, ctype in user_cols:
             try: conn.execute(db.text(f"ALTER TABLE \"user\" ADD COLUMN {col} {ctype}")); conn.commit()
             except: pass
             
-        # Add columns to algo_trade
         trade_cols = [("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")]
         for col, ctype in trade_cols:
             try: conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}")); conn.commit()
@@ -171,13 +174,6 @@ def toggle_algo(user_id):
 def toggle_auto_mode(user_id):
     user = User.query.get_or_404(user_id); user.full_auto_mode = not user.full_auto_mode
     db.session.commit(); flash(f"GVN Pilot: {'ACTIVE' if user.full_auto_mode else 'DISABLED'}")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/update-lots', methods=['POST'])
-def update_lots():
-    user_id = request.form.get('user_id'); user = User.query.get_or_404(user_id)
-    user.trade_lots = int(request.form.get('trade_lots', 1))
-    db.session.commit(); flash(f"Quantity Updated to {user.trade_lots}x")
     return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/save_api_settings', methods=['POST'])
