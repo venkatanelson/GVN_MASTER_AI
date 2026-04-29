@@ -1,29 +1,31 @@
-# shared_data.py - Master Memory for GVN Algo
+# GVN Algorithmic AI Engine - Shared Memory
+# ---------------------------------------------------------
 
-# Live Market Data
+# Market Data LTP Storage
 market_data = {
     "NIFTY": 0.0,
     "BANKNIFTY": 0.0,
     "FINNIFTY": 0.0
 }
 
-# GVN Alpha Grid - Holds 14 strikes with levels
+# Alpha Grid Storage (14 Strikes)
 gvn_alpha_grid = []
 
-# Pulse Data
+# AI Sentiment / Market Pulse
 market_pulse = {
-    "trend": "SIDEWAYS",
-    "strength": "NORMAL",
-    "inst_activity": "QUIET",
-    "zone": "DULL ZONE",
-    "vol_ratio": 1.0
+    "mode": "INITIALIZING",
+    "flow": "WAITING",
+    "inst": "SCANNERS READY",
+    "zone": "CHECKING TIME",
+    "priority": "P1: i5 | P2: i7"
+}
+
+# Broker Connectivity Status
+broker_connection_status = {
+    "Shoonya": False,
+    "Dhan": False,
+    "connected_at": None
 }
 
 # Scanner Data
-gvn_scanner_data = {
-    "NIFTY": [],
-    "BANKNIFTY": []
-}
-
-# Broker Connection Status
-broker_connected = False
+gvn_scanner_data = {}
