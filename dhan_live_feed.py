@@ -18,24 +18,35 @@ shoonya_master_config = {
 
 def fetch_dhan_spot_data(symbol="NIFTY"):
     """
-    Fetches the live spot price from Dhan or Backup source.
+    Fetches the live spot price from Dhan API (Primary) or Yahoo (Backup).
     """
+    # 1. Try Dhan API first (More reliable on Render)
+    if dhan_master_config.get("active") and dhan_master_config.get("access_token"):
+        try:
+            from dhanhq import dhanhq
+            dhan = dhanhq(dhan_master_config["client_id"], dhan_master_config["access_token"])
+            sec_ids = {"NIFTY": "13", "BANKNIFTY": "25", "FINNIFTY": "27", "SENSEX": "1"}
+            sid = sec_ids.get(symbol)
+            if sid:
+                instruments = {"IDX_I": [sid]}
+                quote = dhan.quote_data(instruments)
+                if quote.get('status') == 'success':
+                    price = quote.get('data', {}).get(sid, {}).get('lastPrice', 0)
+                    if price > 0: return float(price)
+        except Exception as e:
+            print(f"⚠️ [DHAN API ERROR] {symbol}: {e}")
+
+    # 2. Fallback to Yahoo Finance
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        tickers = {
-            "NIFTY": "%5ENSEI",
-            "BANKNIFTY": "%5ENSEBANK",
-            "FINNIFTY": "NIFTY_FIN_SERVICE.NS",
-            "SENSEX": "%5EBSESN"
-        }
+        tickers = {"NIFTY": "%5ENSEI", "BANKNIFTY": "%5ENSEBANK", "FINNIFTY": "NIFTY_FIN_SERVICE.NS", "SENSEX": "%5EBSESN"}
         ticker = tickers.get(symbol, "%5ENSEI")
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
         resp = requests.get(url, headers=headers, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             return float(data['chart']['result'][0]['meta']['regularMarketPrice'])
-    except:
-        pass
+    except: pass
     return 0
 
 def process_strike_levels():
