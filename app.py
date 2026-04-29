@@ -148,8 +148,21 @@ with app.app_context():
 # --- ROUTES ---
 @app.route('/')
 def index():
-    if 'user_id' in session: return redirect(url_for('user_dashboard', user_id=session['user_id']))
+    user = User.query.first()
+    if user: return redirect(url_for('user_dashboard', user_id=user.id))
     return render_template('index.html', config=get_admin_config())
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+@app.route('/toggle-algo/<int:user_id>')
+def toggle_algo(user_id):
+    user = User.query.get_or_404(user_id)
+    user.algo_status = 'ON' if user.algo_status == 'OFF' else 'OFF'
+    db.session.commit()
+    return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
