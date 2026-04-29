@@ -9,13 +9,13 @@ import json
 import base64
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy import text, func
 from cryptography.fernet import Fernet
 import shared_data
 import gvn_levels_engine
 
 app = Flask(__name__)
-app.secret_key = 'gvn_master_venkat_final_stable'
+app.secret_key = 'gvn_master_venkat_final_stable_v3'
 
 # Database Configuration
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_master_algo.db')
@@ -69,34 +69,35 @@ class UserBrokerConfig(db.Model):
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', base64.urlsafe_b64encode(b'gvn_secure_key_for_encryption_26'))
 cipher = Fernet(ENCRYPTION_KEY)
 
-# --- MIGRATIONS & SETUP ---
+# --- MASTER SETUP ---
 def run_setup():
     with app.app_context():
-        db.create_all()
-        conn = db.engine.connect()
-        
-        # 🌟 Ensure User 'Venkat' exists
-        v = User.query.filter_by(username='Venkat').first()
-        if not v:
-            v = User(username='Venkat', email='nelsonp143@gmail.com')
-            db.session.add(v)
-            db.session.commit()
-            print("✅ User 'Venkat' created.")
+        try:
+            db.create_all()
+            # Ensure User 'Venkat'
+            v = User.query.filter_by(username='Venkat').first()
+            if not v:
+                v = User(username='Venkat', email='nelsonp143@gmail.com')
+                db.session.add(v)
+                db.session.commit()
 
-        # 🌟 P&L Recovery
-        legacy_tables = ["algo_trades_v3", "user_dashboard_trades", "trades_old"]
-        for table in legacy_tables:
-            try:
-                # Check if data exists in legacy
-                res = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
-                if res and res[0] > 0:
-                    # Sync to Venkat's account
-                    conn.execute(text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status, timestamp) SELECT {v.id}, 'RECOVERY', pnl, 'Closed', datetime('now') FROM {table} WHERE pnl IS NOT NULL"))
-                    conn.execute(text(f"INSERT INTO daily_pnl (user_id, pnl, date) SELECT {v.id}, SUM(pnl), date('now') FROM {table} WHERE pnl IS NOT NULL GROUP BY date('now')"))
-                    conn.commit()
-                    print(f"✅ Data recovered from {table}")
-            except: pass
-        conn.close()
+            # P&L Recovery Logic (Safer Version)
+            legacy_tables = ["algo_trades_v3", "user_dashboard_trades"]
+            for table in legacy_tables:
+                try:
+                    # Check if table exists
+                    count_res = db.session.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+                    if count_res and count_res[0] > 0:
+                        # Fetch legacy data
+                        legacy_data = db.session.execute(text(f"SELECT pnl FROM {table} WHERE pnl IS NOT NULL")).fetchall()
+                        for row in legacy_data:
+                            new_trade = AlgoTrade(user_id=v.id, symbol='RECOVERY', pnl=row[0], status='Closed', timestamp=datetime.utcnow())
+                            db.session.add(new_trade)
+                        db.session.commit()
+                        print(f"✅ Recovered from {table}")
+                except: pass
+        except Exception as e:
+            print(f"⚠️ Setup Warning: {e}")
 
 run_setup()
 
@@ -105,14 +106,18 @@ run_setup()
 def index():
     v = User.query.filter_by(username='Venkat').first()
     if v: return redirect(url_for('user_dashboard', user_id=v.id))
-    return "User not found. Check database setup."
+    return "Setup in progress... Please refresh."
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
     user = User.query.get_or_404(user_id)
-    trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
-    pnl_1d = sum(t.pnl for t in trades if t.timestamp.date() == datetime.utcnow().date())
+    trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(50).all()
     
+    # Calculate 1D PnL
+    today = datetime.utcnow().date()
+    pnl_1d = sum(t.pnl for t in trades if t.timestamp.date() == today)
+    
+    # Calculate 30D PnL
     daily = DailyPnL.query.filter_by(user_id=user_id).order_by(DailyPnL.date.desc()).limit(30).all()
     pnl_30d = sum(d.pnl for d in daily)
     
