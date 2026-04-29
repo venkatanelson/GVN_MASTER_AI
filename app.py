@@ -2226,7 +2226,20 @@ def broker_status():
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
-    """Returns the latest Zero-to-Hero scanner data from Shared Memory."""
+    """Returns the latest Zero-to-Hero scanner data from Shared Memory or Disk."""
+    # 🌟 DATA RECOVERY: If memory is empty, try loading from disk (for Multi-Process Render)
+    if not shared_data.gvn_scanner_data.get("NIFTY") or shared_data.live_option_chain_summary.get("NIFTY", {}).get("spot", 0) == 0:
+        try:
+            import json
+            if os.path.exists("live_market_data.json"):
+                with open("live_market_data.json", "r") as f:
+                    disk_data = json.load(f)
+                    if disk_data.get("summary"): shared_data.live_option_chain_summary.update(disk_data["summary"])
+                    if disk_data.get("scanner"): shared_data.gvn_scanner_data.update(disk_data["scanner"])
+                    if disk_data.get("strikes"): shared_data.monitored_strikes.update(disk_data["strikes"])
+                    if disk_data.get("pulse"): shared_data.market_pulse.update(disk_data["pulse"])
+        except: pass
+
     n_price = shared_data.live_option_chain_summary.get('NIFTY', {}).get('spot', 0)
     tv_tech = get_tradingview_technicals("NIFTY")
     
@@ -2247,7 +2260,9 @@ def gvn_scanner():
         "tradingview_tech": tv_tech,
         "deep_scan_signals": shared_data.auto_trade_signals[:10],
         "demo_signals": DEMO_SIGNALS,
-        "user_strikes": user_strikes
+        "user_strikes": user_strikes,
+        "monitored_strikes": shared_data.monitored_strikes,
+        "last_updated": shared_data.live_option_chain_summary.get("last_updated")
     })
 
 @app.route('/unlock-premium/<int:user_id>')
