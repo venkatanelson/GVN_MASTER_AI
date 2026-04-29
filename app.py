@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import sqlite3
 import shared_data
-import shoonya_live_feed 
 import broker_api
 import pyotp 
 from dhanhq import dhanhq
@@ -193,6 +192,7 @@ def logout():
 
 if __name__ == '__main__':
     with app.app_context():
+        import shoonya_live_feed
         db.create_all()
         if not User.query.get(1):
             db.session.add(User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, is_approved=True))
