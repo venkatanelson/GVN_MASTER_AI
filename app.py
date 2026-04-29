@@ -235,7 +235,8 @@ def init_gvn():
                     ('user', 'trade_lots', 'INTEGER DEFAULT 1'),
                     ('user', 'user_type', "VARCHAR(20) DEFAULT 'PAPER'"),
                     ('user_broker_config', 'call_strike', 'VARCHAR(20)'),
-                    ('user_broker_config', 'put_strike', 'VARCHAR(20)')
+                    ('user_broker_config', 'put_strike', 'VARCHAR(20)'),
+                    ('user_broker_config', 'support_number_1', 'VARCHAR(20)')
                 ]
                 for table, col, col_type in columns:
                     try:
