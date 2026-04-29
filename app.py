@@ -207,7 +207,9 @@ def save_api_settings():
     config.call_strike = data.get('call_strike')
     config.put_strike = data.get('put_strike')
     db.session.commit()
-    flash("Settings Saved!")
+    # Re-initialize orchestrator with new settings
+    init_gvn()
+    flash("Settings Saved and Orchestrator Re-initialized!")
     return redirect(url_for('user_dashboard', user_id=uid))
 
 @app.route('/logout')
@@ -215,14 +217,38 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
+# --- ENGINES ---
+from gvn_master_orchestrator import get_orchestrator
+
 # --- INITIALIZATION ---
 def init_gvn():
     with app.app_context():
         db.create_all()
-        if not db.session.get(User, 1):
+        # Check if admin user exists by phone number to avoid duplicate key error
+        existing_user = User.query.filter_by(phone="9966123078").first()
+        if not existing_user:
             v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
-            db.session.add(v); db.session.commit()
+            db.session.add(v)
+            db.session.commit()
         
+        # Initialize Orchestrator with admin config if available
+        config = UserBrokerConfig.query.filter_by(user_id=1).first()
+        if config:
+            broker_cfg = {
+                "broker_name": config.broker_name,
+                "client_id": config.client_id,
+                "api_key": config.api_key,
+                "access_token": config.api_secret, # Using secret as token placeholder
+                "webhook_url": "https://gvn-algo-terminal.onrender.com/webhook", # Placeholder
+                "quantity": 50
+            }
+            orchestrator = get_orchestrator(broker_cfg)
+            try:
+                orchestrator.initialize_system()
+                print("🚀 GVN Master Orchestrator Started Successfully!")
+            except Exception as e:
+                print(f"⚠️ Orchestrator Init Failed: {e}")
+
         try:
             import shoonya_live_feed
             shoonya_live_feed.start_live_feed_worker()
