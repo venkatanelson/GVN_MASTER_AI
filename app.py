@@ -15,7 +15,7 @@ import shared_data
 import gvn_levels_engine
 
 app = Flask(__name__)
-app.secret_key = 'gvn_master_venkat_final_stable_v5'
+app.secret_key = 'gvn_master_venkat_final_stable_v6'
 
 # Database Configuration
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_master_algo.db')
@@ -64,8 +64,9 @@ class UserBrokerConfig(db.Model):
     broker_name = db.Column(db.String(50))
     client_id = db.Column(db.String(100))
     encrypted_password = db.Column(db.LargeBinary)
-    encrypted_token = db.Column(db.LargeBinary)
     api_key = db.Column(db.String(200))
+    api_secret = db.Column(db.String(200))
+    totp_key = db.Column(db.String(100))
 
 # Security
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', base64.urlsafe_b64encode(b'gvn_secure_key_for_encryption_26'))
@@ -81,8 +82,7 @@ def run_setup():
                 v = User(username='Venkat', email='nelsonp143@gmail.com', is_admin=True)
                 db.session.add(v)
             else:
-                v.username = 'Venkat'
-                v.is_admin = True
+                v.username = 'Venkat'; v.is_admin = True
             db.session.commit()
             
             # P&L Recovery
@@ -97,8 +97,7 @@ def run_setup():
                             db.session.add(new_trade)
                         db.session.commit()
                 except: pass
-        except Exception as e:
-            print(f"⚠️ Setup Warning: {e}")
+        except Exception as e: print(f"⚠️ Setup Warning: {e}")
 
 run_setup()
 
@@ -128,8 +127,8 @@ def admin_dashboard():
     config = UserBrokerConfig.query.filter_by(user_id=v.id).first()
     return render_template('admin.html', user=v, config=config)
 
-@app.route('/save-broker-config', methods=['POST'])
-def save_broker_config():
+@app.route('/save_api_settings', methods=['POST']) # 🌟 MATCHED ROUTE NAME
+def save_api_settings():
     user_id = session.get('user_id')
     if not user_id: return jsonify({"status": "error", "message": "Not logged in"}), 401
     data = request.form
@@ -137,13 +136,17 @@ def save_broker_config():
     if not config:
         config = UserBrokerConfig(user_id=user_id)
         db.session.add(config)
-    config.broker_name = data.get('broker_name')
+    
+    config.broker_name = data.get('broker_name', 'Shoonya')
     config.client_id = data.get('client_id')
     if data.get('password'):
         config.encrypted_password = cipher.encrypt(data.get('password').encode())
-    if data.get('api_key'):
-        config.api_key = data.get('api_key')
+    config.api_key = data.get('api_key')
+    config.api_secret = data.get('api_secret')
+    config.totp_key = data.get('totp_key')
+    
     db.session.commit()
+    flash("Broker Settings Saved Successfully!", "success")
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/api/broker-status')
