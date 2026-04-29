@@ -14,7 +14,7 @@ import shared_data
 import gvn_levels_engine
 
 app = Flask(__name__)
-app.secret_key = 'gvn_master_secret_key_fixed'
+app.secret_key = 'gvn_master_master_stable_key'
 
 # Database Configuration
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_master_algo.db')
@@ -24,12 +24,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- MODELS ---
+# --- STABLE MODELS ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120))
+    username = db.Column(db.String(80), default="Venkata")
+    email = db.Column(db.String(120), default="nelsonp143@gmail.com")
     algo_status = db.Column(db.String(10), default='OFF')
+    full_auto_mode = db.Column(db.Boolean, default=False)
+    trade_lots = db.Column(db.Integer, default=1)
 
 class AlgoTrade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -37,7 +39,7 @@ class AlgoTrade(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     symbol = db.Column(db.String(50))
     pnl = db.Column(db.Float, default=0.0)
-    status = db.Column(db.String(20), default='Closed')
+    status = db.Column(db.String(20), default='Closed') # 'Open' or 'Closed'
 
 class DailyPnL(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -63,39 +65,50 @@ class UserBrokerConfig(db.Model):
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', base64.urlsafe_b64encode(b'gvn_secure_key_for_encryption_26'))
 cipher = Fernet(ENCRYPTION_KEY)
 
-# --- INITIALIZATION & RECOVERY ---
+# --- MASTER INITIALIZATION ---
 with app.app_context():
     db.create_all()
-    # 🌟 Ensure User exists
-    if not User.query.filter_by(username='Venkata').first():
-        v_user = User(username='Venkata', email='nelsonp143@gmail.com')
-        db.session.add(v_user)
+    # 🌟 RESTORE OR CREATE USER
+    main_user = User.query.filter_by(username='Venkata').first()
+    if not main_user:
+        main_user = User(username='Venkata', email='nelsonp143@gmail.com')
+        db.session.add(main_user)
         db.session.commit()
     
-    # 🌟 P&L Recovery Logic (Restoring 92k)
-    active_user = User.query.filter_by(username='Venkata').first()
-    if active_user:
-        try:
-            conn = db.engine.connect()
-            legacy_tables = ["algo_trades_v3", "user_dashboard_trades", "daily_pnl_old"]
-            for table in legacy_tables:
-                try:
-                    # Check if already restored
-                    count = AlgoTrade.query.filter_by(user_id=active_user.id, symbol='Legacy Recovery').count()
-                    if count == 0:
-                        conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status, timestamp) SELECT {active_user.id}, 'Legacy Recovery', pnl, 'Closed', datetime('now') FROM {table} WHERE pnl IS NOT NULL"))
-                        conn.execute(db.text(f"INSERT INTO daily_pnl (user_id, pnl, date) SELECT {active_user.id}, SUM(pnl), date('now') FROM {table} WHERE pnl IS NOT NULL GROUP BY date('now')"))
+    # 🌟 P&L RECOVERY (One-time Sync)
+    try:
+        conn = db.engine.connect()
+        legacy_tables = ["algo_trades_v3", "user_dashboard_trades"]
+        for table in legacy_tables:
+            try:
+                # Check if table exists and has data
+                res = conn.execute(db.text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+                if res and res[0] > 0:
+                    # Move to algo_trade if not already moved
+                    existing = AlgoTrade.query.filter_by(user_id=main_user.id, symbol='RECOVERED').first()
+                    if not existing:
+                        conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status, timestamp) SELECT {main_user.id}, 'RECOVERED', pnl, 'Closed', datetime('now') FROM {table} WHERE pnl IS NOT NULL"))
+                        conn.execute(db.text(f"INSERT INTO daily_pnl (user_id, pnl, date) SELECT {main_user.id}, SUM(pnl), date('now') FROM {table} WHERE pnl IS NOT NULL GROUP BY date('now')"))
                         conn.commit()
-                        print(f"✅ [RECOVERY] Success from {table}")
-                except: pass
-            conn.close()
+                        print(f"✅ [STABLE] Recovered data from {table}")
+            except: pass
+        conn.close()
+    except: pass
+
+# --- TELEGRAM ENGINE ---
+def send_telegram_alert(message):
+    token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = os.environ.get('CHAT_ID')
+    if token and chat_id:
+        try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            requests.post(url, json={"chat_id": chat_id, "text": message})
         except: pass
 
 # --- ROUTES ---
 @app.route('/')
 def index():
     user = User.query.filter_by(username='Venkata').first()
-    if not user: user = User.query.first()
     if user: return redirect(url_for('user_dashboard', user_id=user.id))
     return render_template('index.html')
 
@@ -105,7 +118,7 @@ def user_dashboard(user_id):
     user = User.query.get_or_404(user_id)
     
     # Fetch Data
-    trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(10).all()
+    trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
     pnl_1d = sum(t.pnl for t in trades if t.timestamp.date() == datetime.utcnow().date())
     
     daily_history = DailyPnL.query.filter_by(user_id=user_id).order_by(DailyPnL.date.desc()).limit(30).all()
@@ -120,7 +133,7 @@ def user_dashboard(user_id):
 @app.route('/api/broker-status')
 def broker_status():
     md = MarketData.query.filter_by(symbol='NIFTY').first()
-    spot = md.price if md else 0
+    spot = md.price if md else 0.0
     return jsonify({
         "connected": True if spot > 0 else False,
         "broker_name": "Shoonya",
