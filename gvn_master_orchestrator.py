@@ -46,13 +46,13 @@ class GVNMasterOrchestrator:
         }
         """
         
-        self.broker_config = broker_config
-        self.telegram_config = telegram_config or {}
+        self.broker_config = broker_config if broker_config is not None else {}
+        self.telegram_config = telegram_config if telegram_config is not None else {}
         
         # Initialize all engines
         logger.info("🚀 Initializing GVN Master Orchestrator...")
         
-        self.greeks_monitor = AlphaGridMonitor(broker_config)
+        self.greeks_monitor = AlphaGridMonitor(self.broker_config)
         self.strike_selector = StrikeSelector()
         self.sentiment_filter = UnifiedSentimentFilter()
         self.telegram_manager = TelegramAlertManager(
@@ -61,8 +61,8 @@ class GVNMasterOrchestrator:
         )
         self.paper_trading = PaperTradingManager()
         self.webhook_executor = WebhookExecutor(
-            webhook_url=broker_config.get("webhook_url"),
-            broker=broker_config.get("broker_name", "Dhan")
+            webhook_url=self.broker_config.get("webhook_url") if isinstance(self.broker_config, dict) else None,
+            broker=self.broker_config.get("broker_name", "Dhan") if isinstance(self.broker_config, dict) else "Dhan"
         )
         
         # System state
@@ -316,8 +316,10 @@ def get_orchestrator(broker_config=None, telegram_config=None):
     """Get or create global orchestrator instance"""
     global _orchestrator
     
-    if _orchestrator is None and broker_config:
+    if _orchestrator is None:
         _orchestrator = GVNMasterOrchestrator(broker_config, telegram_config)
+    elif broker_config:
+        _orchestrator.broker_config.update(broker_config)
     
     return _orchestrator
 
