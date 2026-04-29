@@ -33,7 +33,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# --- FULL MODELS ---
+# --- MODELS ---
 class AdminConfig(db.Model):
     __tablename__ = 'admin_system_config'
     id = db.Column(db.Integer, primary_key=True)
@@ -71,6 +71,7 @@ class DailyPnL(db.Model):
     pnl = db.Column(db.Float, default=0.0)
 
 class AlgoTrade(db.Model):
+    __tablename__ = 'algo_trade'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -110,6 +111,38 @@ def get_admin_config():
         db.session.commit()
     return config
 
+# --- MIGRATIONS ---
+def run_migrations():
+    with app.app_context():
+        try:
+            conn = db.engine.connect()
+            # 🌟 Ensure user table has all columns
+            user_cols = [
+                ("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"),
+                ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"),
+                ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BLOB"),
+                ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT 0"),
+                ("is_blocked", "BOOLEAN DEFAULT 0"), ("is_admin", "BOOLEAN DEFAULT 0"),
+                ("is_locked", "BOOLEAN DEFAULT 1"), ("signals_unlocked_until", "DATETIME"),
+                ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT 0")
+            ]
+            for col, ctype in user_cols:
+                try: conn.execute(db.text(f"ALTER TABLE user ADD COLUMN {col} {ctype}")); conn.commit()
+                except: pass
+            
+            # 🌟 Ensure algo_trade table has all columns
+            trade_cols = [
+                ("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")
+            ]
+            for col, ctype in trade_cols:
+                try: conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}")); conn.commit()
+                except: pass
+                
+            conn.close()
+            print("✅ [DATABASE] Migrations Completed Successfully.")
+        except Exception as e:
+            print(f"⚠️ [MIGRATION WARNING] {e}")
+
 # --- ROUTES ---
 @app.route('/')
 def index():
@@ -123,14 +156,11 @@ def user_dashboard(user_id):
     session['user_id'] = user_id
     user = User.query.get_or_404(user_id)
     now = datetime.utcnow() + timedelta(hours=5, minutes=30)
-    
     todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
     pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
-    
     all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
     daily_history = [{'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)} for dp in all_daily]
     pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
-    
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     decrypted_keys = {"tv_secret": "", "access_token": "", "client_secret": "", "totp_key": "", "broker_password": ""}
     if broker_config:
@@ -141,7 +171,6 @@ def user_dashboard(user_id):
             if broker_config.encrypted_totp_key: decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
             if broker_config.encrypted_password: decrypted_keys["broker_password"] = cipher.decrypt(broker_config.encrypted_password).decode()
         except: pass
-    
     return render_template('user.html', user=user, broker_config=broker_config, decrypted_keys=decrypted_keys,
                            remaining_days=max(0, (user.expiry_date - now).days if user.expiry_date else 0),
                            pnl_1d=pnl_1d, pnl_total_30d=pnl_total_30d, daily_history=daily_history,
@@ -161,19 +190,6 @@ def gvn_scanner():
             user_strikes["PUT"] = conf.put_strike or "N/A"
     return jsonify({"status": "success", "data": shared_data.gvn_scanner_data, "summary": shared_data.live_option_chain_summary,
                     "nifty_spot": n_price, "user_strikes": user_strikes, "selected_index": target_idx})
-
-@app.route('/api/ai-chat', methods=['POST'])
-def ai_chat():
-    try:
-        data = request.json
-        api_key = os.environ.get('GROQ_API_KEY', '').strip()
-        if not api_key: return jsonify({"reply": "⚠️ AI Offline"})
-        idx = data.get('index', 'NIFTY')
-        spot = shared_data.live_option_chain_summary.get(idx, {}).get('spot', 0)
-        payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": "You are GVN Master AI. Reply in TELUGU."}, {"role": "user", "content": f"Spot: {spot}. Msg: {data.get('message')}"}]}
-        resp = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=10)
-        return jsonify({"reply": resp.json()['choices'][0]['message']['content'] if resp.status_code == 200 else "AI Error"})
-    except: return jsonify({"reply": "AI Error"})
 
 @app.route('/api/broker-status')
 def broker_status():
@@ -211,7 +227,9 @@ def gvn_signal_engine():
             time.sleep(5)
 
 if __name__ == '__main__':
-    with app.app_context(): db.create_all()
+    with app.app_context(): 
+        db.create_all()
+        run_migrations()
     if not getattr(app, '_workers_started', False):
         threading.Thread(target=gvn_signal_engine, daemon=True).start()
         app._workers_started = True
