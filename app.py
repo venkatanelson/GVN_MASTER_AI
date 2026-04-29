@@ -122,13 +122,15 @@ with app.app_context():
         conn = db.engine.connect()
         # 🛡️ P&L RECOVERY: Search for 92k data
         legacy_tables = ["user_dashboard_trades", "trades_old", "algo_trades_v3", "daily_pnl_old"]
-        for table in legacy_tables:
-            try:
-                # Merge logic: if table exists, copy to algo_trade
-                conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status) SELECT 1, 'Legacy Trade', pnl, 'Closed' FROM {table} WHERE pnl IS NOT NULL"))
-                conn.commit()
-                print(f"✅ [RECOVERY] Restored data from {table}")
-            except: pass
+        active_user = User.query.first()
+        if active_user:
+            uid = active_user.id
+            for table in legacy_tables:
+                try:
+                    conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status, timestamp) SELECT {uid}, 'Legacy Recovery', pnl, 'Closed', datetime('now') FROM {table} WHERE pnl IS NOT NULL"))
+                    conn.commit()
+                    print(f"✅ [RECOVERY] Restored data from {table} for User {uid}")
+                except: pass
             
         # Standard columns
         user_cols = [("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"), ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"), ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BYTEA" if "postgres" in db_url else "BLOB"), ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT FALSE"), ("is_blocked", "BOOLEAN DEFAULT FALSE"), ("is_admin", "BOOLEAN DEFAULT FALSE"), ("is_locked", "BOOLEAN DEFAULT TRUE"), ("signals_unlocked_until", "TIMESTAMP"), ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT FALSE")]
