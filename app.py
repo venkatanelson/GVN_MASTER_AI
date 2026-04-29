@@ -19,7 +19,7 @@ import dhan_live_feed
 import broker_api
 
 # 🚀 GVN MASTER BUILD VERSION
-BUILD_VERSION = "2.2.5 (Recovery & Master Sync)"
+BUILD_VERSION = "2.2.6 (DB-Sync & Recovery)"
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
@@ -99,6 +99,13 @@ class UserBrokerConfig(db.Model):
     call_strike = db.Column(db.String(50))
     put_strike = db.Column(db.String(50))
 
+class MarketData(db.Model):
+    __tablename__ = 'market_data'
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(50), unique=True)
+    price = db.Column(db.Float, default=0.0)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+
 # Security
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', base64.urlsafe_b64encode(b'gvn_secure_key_for_encryption_26'))
 cipher = Fernet(ENCRYPTION_KEY)
@@ -113,27 +120,22 @@ with app.app_context():
     db.create_all()
     try:
         conn = db.engine.connect()
-        # 🛡️ RECOVERY: Merge old data if tables exist
-        tables_to_sync = [("algo_trades_v3", "algo_trade"), ("daily_pnl_old", "daily_pnl")]
-        for old, new in tables_to_sync:
+        # 🛡️ P&L RECOVERY: Search for 92k data
+        legacy_tables = ["user_dashboard_trades", "trades_old", "algo_trades_v3", "daily_pnl_old"]
+        for table in legacy_tables:
             try:
-                conn.execute(db.text(f"INSERT INTO {new} SELECT * FROM {old} WHERE id NOT IN (SELECT id FROM {new})"))
+                # Merge logic: if table exists, copy to algo_trade
+                conn.execute(db.text(f"INSERT INTO algo_trade (user_id, symbol, pnl, status) SELECT 1, 'Legacy Trade', pnl, 'Closed' FROM {table} WHERE pnl IS NOT NULL"))
                 conn.commit()
-                print(f"✅ [RECOVERY] Synced data from {old} to {new}")
+                print(f"✅ [RECOVERY] Restored data from {table}")
             except: pass
             
-        # Add columns for robustness
+        # Standard columns
         user_cols = [("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"), ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"), ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BYTEA" if "postgres" in db_url else "BLOB"), ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT FALSE"), ("is_blocked", "BOOLEAN DEFAULT FALSE"), ("is_admin", "BOOLEAN DEFAULT FALSE"), ("is_locked", "BOOLEAN DEFAULT TRUE"), ("signals_unlocked_until", "TIMESTAMP"), ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT FALSE")]
         for col, ctype in user_cols:
             try: conn.execute(db.text(f"ALTER TABLE \"user\" ADD COLUMN {col} {ctype}")); conn.commit()
             except: pass
-            
-        trade_cols = [("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")]
-        for col, ctype in trade_cols:
-            try: conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}")); conn.commit()
-            except: pass
         conn.close()
-        print("✅ [DATABASE] Master Sync Completed.")
     except Exception as e: print(f"⚠️ [MIGRATION WARNING] {e}")
 
 # --- ROUTES ---
@@ -151,7 +153,7 @@ def user_dashboard(user_id):
     pnl_1d = sum((t.pnl or 0.0) for t in todays_trades if t.status == 'Closed')
     all_daily = DailyPnL.query.order_by(DailyPnL.date.desc()).limit(30).all()
     daily_history = [{'date': dp.date.strftime("%d %b"), 'pnl': (dp.pnl or 0.0)} for dp in all_daily]
-    pnl_total_30d = sum(dp['pnl'] for dp in daily_history)
+    pnl_total_30d = sum(dp['pnl'] for dp in daily_history) + pnl_1d
     broker_config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     decrypted_keys = {"tv_secret": "", "access_token": "", "client_secret": "", "totp_key": "", "broker_password": ""}
     if broker_config:
@@ -164,46 +166,24 @@ def user_dashboard(user_id):
         except: pass
     return render_template('user.html', user=user, broker_config=broker_config, decrypted_keys=decrypted_keys, remaining_days=max(0, (user.expiry_date - now).days if user.expiry_date else 0), pnl_1d=pnl_1d, pnl_total_30d=pnl_total_30d, daily_history=daily_history, discount_percent=user.personal_discount + 10, parsed_trades=todays_trades, config=get_admin_config(), build_version=BUILD_VERSION, cache_id=int(time.time()))
 
-@app.route('/toggle-algo/<int:user_id>')
-def toggle_algo(user_id):
-    user = User.query.get_or_404(user_id); user.algo_status = 'ON' if user.algo_status == 'OFF' else 'OFF'
-    db.session.commit(); flash(f"Algo Master Switch: {user.algo_status}")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/toggle-auto-mode/<int:user_id>')
-def toggle_auto_mode(user_id):
-    user = User.query.get_or_404(user_id); user.full_auto_mode = not user.full_auto_mode
-    db.session.commit(); flash(f"GVN Pilot: {'ACTIVE' if user.full_auto_mode else 'DISABLED'}")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
-@app.route('/save_api_settings', methods=['POST'])
-def save_api_settings():
-    user_id = request.form.get('user_id')
-    conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-    if not conf: conf = UserBrokerConfig(user_id=user_id); db.session.add(conf)
-    conf.broker_name = request.form.get('broker_name'); conf.client_id = request.form.get('client_id'); conf.webhook_url = request.form.get('webhook_url')
-    conf.call_strike = request.form.get('call_strike'); conf.put_strike = request.form.get('put_strike')
-    sk = request.form.get('secret_key')
-    if sk and sk != '********': conf.encrypted_secret_key = cipher.encrypt(sk.encode())
-    at = request.form.get('access_token')
-    if at and at != '********': conf.encrypted_access_token = cipher.encrypt(at.encode())
-    db.session.commit(); flash("API Settings Saved!")
-    return redirect(url_for('user_dashboard', user_id=user_id))
-
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
     target_idx = getattr(shared_data, 'selected_index', 'NIFTY')
-    n_price = shared_data.live_option_chain_summary.get(target_idx, {}).get('spot', 0)
+    # 🌟 SYNC FROM DB (For Render Multi-Worker)
+    md = MarketData.query.filter_by(symbol=target_idx).first()
+    n_price = md.price if md else 0
     user_id = session.get('user_id'); user_strikes = {"CALL": "N/A", "PUT": "N/A"}
     if user_id:
         conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
         if conf: user_strikes["CALL"] = conf.call_strike or "N/A"; user_strikes["PUT"] = conf.put_strike or "N/A"
-    return jsonify({"status": "success", "data": shared_data.gvn_scanner_data, "summary": shared_data.live_option_chain_summary, "nifty_spot": n_price, "user_strikes": user_strikes, "selected_index": target_idx})
+    return jsonify({"status": "success", "data": shared_data.gvn_scanner_data, "summary": {target_idx: {"spot": n_price}}, "nifty_spot": n_price, "user_strikes": user_strikes, "selected_index": target_idx})
 
 @app.route('/api/broker-status')
 def broker_status():
     status = shared_data.broker_connection_status.copy()
-    status["nifty_spot"] = shared_data.live_option_chain_summary.get(getattr(shared_data, 'selected_index', 'NIFTY'), {}).get("spot", 0)
+    md = MarketData.query.filter_by(symbol=getattr(shared_data, 'selected_index', 'NIFTY')).first()
+    status["nifty_spot"] = md.price if md else 0
+    status["connected"] = True if status["nifty_spot"] > 0 else False
     return jsonify(status)
 
 @app.route('/api/ai-chat', methods=['POST'])
@@ -211,8 +191,10 @@ def ai_chat():
     try:
         data = request.json; api_key = os.environ.get('GROQ_API_KEY', '').strip()
         if not api_key: return jsonify({"reply": "⚠️ AI Offline"})
-        idx = data.get('index', 'NIFTY'); spot = shared_data.live_option_chain_summary.get(idx, {}).get('spot', 0)
-        payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": "You are GVN Master AI. Analyze and Reply in TELUGU language."}, {"role": "user", "content": f"Spot: {spot}. Index: {idx}. Msg: {data.get('message')}"}]}
+        idx = data.get('index', 'NIFTY')
+        md = MarketData.query.filter_by(symbol=idx).first()
+        spot = md.price if md else 0
+        payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": "You are GVN AI Engine. Analyze and Reply in TELUGU language ONLY."}, {"role": "user", "content": f"Spot: {spot}. Index: {idx}. Msg: {data.get('message')}"}]}
         resp = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=15)
         return jsonify({"reply": resp.json()['choices'][0]['message']['content'] if resp.status_code == 200 else "AI Error"})
     except Exception as e: return jsonify({"reply": f"AI Error: {e}"})
@@ -224,7 +206,6 @@ def gvn_signal_engine():
         try:
             idx = getattr(shared_data, 'selected_index', 'NIFTY')
             scanner_data = shared_data.gvn_scanner_data.get(idx, [])
-            spot = shared_data.live_option_chain_summary.get(idx, {}).get('spot', 0)
             for item in scanner_data:
                 if item.get('levels') and item['ltp'] > item['levels']['i5']:
                     if time.time() - shared_data.last_signal_time.get(item['strike'], 0) > 900:
@@ -234,24 +215,6 @@ def gvn_signal_engine():
                         shared_data.last_signal_time[item['strike']] = time.time()
             time.sleep(2)
         except Exception: time.sleep(5)
-
-@app.route('/debug/db-check')
-def db_check():
-    try:
-        conn = db.engine.connect()
-        cursor = conn.execute(db.text("SELECT name FROM sqlite_master WHERE type='table';"))
-        tables = [row[0] for row in cursor]
-        results = {}
-        for table in tables:
-            try:
-                count_res = conn.execute(db.text(f"SELECT COUNT(*) FROM {table}"))
-                count = count_res.fetchone()[0]
-                results[table] = count
-            except: results[table] = "Error"
-        conn.close()
-        return jsonify(results)
-    except Exception as e:
-        return str(e)
 
 if __name__ == '__main__':
     if not getattr(app, '_workers_started', False):
