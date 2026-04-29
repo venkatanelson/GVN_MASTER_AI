@@ -106,9 +106,7 @@ cipher = Fernet(ENCRYPTION_KEY)
 def get_admin_config():
     config = AdminConfig.query.first()
     if not config:
-        config = AdminConfig()
-        db.session.add(config)
-        db.session.commit()
+        config = AdminConfig(); db.session.add(config); db.session.commit()
     return config
 
 # --- MIGRATIONS ---
@@ -116,44 +114,27 @@ def run_migrations():
     with app.app_context():
         try:
             conn = db.engine.connect()
-            # 🌟 Ensure user table has all columns
-            user_cols = [
-                ("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"),
-                ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"),
-                ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BLOB"),
-                ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT 0"),
-                ("is_blocked", "BOOLEAN DEFAULT 0"), ("is_admin", "BOOLEAN DEFAULT 0"),
-                ("is_locked", "BOOLEAN DEFAULT 1"), ("signals_unlocked_until", "DATETIME"),
-                ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT 0")
-            ]
+            user_cols = [("email", "VARCHAR(100)"), ("demo_capital", "INTEGER DEFAULT 0"), ("selected_plan", "VARCHAR(50)"), ("is_approved", "BOOLEAN DEFAULT 0"), ("dhan_webhook_url", "VARCHAR(300)"), ("encrypted_secret_key", "BLOB"), ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"), ("admin_kill_switch", "BOOLEAN DEFAULT 0"), ("is_blocked", "BOOLEAN DEFAULT 0"), ("is_admin", "BOOLEAN DEFAULT 0"), ("is_locked", "BOOLEAN DEFAULT 1"), ("signals_unlocked_until", "DATETIME"), ("trade_lots", "INTEGER DEFAULT 1"), ("full_auto_mode", "BOOLEAN DEFAULT 0")]
             for col, ctype in user_cols:
                 try: conn.execute(db.text(f"ALTER TABLE user ADD COLUMN {col} {ctype}")); conn.commit()
                 except: pass
-            
-            # 🌟 Ensure algo_trade table has all columns
-            trade_cols = [
-                ("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")
-            ]
+            trade_cols = [("exit_price", "FLOAT"), ("target_price", "FLOAT"), ("stop_loss", "FLOAT")]
             for col, ctype in trade_cols:
                 try: conn.execute(db.text(f"ALTER TABLE algo_trade ADD COLUMN {col} {ctype}")); conn.commit()
                 except: pass
-                
             conn.close()
-            print("✅ [DATABASE] Migrations Completed Successfully.")
-        except Exception as e:
-            print(f"⚠️ [MIGRATION WARNING] {e}")
+            print("✅ [DATABASE] Migrations Completed.")
+        except Exception as e: print(f"⚠️ [MIGRATION WARNING] {e}")
 
-# --- ROUTES ---
+# --- CORE ROUTES ---
 @app.route('/')
 def index():
-    if 'user_id' in session:
-        return redirect(url_for('user_dashboard', user_id=session['user_id']))
+    if 'user_id' in session: return redirect(url_for('user_dashboard', user_id=session['user_id']))
     return render_template('index.html', config=get_admin_config())
 
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
-    session.permanent = True
-    session['user_id'] = user_id
+    session.permanent = True; session['user_id'] = user_id
     user = User.query.get_or_404(user_id)
     now = datetime.utcnow() + timedelta(hours=5, minutes=30)
     todays_trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).all()
@@ -171,11 +152,47 @@ def user_dashboard(user_id):
             if broker_config.encrypted_totp_key: decrypted_keys["totp_key"] = cipher.decrypt(broker_config.encrypted_totp_key).decode()
             if broker_config.encrypted_password: decrypted_keys["broker_password"] = cipher.decrypt(broker_config.encrypted_password).decode()
         except: pass
-    return render_template('user.html', user=user, broker_config=broker_config, decrypted_keys=decrypted_keys,
-                           remaining_days=max(0, (user.expiry_date - now).days if user.expiry_date else 0),
-                           pnl_1d=pnl_1d, pnl_total_30d=pnl_total_30d, daily_history=daily_history,
-                           discount_percent=user.personal_discount + 10, parsed_trades=todays_trades,
-                           config=get_admin_config(), build_version=BUILD_VERSION)
+    return render_template('user.html', user=user, broker_config=broker_config, decrypted_keys=decrypted_keys, remaining_days=max(0, (user.expiry_date - now).days if user.expiry_date else 0), pnl_1d=pnl_1d, pnl_total_30d=pnl_total_30d, daily_history=daily_history, discount_percent=user.personal_discount + 10, parsed_trades=todays_trades, config=get_admin_config(), build_version=BUILD_VERSION, cache_id=int(time.time()))
+
+@app.route('/toggle-algo/<int:user_id>')
+def toggle_algo(user_id):
+    user = User.query.get_or_404(user_id)
+    user.algo_status = 'ON' if user.algo_status == 'OFF' else 'OFF'
+    db.session.commit(); flash(f"Algo Master Switch: {user.algo_status}")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/toggle-auto-mode/<int:user_id>')
+def toggle_auto_mode(user_id):
+    user = User.query.get_or_404(user_id)
+    user.full_auto_mode = not user.full_auto_mode
+    db.session.commit(); flash(f"GVN Full-Auto Pilot: {'ACTIVE' if user.full_auto_mode else 'DISABLED'}")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/update-lots', methods=['POST'])
+def update_lots():
+    user_id = request.form.get('user_id')
+    user = User.query.get_or_404(user_id)
+    user.trade_lots = int(request.form.get('trade_lots', 1))
+    db.session.commit(); flash(f"Trade Quantity Updated to {user.trade_lots}x")
+    return redirect(url_for('user_dashboard', user_id=user_id))
+
+@app.route('/save_api_settings', methods=['POST'])
+def save_api_settings():
+    user_id = request.form.get('user_id')
+    conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
+    if not conf: conf = UserBrokerConfig(user_id=user_id); db.session.add(conf)
+    conf.broker_name = request.form.get('broker_name')
+    conf.client_id = request.form.get('client_id')
+    conf.webhook_url = request.form.get('webhook_url')
+    conf.call_strike = request.form.get('call_strike')
+    conf.put_strike = request.form.get('put_strike')
+    # Encrypt secrets
+    sk = request.form.get('secret_key')
+    if sk and sk != '********': conf.encrypted_secret_key = cipher.encrypt(sk.encode())
+    at = request.form.get('access_token')
+    if at and at != '********': conf.encrypted_access_token = cipher.encrypt(at.encode())
+    db.session.commit(); flash("API & Strike Settings Saved!")
+    return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/api/gvn-scanner')
 def gvn_scanner():
@@ -185,25 +202,27 @@ def gvn_scanner():
     user_strikes = {"CALL": "N/A", "PUT": "N/A"}
     if user_id:
         conf = UserBrokerConfig.query.filter_by(user_id=user_id).first()
-        if conf:
-            user_strikes["CALL"] = conf.call_strike or "N/A"
-            user_strikes["PUT"] = conf.put_strike or "N/A"
-    return jsonify({"status": "success", "data": shared_data.gvn_scanner_data, "summary": shared_data.live_option_chain_summary,
-                    "nifty_spot": n_price, "user_strikes": user_strikes, "selected_index": target_idx})
+        if conf: user_strikes["CALL"] = conf.call_strike or "N/A"; user_strikes["PUT"] = conf.put_strike or "N/A"
+    return jsonify({"status": "success", "data": shared_data.gvn_scanner_data, "summary": shared_data.live_option_chain_summary, "nifty_spot": n_price, "user_strikes": user_strikes, "selected_index": target_idx})
 
 @app.route('/api/broker-status')
 def broker_status():
     status = shared_data.broker_connection_status.copy()
-    status["nifty_spot"] = shared_data.live_option_chain_summary.get("NIFTY", {}).get("spot", 0)
+    status["nifty_spot"] = shared_data.live_option_chain_summary.get(getattr(shared_data, 'selected_index', 'NIFTY'), {}).get("spot", 0)
     return jsonify(status)
 
-# --- LOGIC ---
-def send_telegram_msg(message):
-    token, cid = os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
-    if token and cid:
-        try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": cid, "text": message, "parse_mode": "HTML"}, timeout=5)
-        except: pass
+@app.route('/api/ai-chat', methods=['POST'])
+def ai_chat():
+    try:
+        data = request.json; api_key = os.environ.get('GROQ_API_KEY', '').strip()
+        if not api_key: return jsonify({"reply": "⚠️ AI Offline"})
+        idx = data.get('index', 'NIFTY'); spot = shared_data.live_option_chain_summary.get(idx, {}).get('spot', 0)
+        payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": "You are GVN Master AI. Analyze and Reply in TELUGU language."}, {"role": "user", "content": f"Spot: {spot}. Index: {idx}. Msg: {data.get('message')}"}]}
+        resp = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=15)
+        return jsonify({"reply": resp.json()['choices'][0]['message']['content'] if resp.status_code == 200 else "AI Error"})
+    except Exception as e: return jsonify({"reply": f"AI Error: {e}"})
 
+# --- BACKGROUND LOGIC ---
 def gvn_signal_engine():
     print("🚀 [GVN SIGNAL ENGINE] Monitoring Alpha Grid for Breakouts...")
     while True:
@@ -211,25 +230,21 @@ def gvn_signal_engine():
             idx = getattr(shared_data, 'selected_index', 'NIFTY')
             scanner_data = shared_data.gvn_scanner_data.get(idx, [])
             spot = shared_data.live_option_chain_summary.get(idx, {}).get('spot', 0)
-            if spot > 0:
-                print(f"🛰️ [GVN SCANNER] {idx} Spot: {spot} | Active Strikes: {len(scanner_data)}")
+            if spot > 0: print(f"🛰️ [GVN SCANNER] {idx} Spot: {spot} | Active Strikes: {len(scanner_data)}")
             for item in scanner_data:
                 if item.get('levels') and item['ltp'] > item['levels']['i5']:
                     if time.time() - shared_data.last_signal_time.get(item['strike'], 0) > 900:
                         msg = f"🚀 <b>GVN MASTER ALGO: NEW SIGNAL</b>\n━━━━━━━━━━━━━━━━━━━━\n📦 <b>STRIKE:</b> <code>{item['strike']}</code>\n⚡ <b>SIGNAL:</b> <b>BUY</b> @ ₹{item['ltp']}\n📊 <b>PULSE SCORE:</b> {item.get('score', 75)}%\n🛰️ <b>ZONE:</b> ALPHA ZONE\n━━━━━━━━━━━━━━━━━━━━\n🤖 <b>AI Validation:</b> CONFIRMED ✅"
                         if idx in item['strike']:
                             print(f"🔥 [SIGNAL DETECTED] {item['strike']} @ {item['ltp']}")
-                            send_telegram_msg(msg)
+                            token, cid = os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
+                            if token and cid: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": cid, "text": msg, "parse_mode": "HTML"}, timeout=5)
                             shared_data.last_signal_time[item['strike']] = time.time()
             time.sleep(2)
-        except Exception as e:
-            print(f"❌ [SIGNAL ENGINE ERROR] {e}")
-            time.sleep(5)
+        except Exception as e: print(f"❌ [SIGNAL ENGINE ERROR] {e}"); time.sleep(5)
 
 if __name__ == '__main__':
-    with app.app_context(): 
-        db.create_all()
-        run_migrations()
+    with app.app_context(): db.create_all(); run_migrations()
     if not getattr(app, '_workers_started', False):
         threading.Thread(target=gvn_signal_engine, daemon=True).start()
         app._workers_started = True
