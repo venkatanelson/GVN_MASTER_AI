@@ -87,9 +87,18 @@ def user_dashboard(user_id):
     trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(20).all()
     config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     
-    password = ""
+    # Decrypt keys for pre-filling the form
+    decrypted_keys = {
+        'client_id': config.client_id if config else '',
+        'access_token': config.api_key if config else '',
+        'client_secret': config.api_secret if config else '',
+        'totp_key': config.totp_key if config else '',
+        'broker_password': '',
+        'tv_secret': '' # Usually not stored in DB yet, or use a default
+    }
+    
     if config and config.encrypted_password:
-        try: password = cipher.decrypt(config.encrypted_password).decode()
+        try: decrypted_keys['broker_password'] = cipher.decrypt(config.encrypted_password).decode()
         except: pass
 
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
@@ -120,7 +129,8 @@ def user_dashboard(user_id):
                            parsed_trades=parsed_trades,
                            config=config, 
                            broker_config=config,
-                           password=password,
+                           decrypted_keys=decrypted_keys,
+                           password=decrypted_keys['broker_password'],
                            pnl_total_30d=pnl_total_30d,
                            daily_history=daily_history,
                            remaining_days=30, 
@@ -128,12 +138,16 @@ def user_dashboard(user_id):
 
 @app.route('/api/broker-status')
 def broker_status():
+    config = UserBrokerConfig.query.filter_by(user_id=session.get('user_id', 1)).first()
+    broker_name = config.broker_name if config else "Shoonya"
+    is_connected = shared_data.broker_connection_status.get(broker_name, False)
+    
     return jsonify({
-        "connected": True,
-        "broker_name": "Shoonya",
-        "data_source": "Live WebSocket",
+        "connected": is_connected,
+        "broker_name": broker_name,
+        "data_source": "Live WebSocket" if is_connected else "None",
         "nifty_spot": shared_data.market_data.get("NIFTY", 0),
-        "reason": "Stable Connection"
+        "reason": "Stable Connection" if is_connected else "Authentication Failed / Session Expired"
     })
 
 @app.route('/api/gvn-scanner')
@@ -197,19 +211,34 @@ def save_api_settings():
     config = UserBrokerConfig.query.filter_by(user_id=uid).first()
     if not config:
         config = UserBrokerConfig(user_id=uid); db.session.add(config)
+    
     config.broker_name = data.get('broker_name', 'Shoonya')
     config.client_id = data.get('client_id')
-    if data.get('password'):
-        config.encrypted_password = cipher.encrypt(data.get('password').encode())
-    config.api_key = data.get('api_key')
-    config.api_secret = data.get('api_secret')
+    
+    # Map form fields to DB columns
+    # Form: access_token -> DB: api_key
+    # Form: client_secret -> DB: api_secret
+    # Form: broker_password -> DB: encrypted_password
+    
+    config.api_key = data.get('access_token')
+    config.api_secret = data.get('client_secret')
     config.totp_key = data.get('totp_key')
+    
+    if data.get('broker_password'):
+        config.encrypted_password = cipher.encrypt(data.get('broker_password').encode())
+    
     config.call_strike = data.get('call_strike')
     config.put_strike = data.get('put_strike')
+    
     db.session.commit()
+    
     # Re-initialize orchestrator with new settings
-    init_gvn()
-    flash("Settings Saved and Orchestrator Re-initialized!")
+    try:
+        init_gvn()
+        flash("Settings Saved and Orchestrator Re-initialized!")
+    except Exception as e:
+        flash(f"Settings Saved but Orchestrator Failed: {e}")
+        
     return redirect(url_for('user_dashboard', user_id=uid))
 
 @app.route('/logout')
