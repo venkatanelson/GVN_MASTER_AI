@@ -814,38 +814,43 @@
                         <option value="FlatTrade" {% if broker_config and broker_config.broker_name == 'FlatTrade' %}selected{% endif %}>FlatTrade</option>
                     </select>
 
-                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 15px 5px; text-transform: uppercase;">Broker API Credentials</p>
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 15px 5px; text-transform: uppercase;">Broker API Credentials (Auto-Saved)</p>
                     
                     <p id="label_client_id" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT ID / APP ID</p>
-                    <input type="text" id="api_client_id" name="client_id" placeholder="Client ID / App ID" value="{{ broker_config.client_id if broker_config else '' }}">
+                    <input type="text" id="api_client_id" name="client_id" placeholder="Client ID / App ID" value="{{ decrypted_keys.client_id if decrypted_keys else '' }}">
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Example: FA440429_U</small>
                     
                     <p id="label_access_token" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">ACCESS TOKEN / API KEY</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ decrypted_keys.access_token if decrypted_keys and decrypted_keys.access_token else '' }}">
+                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ decrypted_keys.access_token if decrypted_keys else '' }}">
                         <span onclick="toggleVisibility('api_access_token')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+                    <small id="hint_access_token" style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: Your 'Algo ID' (e.g., gvnalgo)</small>
 
                     <p id="label_client_secret" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT SECRET / APP SECRET</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ decrypted_keys.client_secret if decrypted_keys and decrypted_keys.client_secret else '' }}">
+                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ decrypted_keys.client_secret if decrypted_keys else '' }}">
                         <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: Your 'Secret Code' (Long string)</small>
 
                     <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys and decrypted_keys.totp_key else '' }}">
+                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys else '' }}">
                         <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: 16-char code from QR Popup (e.g., II5QTH...)</small>
 
 
                     <p id="label_broker_password" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">BROKER PASSWORD</p>
                     <div style="position: relative;">
-                        <input type="password" id="api_broker_password" name="broker_password" placeholder="Broker Password" value="{{ decrypted_keys.broker_password if decrypted_keys and decrypted_keys.broker_password else '' }}">
+                        <input type="password" id="api_broker_password" name="broker_password" placeholder="Broker Password" value="{{ decrypted_keys.broker_password if decrypted_keys else '' }}">
                         <span onclick="toggleVisibility('api_broker_password')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
                     </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Your actual Shoonya login password</small>
 
                     
-                    <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px;">Connect Broker</button>
+                    <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #6366f1, #4f46e5); font-size: 14px; padding: 15px;">🚀 CONNECT & SYNC BROKER</button>
                 </form>
                 <script>
                     function toggleVisibility(id) {
