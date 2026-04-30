@@ -33,75 +33,77 @@ def get_totp(totp_key):
     except:
         return ""
 
+import httpx
+
+from NorenRestApiPy.NorenApi import NorenApi
+
 # ─── SHOONYA BYPASS ─────────────────────────────────────────
 def shoonya_http_login(cfg):
-    """Direct HTTP Login for Shoonya (Bypasses NorenRestApiPy)"""
+    """Dual-Strategy HTTP/2 Login for Shoonya (Force H2)"""
     client_id    = cfg.get("client_id")
     password     = cfg.get("password")
     api_secret   = cfg.get("client_secret")
-    vendor_code  = cfg.get("access_token") # access_token field = vendor code
+    vendor_code  = cfg.get("access_token") 
     totp_key     = cfg.get("totp_key")
 
     if not all([client_id, password, api_secret, vendor_code]):
         logger.warning("Missing Shoonya credentials")
         return None
 
+    endpoints = [
+        "https://api.shoonya.com/NorenWClientTP/QuickAuth",
+        "https://api.shoonya.com/NorenWSTP/QuickAuthenticate"
+    ]
+    
     totp = get_totp(totp_key)
     pwd_hash = sha256_hash(password)
-    pwd_hash = sha256_hash(password)
-    # Matching 'test_raw.py' logic: sha256(uid|api_key)
     app_key_hash = sha256_hash(f"{client_id}|{api_secret}")
 
-    payload = {
-        "apkversion": "py:0.0.22", 
-        "uid": client_id, 
-        "pwd": pwd_hash,
-        "factor2": totp, 
-        "vc": vendor_code, 
-        "appkey": app_key_hash,
-        "imei": "ABC123456789", 
-        "source": "API"
-    }
-    payload_data = {
-        "jData": json.dumps(payload)
-    }
-    
-    url = "https://api.shoonya.com/NorenWSTP/QuickAuthenticate"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
     }
-    
-    try:
-        # Passing a dictionary to 'data' ensures it is correctly URL-encoded
-        resp = requests.post(url, data=payload_data, headers=headers, timeout=15)
-        
-        # Handle 502 and other server errors
-        if resp.status_code == 502:
-            logger.error("❌ Shoonya 502 Bad Gateway: Server is temporarily overloaded. Please try again in a few minutes.")
-            return None
-        elif resp.status_code != 200:
-            logger.error(f"❌ Shoonya Server Error ({resp.status_code}): {resp.text[:100]}")
-            return None
 
-        if not resp.text:
-            logger.error("❌ Empty response from Shoonya")
-            return None
-            
+    # Try both endpoints
+    for url in endpoints:
         try:
-            res = resp.json()
-        except:
-            logger.error(f"❌ Invalid JSON response from Shoonya: {resp.text[:100]}")
-            return None
+            payload = {
+                "apkversion": "py:0.0.22", 
+                "uid": client_id, 
+                "pwd": pwd_hash,
+                "factor2": totp, 
+                "vc": vendor_code, 
+                "appkey": app_key_hash,
+                "imei": "ABC123456789", 
+                "source": "API"
+            }
+            payload_data = {"jData": json.dumps(payload)}
             
-        if res.get('stat') == 'Ok':
-            logger.info("✅ Shoonya login successful")
-            return res.get('susertoken')
-        else:
-            logger.error(f"❌ Shoonya login failed: {res.get('emsg', 'Unknown error')}")
-    except requests.exceptions.Timeout:
-        logger.error("❌ Shoonya login timeout: The server took too long to respond.")
-    except Exception as e:
-        logger.error(f"❌ Shoonya login exception: {e}")
+            logger.info(f"🔄 Attempting Forced HTTP/2: {url.split('/')[-1]}")
+            
+            # Forcing HTTP/2 by disabling HTTP/1.1
+            with httpx.Client(http2=True, timeout=20.0) as client:
+                resp = client.post(url, data=payload_data, headers=headers)
+                
+                logger.info(f"📡 Protocol: {resp.http_version} | Status: {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    res = resp.json()
+                    if res.get('stat') == 'Ok':
+                        logger.info(f"✅ Shoonya login successful ({resp.http_version})")
+                        return res.get('susertoken')
+                    else:
+                        logger.warning(f"⚠️ Shoonya API Error: {res.get('emsg')}")
+                elif resp.status_code == 502:
+                    logger.warning("⚠️ 502 Gateway Error: Server might be down or IP blocked.")
+                elif resp.status_code == 426:
+                    logger.warning("⚠️ 426 Upgrade Required: Server rejecting protocol.")
+                    
+        except Exception as e:
+            logger.error(f"❌ Error during login: {e}")
+                
+    logger.error("❌ All Shoonya login attempts failed.")
     return None
 
 # ─── DHAN BYPASS (Direct) ───────────────────────────────────
