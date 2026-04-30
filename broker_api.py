@@ -48,11 +48,11 @@ def shoonya_http_login(cfg):
 
     totp = get_totp(totp_key)
     pwd_hash = sha256_hash(password)
-    # Shoonya QuickAuth requires sha256(uid|api_key)
-    app_key_hash = sha256_hash(f"{client_id}|{api_secret}")
+    # Shoonya QuickAuth usually requires sha256(api_secret|totp)
+    app_key_hash = sha256_hash(f"{api_secret}|{totp}")
 
     payload = {
-        "apkversion": "py:0.0.22", 
+        "apkversion": "1.0.0", 
         "uid": client_id, 
         "pwd": pwd_hash,
         "factor2": totp, 
@@ -63,17 +63,42 @@ def shoonya_http_login(cfg):
     }
     jData = "jData=" + json.dumps(payload)
     
-    url = "https://api.shoonya.com/NorenWSTP/QuickAuthenticate"
+    url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
     try:
-        resp = requests.post(url, data=jData, timeout=10)
-        res = resp.json()
+        resp = requests.post(url, data=jData, headers=headers, timeout=15)
+        
+        # Handle 502 and other server errors
+        if resp.status_code == 502:
+            logger.error("❌ Shoonya 502 Bad Gateway: Server is temporarily overloaded. Please try again in a few minutes.")
+            return None
+        elif resp.status_code != 200:
+            logger.error(f"❌ Shoonya Server Error ({resp.status_code}): {resp.text[:100]}")
+            return None
+
+        if not resp.text:
+            logger.error("❌ Empty response from Shoonya")
+            return None
+            
+        try:
+            res = resp.json()
+        except:
+            logger.error(f"❌ Invalid JSON response from Shoonya: {resp.text[:100]}")
+            return None
+            
         if res.get('stat') == 'Ok':
             logger.info("✅ Shoonya login successful")
             return res.get('susertoken')
         else:
-            logger.error(f"Shoonya login failed: {res.get('emsg', 'Unknown error')}")
+            logger.error(f"❌ Shoonya login failed: {res.get('emsg', 'Unknown error')}")
+    except requests.exceptions.Timeout:
+        logger.error("❌ Shoonya login timeout: The server took too long to respond.")
     except Exception as e:
-        logger.error(f"Shoonya login exception: {e}")
+        logger.error(f"❌ Shoonya login exception: {e}")
     return None
 
 # ─── DHAN BYPASS (Direct) ───────────────────────────────────
