@@ -67,13 +67,15 @@ class GVNMasterOrchestrator:
                 token = shoonya_http_login(self.broker_config)
                 if token:
                     self.broker_config["session_token"] = token
-                    shared_data.update_market_data("Shoonya", True)
+                    shared_data.broker_connection_status["Shoonya"] = True
                     self.telegram_manager.alert_status("CONNECTED", "✅ Shoonya Connected")
                     logger.info("✅ Shoonya authenticated")
                 else:
+                    shared_data.broker_connection_status["Shoonya"] = False
                     self.telegram_manager.alert_status("DISCONNECTED", "❌ Shoonya auth failed")
                     logger.error("❌ Shoonya authentication failed")
             except Exception as e:
+                shared_data.broker_connection_status["Shoonya"] = False
                 logger.error(f"❌ Shoonya Login Error: {e}")
         
         self.system_initialized = True
