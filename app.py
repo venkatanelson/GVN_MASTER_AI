@@ -215,20 +215,21 @@ def save_api_settings():
     config.broker_name = data.get('broker_name', 'Shoonya')
     config.client_id = data.get('client_id')
     
-    # Map form fields to DB columns
-    # Form: access_token -> DB: api_key
-    # Form: client_secret -> DB: api_secret
-    # Form: broker_password -> DB: encrypted_password
+    # Only update if the value is provided and not the masked placeholder
+    if data.get('access_token') and data.get('access_token') != "********":
+        config.api_key = data.get('access_token')
     
-    config.api_key = data.get('access_token')
-    config.api_secret = data.get('client_secret')
-    config.totp_key = data.get('totp_key')
+    if data.get('client_secret') and data.get('client_secret') != "********":
+        config.api_secret = data.get('client_secret')
+        
+    if data.get('totp_key') and data.get('totp_key') != "********":
+        config.totp_key = data.get('totp_key')
     
-    if data.get('broker_password'):
+    if data.get('broker_password') and data.get('broker_password') != "********":
         config.encrypted_password = cipher.encrypt(data.get('broker_password').encode())
     
-    config.call_strike = data.get('call_strike')
-    config.put_strike = data.get('put_strike')
+    if data.get('call_strike'): config.call_strike = data.get('call_strike')
+    if data.get('put_strike'): config.put_strike = data.get('put_strike')
     
     db.session.commit()
     
@@ -301,8 +302,8 @@ def init_gvn():
                 broker_cfg = {
                     "broker_name": config.broker_name,
                     "client_id": config.client_id,
-                    "api_key": config.api_key,
-                    "access_token": config.api_secret, 
+                    "access_token": config.api_key,   # Map api_key to access_token (Vendor Code)
+                    "client_secret": config.api_secret, # Map api_secret to client_secret
                     "totp_key": config.totp_key,
                     "password": cipher.decrypt(config.encrypted_password).decode() if config.encrypted_password else None
                 }
@@ -311,7 +312,7 @@ def init_gvn():
                 if orch:
                     try:
                         orch.start(broker_cfg)
-                        print("🚀 GVN Master Orchestrator Started Successfully!")
+                        print(f"🚀 GVN Master Orchestrator Started Successfully for {config.client_id}!")
                     except Exception as e:
                         print(f"❌ Orchestrator Start Failed: {e}")
                 else:
