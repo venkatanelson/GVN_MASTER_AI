@@ -45,6 +45,8 @@ class UserBrokerConfig(db.Model):
     api_key = db.Column(db.String(200))
     api_secret = db.Column(db.String(200))
     totp_key = db.Column(db.String(100))
+    webhook_url = db.Column(db.String(500))
+    tv_secret = db.Column(db.String(100))
     call_strike = db.Column(db.String(50))
     put_strike = db.Column(db.String(50))
     support_number_1 = db.Column(db.String(20), default="919966123078")
@@ -61,7 +63,12 @@ class AlgoTrade(db.Model):
 # --- ROUTES ---
 @app.route('/')
 def index():
-    if 'user_id' in session: return redirect(url_for('user_dashboard', user_id=session['user_id']))
+    if 'user_id' in session:
+        user = db.session.get(User, session['user_id'])
+        if user:
+            return redirect(url_for('user_dashboard', user_id=user.id))
+        else:
+            session.pop('user_id', None)
     return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -93,8 +100,9 @@ def user_dashboard(user_id):
         'access_token': config.api_key if config else '',
         'client_secret': config.api_secret if config else '',
         'totp_key': config.totp_key if config else '',
+        'webhook_url': config.webhook_url if config else (user.dhan_webhook_url if user else ''),
+        'tv_secret': config.tv_secret if config else '',
         'broker_password': '',
-        'tv_secret': '' # Usually not stored in DB yet, or use a default
     }
     
     if config and config.encrypted_password:
@@ -156,8 +164,47 @@ def gvn_scanner():
         "status": "success",
         "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', {}),
         "market_pulse": getattr(shared_data, 'market_pulse', {}),
-        "nifty_spot": shared_data.market_data.get("NIFTY", 0)
+        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "data": getattr(shared_data, 'scanner_data', {}),
+        "demo_signals": getattr(shared_data, 'demo_signals', [])
     })
+
+@app.route('/api/ai-chat', methods=['POST'])
+def ai_chat():
+    try:
+        data = request.json
+        msg = data.get('message', '').lower()
+        nifty_price = data.get('nifty_price', '0')
+        
+        reply = "I am GVN AI Engine. Analyzing market... Current connectivity status is pending. "
+        if "nifty" in msg or "trend" in msg:
+            spot = shared_data.market_data.get("NIFTY", nifty_price)
+            reply = f"Nifty Spot is around {spot}. Based on Alpha Grid, the trend looks Neutral to Sideways. Waiting for institutional breakout."
+        elif "ce" in msg or "call" in msg:
+            reply = "Scanning Call side momentum... Option chain shows heavy resistance at higher strikes. Wait for i5 level breakout for safe entry."
+        elif "pe" in msg or "put" in msg:
+            reply = "Scanning Put side momentum... Support is being tested at current levels. No clear signal yet."
+        
+        return jsonify({"reply": reply})
+    except Exception as e:
+        return jsonify({"reply": f"AI Error: {e}"}), 500
+
+@app.route('/api/robot/status', methods=['POST'])
+def robot_status():
+    data = request.json
+    active = data.get('active', False)
+    shared_data.robot_active = active
+    return jsonify({"status": "success", "robot_active": active})
+
+@app.route('/unlock-premium/<int:user_id>')
+def unlock_premium(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        user.user_type = 'LIVE'
+        user.is_locked = False
+        db.session.commit()
+        flash("Premium Activated Successfully! Enjoy Zero-to-Hero signals.")
+    return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/toggle-algo/<int:user_id>')
 def toggle_algo(user_id):
@@ -228,6 +275,10 @@ def save_api_settings():
     if data.get('broker_password') and data.get('broker_password') != "********":
         config.encrypted_password = cipher.encrypt(data.get('broker_password').encode())
     
+    if data.get('webhook_url'): config.webhook_url = data.get('webhook_url')
+    if data.get('secret_key') and data.get('secret_key') != "********":
+        config.tv_secret = data.get('secret_key')
+        
     if data.get('call_strike'): config.call_strike = data.get('call_strike')
     if data.get('put_strike'): config.put_strike = data.get('put_strike')
     
@@ -270,6 +321,8 @@ def init_gvn():
                 'user_broker_config': [
                     ('call_strike', 'VARCHAR(20)'),
                     ('put_strike', 'VARCHAR(20)'),
+                    ('webhook_url', 'VARCHAR(500)'),
+                    ('tv_secret', 'VARCHAR(100)'),
                     ('support_number_1', 'VARCHAR(20)')
                 ]
             }
@@ -290,10 +343,16 @@ def init_gvn():
 
         # Check for admin user
         try:
-            existing_user = User.query.filter_by(phone="9966123078").first()
+            target_phone = "9381490610"
+            existing_user = User.query.filter((User.phone == target_phone) | (User.phone == "9966123078")).first()
             if not existing_user:
-                v = User(id=1, username="Venkat", phone="9966123078", email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
+                v = User(id=1, username="Venkat", phone=target_phone, email="nelsonp143@gmail.com", is_admin=True, algo_status="OFF", user_type="LIVE")
                 db.session.add(v)
+                db.session.commit()
+            else:
+                # Update existing user to the correct phone number
+                existing_user.phone = target_phone
+                existing_user.is_admin = True
                 db.session.commit()
             
             # Initialize Orchestrator
