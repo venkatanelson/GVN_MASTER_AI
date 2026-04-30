@@ -48,29 +48,32 @@ def shoonya_http_login(cfg):
 
     totp = get_totp(totp_key)
     pwd_hash = sha256_hash(password)
-    # Shoonya QuickAuth usually requires sha256(api_secret|totp)
-    app_key_hash = sha256_hash(f"{api_secret}|{totp}")
+    pwd_hash = sha256_hash(password)
+    # Matching 'test_raw.py' logic: sha256(uid|api_key)
+    app_key_hash = sha256_hash(f"{client_id}|{api_secret}")
 
     payload = {
-        "apkversion": "1.0.0", 
+        "apkversion": "py:0.0.22", 
         "uid": client_id, 
         "pwd": pwd_hash,
         "factor2": totp, 
         "vc": vendor_code, 
         "appkey": app_key_hash,
-        "imei": "abs1234", 
+        "imei": "ABC123456789", 
         "source": "API"
     }
-    jData = "jData=" + json.dumps(payload)
+    payload_data = {
+        "jData": json.dumps(payload)
+    }
     
-    url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+    url = "https://api.shoonya.com/NorenWSTP/QuickAuthenticate"
     headers = {
-        'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
-        resp = requests.post(url, data=jData, headers=headers, timeout=15)
+        # Passing a dictionary to 'data' ensures it is correctly URL-encoded
+        resp = requests.post(url, data=payload_data, headers=headers, timeout=15)
         
         # Handle 502 and other server errors
         if resp.status_code == 502:
