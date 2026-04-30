@@ -48,16 +48,22 @@ def shoonya_http_login(cfg):
 
     totp = get_totp(totp_key)
     pwd_hash = sha256_hash(password)
-    app_key_hash = sha256_hash(f"{api_secret}|{totp}")
+    # Shoonya QuickAuth requires sha256(uid|api_key)
+    app_key_hash = sha256_hash(f"{client_id}|{api_secret}")
 
     payload = {
-        "apkversion": "1.0.0", "uid": client_id, "pwd": pwd_hash,
-        "factor2": totp, "vc": vendor_code, "appkey": app_key_hash,
-        "imei": "abs1234", "source": "API"
+        "apkversion": "py:0.0.22", 
+        "uid": client_id, 
+        "pwd": pwd_hash,
+        "factor2": totp, 
+        "vc": vendor_code, 
+        "appkey": app_key_hash,
+        "imei": "abs1234", 
+        "source": "API"
     }
     jData = "jData=" + json.dumps(payload)
     
-    url = "https://api.shoonya.com/NorenWClientTP/QuickAuth"
+    url = "https://api.shoonya.com/NorenWSTP/QuickAuthenticate"
     try:
         resp = requests.post(url, data=jData, timeout=10)
         res = resp.json()
