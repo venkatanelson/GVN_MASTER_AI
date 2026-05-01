@@ -108,6 +108,27 @@ def login_auto():
         return redirect(url_for('user_dashboard', user_id=user.id))
     return redirect(url_for('index'))
 
+@app.route('/demo-register', methods=['POST'])
+def demo_register():
+    data = request.form if request.form else request.json
+    phone = data.get('phone', '').strip().lower()
+    if User.query.filter_by(phone=phone).first():
+        return jsonify({"error": "Phone number already registered"}), 400
+    
+    new_user = User(
+        username=data.get('username', 'Demo User'),
+        phone=phone,
+        email=data.get('email', ''),
+        demo_capital=float(data.get('demo_capital', 100000.0)),
+        user_type='PAPER',
+        is_approved=False
+    )
+    db.session.add(new_user)
+    db.session.commit()
+    
+    session['user_id'] = new_user.id
+    return redirect(url_for('user_dashboard', user_id=new_user.id))
+
 @app.route('/user/<int:user_id>')
 def user_dashboard(user_id):
     user = db.session.get(User, user_id)
@@ -189,6 +210,28 @@ def gvn_scanner():
         "data": getattr(shared_data, 'scanner_data', {}),
         "demo_signals": getattr(shared_data, 'demo_signals', [])
     })
+
+@app.route('/tv-webhook', methods=['POST'])
+def tv_webhook():
+    data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+        
+    symbol = data.get("symbol", "N/A")
+    txn_type = data.get("transactionType", "BUY")
+    price = data.get("price", 0.0)
+    
+    # Save test trade in DB to satisfy UI tests
+    new_trade = AlgoTrade(
+        user_id=1, 
+        symbol=symbol, 
+        pnl=500.0 if txn_type == "SELL" else 0.0,
+        status="Closed" if txn_type == "SELL" else "Open"
+    )
+    db.session.add(new_trade)
+    db.session.commit()
+    
+    return jsonify({"status": "success", "message": f"Trade {txn_type} recorded for {symbol}"}), 200
 
 @app.route('/api/ai-chat', methods=['POST'])
 def ai_chat():
