@@ -31,9 +31,22 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     is_approved = db.Column(db.Boolean, default=True)
     is_locked = db.Column(db.Boolean, default=False)
+    is_blocked = db.Column(db.Boolean, default=False)
     full_auto_mode = db.Column(db.Boolean, default=False)
     trade_lots = db.Column(db.Integer, default=1)
     dhan_webhook_url = db.Column(db.String(500), default="")
+    selected_plan = db.Column(db.String(50), default="Basic")
+    expiry_date = db.Column(db.DateTime, nullable=True)
+    demo_capital = db.Column(db.Float, default=100000.0)
+    admin_kill_switch = db.Column(db.Boolean, default=False)
+
+class PendingPayment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer)
+    plan_selected = db.Column(db.String(50))
+    utr_number = db.Column(db.String(100))
+    screenshot_path = db.Column(db.String(200))
+    status = db.Column(db.String(20), default="Pending")
 
 class UserBrokerConfig(db.Model):
     __tablename__ = 'user_broker_config'
@@ -50,6 +63,14 @@ class UserBrokerConfig(db.Model):
     call_strike = db.Column(db.String(50))
     put_strike = db.Column(db.String(50))
     support_number_1 = db.Column(db.String(20), default="919966123078")
+    support_number_2 = db.Column(db.String(20), default="")
+    admin_phone = db.Column(db.String(20), default="")
+    admin_user = db.Column(db.String(50), default="admin")
+    admin_pass = db.Column(db.String(50), default="admin123")
+    plan_basic_price = db.Column(db.Integer, default=1500)
+    plan_premium_price = db.Column(db.Integer, default=3000)
+    plan_ultimate_price = db.Column(db.Integer, default=5000)
+    attack_mode = db.Column(db.Boolean, default=False)
 
 class AlgoTrade(db.Model):
     __tablename__ = 'algo_trades_v3'
@@ -249,7 +270,93 @@ def force_close(trade_id):
 def admin_dashboard():
     v = db.session.get(User, 1)
     config = UserBrokerConfig.query.filter_by(user_id=1).first()
-    return render_template('admin.html', user=v, config=config)
+    if not config:
+        config = UserBrokerConfig(user_id=1)
+        db.session.add(config)
+        db.session.commit()
+        
+    real_users = User.query.filter(User.user_type == 'LIVE', User.is_admin == False).all()
+    demo_users = User.query.filter(User.user_type == 'PAPER', User.is_admin == False).all()
+    pending_payments = PendingPayment.query.filter_by(status='Pending').all()
+    
+    return render_template('admin.html', user=v, config=config, real_users=real_users, demo_users=demo_users, pending_payments=pending_payments)
+
+@app.route('/toggle-signal-lock/<int:user_id>')
+def toggle_signal_lock(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        user.is_locked = not user.is_locked
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/block-user/<int:user_id>')
+def block_user(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        user.is_blocked = not user.is_blocked
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/delete-user/<int:user_id>')
+def delete_user(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/toggle-kill-switch/<int:user_id>')
+def toggle_kill_switch(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        user.admin_kill_switch = not user.admin_kill_switch
+        if user.admin_kill_switch:
+            user.algo_status = "OFF"
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin-extend-demo/<int:user_id>')
+def admin_extend_demo(user_id):
+    user = db.session.get(User, user_id)
+    if user:
+        if not user.expiry_date:
+            user.expiry_date = datetime.utcnow()
+        user.expiry_date = user.expiry_date + timedelta(days=30)
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/approve-user', methods=['POST'])
+def approve_user():
+    user_id = request.form.get('user_id')
+    plan = request.form.get('plan', 'Basic')
+    months = int(request.form.get('months', 1))
+    
+    user = db.session.get(User, user_id)
+    if user:
+        user.is_approved = True
+        user.user_type = 'LIVE'
+        user.selected_plan = plan
+        user.expiry_date = datetime.utcnow() + timedelta(days=30 * months)
+        db.session.commit()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/update-settings', methods=['POST'])
+def update_settings():
+    config = UserBrokerConfig.query.filter_by(user_id=1).first()
+    if not config:
+        config = UserBrokerConfig(user_id=1)
+        db.session.add(config)
+    
+    config.admin_user = request.form.get('admin_user')
+    config.admin_pass = request.form.get('admin_pass')
+    config.support_number_1 = request.form.get('support_1')
+    config.support_number_2 = request.form.get('support_2')
+    config.admin_phone = request.form.get('admin_phone')
+    config.plan_basic_price = request.form.get('plan_basic_price')
+    config.plan_premium_price = request.form.get('plan_premium_price')
+    config.plan_ultimate_price = request.form.get('plan_ultimate_price')
+    db.session.commit()
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/save_api_settings', methods=['POST'])
 def save_api_settings():
@@ -314,16 +421,29 @@ def init_gvn():
             required_columns = {
                 'user': [
                     ('is_locked', 'BOOLEAN DEFAULT FALSE'),
+                    ('is_blocked', 'BOOLEAN DEFAULT FALSE'),
                     ('full_auto_mode', 'BOOLEAN DEFAULT FALSE'),
                     ('trade_lots', 'INTEGER DEFAULT 1'),
-                    ('user_type', "VARCHAR(20) DEFAULT 'PAPER'")
+                    ('user_type', "VARCHAR(20) DEFAULT 'PAPER'"),
+                    ('selected_plan', "VARCHAR(50) DEFAULT 'Basic'"),
+                    ('expiry_date', 'DATETIME'),
+                    ('demo_capital', 'FLOAT DEFAULT 100000.0'),
+                    ('admin_kill_switch', 'BOOLEAN DEFAULT FALSE')
                 ],
                 'user_broker_config': [
                     ('call_strike', 'VARCHAR(20)'),
                     ('put_strike', 'VARCHAR(20)'),
                     ('webhook_url', 'VARCHAR(500)'),
                     ('tv_secret', 'VARCHAR(100)'),
-                    ('support_number_1', 'VARCHAR(20)')
+                    ('support_number_1', 'VARCHAR(20)'),
+                    ('support_number_2', 'VARCHAR(20)'),
+                    ('admin_phone', 'VARCHAR(20)'),
+                    ('admin_user', 'VARCHAR(50)'),
+                    ('admin_pass', 'VARCHAR(50)'),
+                    ('plan_basic_price', 'INTEGER DEFAULT 1500'),
+                    ('plan_premium_price', 'INTEGER DEFAULT 3000'),
+                    ('plan_ultimate_price', 'INTEGER DEFAULT 5000'),
+                    ('attack_mode', 'BOOLEAN DEFAULT FALSE')
                 ]
             }
 
