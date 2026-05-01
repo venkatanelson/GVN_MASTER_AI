@@ -78,41 +78,33 @@ class AlertTemplates:
     """Pre-formatted alert messages"""
     
     @staticmethod
-    def entry_alert(symbol, strike, option_type, entry_price, target, sl, quantity):
-        """Entry signal alert"""
+    def entry_alert(symbol, entry_price, target, sl):
+        """Entry signal alert matching user screenshot format"""
         return f"""
-🟢 <b>BUY ENTRY</b>
-━━━━━━━━━━━━━━━━━
-<b>Symbol:</b> {symbol}
-<b>Strike:</b> {strike} {option_type}
-<b>Entry:</b> {entry_price}
-<b>Target:</b> {target}
-<b>SL:</b> {sl}
-<b>Qty:</b> {quantity}
-<b>Risk:</b> {round(entry_price - sl, 2)} pts
-<b>Reward:</b> {round(target - entry_price, 2)} pts
-<b>R:R:</b> 1:{round((target - entry_price) / (entry_price - sl), 2)}
-
-⏰ {datetime.now().strftime('%H:%M:%S')}
+🚀 GVN MASTER ALGO - NEW ENTRY 🚀
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 <b>Symbol:</b> {symbol}
+💸 <b>Entry Price:</b> ₹{entry_price}
+✅ <b>Target:</b> ₹{target}
+⛔ <b>Stop Loss:</b> ₹{sl}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ <i>Processed exactly as per GVN Settings</i>
 """
     
     @staticmethod
-    def exit_alert(symbol, strike, option_type, exit_reason, exit_price, pnl, quantity):
-        """Exit signal alert"""
-        status = "✅ PROFIT" if pnl > 0 else "❌ LOSS"
-        color = "🟢" if pnl > 0 else "🔴"
-        
+    def exit_alert(symbol, exit_reason, exit_price, pnl):
+        """Exit signal alert matching GVN formatting"""
+        status_emoji = "🎯" if "Target" in exit_reason else ("⛔" if "SL" in exit_reason else "⏹️")
+        pnl_emoji = "🟩" if pnl > 0 else "🟥"
         return f"""
-{color} <b>{status}: {exit_reason}</b>
-━━━━━━━━━━━━━━━━━
-<b>Symbol:</b> {symbol}
-<b>Strike:</b> {strike} {option_type}
-<b>Exit Price:</b> {exit_price}
-<b>Quantity:</b> {quantity}
-<b>P&L:</b> {pnl} pts
-<b>P&L %:</b> {round(pnl / exit_price * 100, 2)}%
-
-⏰ {datetime.now().strftime('%H:%M:%S')}
+{status_emoji} GVN MASTER ALGO - TRADE CLOSED {status_emoji}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>Symbol:</b> {symbol}
+🔔 <b>Reason:</b> {exit_reason}
+💸 <b>Exit Price:</b> ₹{exit_price}
+{pnl_emoji} <b>P&L:</b> ₹{pnl}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ <i>Processed exactly as per GVN Settings</i>
 """
     
     @staticmethod
@@ -201,12 +193,9 @@ class TelegramAlertManager:
         
         msg = AlertTemplates.entry_alert(
             symbol=trade_info.get("symbol"),
-            strike=trade_info.get("strike"),
-            option_type=trade_info.get("option_type", "CE"),
             entry_price=trade_info.get("entry_price"),
             target=trade_info.get("target"),
-            sl=trade_info.get("sl"),
-            quantity=trade_info.get("quantity", 1)
+            sl=trade_info.get("sl")
         )
         
         self.bot.send_message(msg)
@@ -220,12 +209,9 @@ class TelegramAlertManager:
         
         msg = AlertTemplates.exit_alert(
             symbol=trade_info.get("symbol"),
-            strike=trade_info.get("strike"),
-            option_type=trade_info.get("option_type", "CE"),
             exit_reason=trade_info.get("exit_reason"),
             exit_price=trade_info.get("exit_price"),
-            pnl=trade_info.get("pnl", 0),
-            quantity=trade_info.get("quantity", 1)
+            pnl=trade_info.get("pnl", 0)
         )
         
         self.bot.send_message(msg)
@@ -282,11 +268,8 @@ if __name__ == "__main__":
     print("✅ Telegram Alert Engine Initialized")
     print("\n📋 Entry Alert Sample:")
     print(AlertTemplates.entry_alert(
-        symbol="NIFTY",
-        strike="25000",
-        option_type="CE",
-        entry_price=100,
-        target=120,
-        sl=80,
-        quantity=65
+        symbol="NIFTY260421C24100",
+        entry_price=292.0,
+        target=354.39,
+        sl=276.63
     ))
