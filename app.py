@@ -380,8 +380,19 @@ def init_gvn():
             print(f"❌ Initialization Error: {e}")
 
         try:
-            import shoonya_live_feed
-            shoonya_live_feed.start_live_feed_worker()
+            config = UserBrokerConfig.query.filter_by(user_id=1).first()
+            broker = config.broker_name.lower() if config else "shoonya"
+            
+            if "dhan" in broker:
+                try:
+                    import dhan_live_feed
+                    dhan_live_feed.start_live_feed_worker()
+                except ImportError:
+                    import shoonya_live_feed
+                    shoonya_live_feed.start_live_feed_worker()
+            else:
+                import shoonya_live_feed
+                shoonya_live_feed.start_live_feed_worker()
         except Exception as e:
             print(f"⚠️ Feed Worker Start Failed: {e}")
 
