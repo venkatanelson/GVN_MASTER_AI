@@ -28,7 +28,18 @@ market_pulse = {
 broker_connection_status = {
     "Shoonya": False,
     "Dhan": False,
+    "AngelOne": False,
     "connected_at": None
+}
+
+# 🧠 SAVING MEMORY: Permanent Backup for Broker Credentials
+# (User requested to hardcode these so they don't get lost on updates)
+PERMANENT_CREDENTIALS_BACKUP = {
+    "broker_name": "AngelOne",
+    "client_id": "P218754",
+    "totp_key": "U7IPZ7XFZELCONOX6SHPM4C7I4",
+    "password": "3061" # Broker PIN
+    # Note: API Key and Secret are not hardcoded here because they were masked in the screenshot.
 }
 
 # Scanner Data
