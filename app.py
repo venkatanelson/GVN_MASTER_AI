@@ -12,7 +12,7 @@ import shared_data
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_master_v1.db')
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/gvn_algo_pro.db')
 if db_url.startswith("postgres://"): db_url = db_url.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -190,7 +190,8 @@ def user_dashboard(user_id):
 def broker_status():
     config = UserBrokerConfig.query.filter_by(user_id=session.get('user_id', 1)).first()
     broker_name = config.broker_name if config else "Shoonya"
-    is_connected = shared_data.broker_connection_status.get(broker_name, False)
+    broker_key = broker_name.replace(" ", "") if broker_name else "Shoonya"
+    is_connected = shared_data.broker_connection_status.get(broker_key, False) or shared_data.broker_connection_status.get(broker_name, False)
     
     return jsonify({
         "connected": is_connected,
@@ -530,7 +531,11 @@ def init_gvn():
                     "password": cipher.decrypt(config.encrypted_password).decode() if config.encrypted_password else None
                 }
                 from gvn_master_orchestrator import get_orchestrator
-                orch = get_orchestrator()
+                telegram_cfg = {
+                    "bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+                    "chat_id": os.environ.get("TELEGRAM_CHAT_ID", "")
+                }
+                orch = get_orchestrator(telegram_config=telegram_cfg)
                 if orch:
                     try:
                         orch.start(broker_cfg)

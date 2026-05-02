@@ -12,7 +12,7 @@ market_data = {
     "FINNIFTY": 0.0
 }
 
-# Alpha Grid Storage (14 Strikes)
+# Saving Memory to AI Engine (14 Strikes)
 gvn_alpha_grid = []
 
 # AI Sentiment / Market Pulse
