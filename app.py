@@ -475,6 +475,11 @@ def init_gvn():
                     ('admin_kill_switch', 'BOOLEAN DEFAULT FALSE')
                 ],
                 'user_broker_config': [
+                    ('broker_name', "VARCHAR(50) DEFAULT 'Shoonya'"),
+                    ('api_key', 'VARCHAR(200)'),
+                    ('api_secret', 'VARCHAR(200)'),
+                    ('totp_key', 'VARCHAR(100)'),
+                    ('encrypted_password', 'BLOB'),
                     ('call_strike', 'VARCHAR(20)'),
                     ('put_strike', 'VARCHAR(20)'),
                     ('webhook_url', 'VARCHAR(500)'),
@@ -521,6 +526,7 @@ def init_gvn():
             
             # Initialize Orchestrator
             config = UserBrokerConfig.query.filter_by(user_id=1).first()
+            broker_cfg = {}
             if config and config.client_id:
                 broker_cfg = {
                     "broker_name": config.broker_name,
@@ -530,6 +536,35 @@ def init_gvn():
                     "totp_key": config.totp_key,
                     "password": cipher.decrypt(config.encrypted_password).decode() if config.encrypted_password else None
                 }
+            else:
+                # 🌟 FALLBACK TO PERMANENT MEMORY (Render Ephemeral Storage Fix)
+                import shared_data
+                if hasattr(shared_data, 'PERMANENT_CREDENTIALS_BACKUP') and shared_data.PERMANENT_CREDENTIALS_BACKUP.get("client_id"):
+                    print("⚠️ DB is empty! Falling back to PERMANENT_CREDENTIALS_BACKUP from shared_data.py")
+                    broker_cfg = {
+                        "broker_name": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("broker_name", "AngelOne"),
+                        "client_id": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("client_id"),
+                        "access_token": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("api_key", ""),
+                        "client_secret": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("api_secret", ""),
+                        "totp_key": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("totp_key", ""),
+                        "password": shared_data.PERMANENT_CREDENTIALS_BACKUP.get("password", "")
+                    }
+                    
+                    # Optional: Auto-seed the database
+                    if broker_cfg["client_id"]:
+                        new_config = UserBrokerConfig(
+                            user_id=1,
+                            broker_name=broker_cfg["broker_name"],
+                            client_id=broker_cfg["client_id"],
+                            api_key=broker_cfg["access_token"],
+                            api_secret=broker_cfg["client_secret"],
+                            totp_key=broker_cfg["totp_key"],
+                            encrypted_password=cipher.encrypt(broker_cfg["password"].encode()) if broker_cfg["password"] else None
+                        )
+                        db.session.add(new_config)
+                        db.session.commit()
+
+            if broker_cfg:
                 from gvn_master_orchestrator import get_orchestrator
                 telegram_cfg = {
                     "bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
