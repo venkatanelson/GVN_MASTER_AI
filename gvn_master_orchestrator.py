@@ -16,7 +16,9 @@ try:
     from gvn_telegram_engine import TelegramAlertManager
     from gvn_paper_trading_engine import PaperTradingManager
     from gvn_webhook_executor import WebhookExecutor, TradeOrderFormatter
-    from broker_api import shoonya_http_login, dhan_http_test
+    from broker_api import shoonya_http_login, dhan_http_test, angel_http_login
+    from gvn_live_execution_engine import GVNLiveExecutionEngine
+    from gvn_ai_delta60_engine import GVNAiDelta60Engine
 except ImportError as e:
     print(f"⚠️ Warning: Some engines could not be imported: {e}")
 
@@ -44,6 +46,17 @@ class GVNMasterOrchestrator:
             self.webhook_executor = WebhookExecutor(
                 webhook_url=self.broker_config.get("webhook_url"),
                 broker=self.broker_config.get("broker_name", "Dhan")
+            )
+            # Initialize Live Execution Engine
+            self.live_executor = GVNLiveExecutionEngine(
+                broker_api=None,  # Will attach broker instance later
+                telegram_bot_token=self.telegram_config.get("bot_token", ""),
+                telegram_chat_id=self.telegram_config.get("chat_id", "")
+            )
+            # Initialize AI Delta 60 Engine
+            self.ai_delta60_engine = GVNAiDelta60Engine(
+                bot_token=self.telegram_config.get("bot_token", ""),
+                chat_id=self.telegram_config.get("chat_id", "")
             )
         except Exception as e:
             logger.error(f"❌ Error initializing engines: {e}")
@@ -77,7 +90,28 @@ class GVNMasterOrchestrator:
             except Exception as e:
                 shared_data.broker_connection_status["Shoonya"] = False
                 logger.error(f"❌ Shoonya Login Error: {e}")
+                
+        elif "angel" in broker:
+            try:
+                token = angel_http_login(self.broker_config)
+                if token:
+                    self.broker_config["session_token"] = token
+                    shared_data.broker_connection_status["AngelOne"] = True
+                    self.telegram_manager.alert_status("CONNECTED", "✅ Angel One Connected")
+                    logger.info("✅ Angel One authenticated")
+                else:
+                    shared_data.broker_connection_status["AngelOne"] = False
+                    self.telegram_manager.alert_status("DISCONNECTED", "❌ Angel One auth failed")
+                    logger.error("❌ Angel One authentication failed")
+            except Exception as e:
+                shared_data.broker_connection_status["AngelOne"] = False
+                logger.error(f"❌ Angel One Login Error: {e}")
         
+        import threading
+        if hasattr(self, 'ai_delta60_engine'):
+            threading.Thread(target=self.ai_delta60_engine.run_ai_loop, daemon=True).start()
+            logger.info("🧠 AI Delta 60 Engine background loop started.")
+
         self.system_initialized = True
         shared_data.system_status["initialized"] = True
         logger.info("✅ System initialization complete")
