@@ -147,15 +147,27 @@ class GVNAiDelta60Engine:
         while self.is_running:
             try:
                 for index in self.indices:
-                    chain = nse_option_chain.get_option_chain(index)
-                    if not chain: continue
+                    chain_response = nse_option_chain.fetch_nse_option_chain(index)
+                    if not chain_response or "records" not in chain_response: continue
                         
-                    spot_price = chain.get("spot_price", 25000)
-                    support, resistance = self.analyze_support_resistance(chain)
+                    records = chain_response["records"]
+                    spot_price = records.get("underlyingValue", 25000)
+                    
+                    # Convert NSE format to simple CE/PE dict
+                    formatted_chain = {"CE": [], "PE": []}
+                    for item in records.get("data", []):
+                        if "CE" in item: formatted_chain["CE"].append(item["CE"])
+                        if "PE" in item: formatted_chain["PE"].append(item["PE"])
+                        elif "type" in item:
+                            opt_type = item.get("type")
+                            if opt_type in formatted_chain:
+                                formatted_chain[opt_type].append(item)
+                                
+                    support, resistance = self.analyze_support_resistance(formatted_chain)
                     shift_detected, shift_msg = self.detect_market_shift(support, resistance)
                     
                     # SINGLE STRIKE PICK
-                    best_strike = self.pick_single_momentum_strike(chain, spot_price)
+                    best_strike = self.pick_single_momentum_strike(formatted_chain, spot_price)
                     
                     # Fire only if shift detected or hourly sync
                     if best_strike and (shift_detected or (time.time() - self.memory["last_alert_time"] > 3600)):
