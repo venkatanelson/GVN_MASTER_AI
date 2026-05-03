@@ -103,11 +103,50 @@ nse_headers = {
 
 def fetch_nse_option_chain(symbol="NIFTY"):
     """
-    Directly uses Dhan API or Shoonya API for fetching real-time Option Chain data.
+    Tries Shoonya -> Dhan -> Direct NSE Website
     """
-    if dhan_master_config.get("broker_name") == "Shoonya":
-        return fetch_from_shoonya(symbol)
-    return fetch_from_dhan_fallback(symbol)
+    broker = dhan_master_config.get("broker_name", "")
+    
+    if "shoonya" in broker.lower() and dhan_master_config.get("active"):
+        data = fetch_from_shoonya(symbol)
+        if data: return data
+        
+    if "dhan" in broker.lower() and dhan_master_config.get("active"):
+        data = fetch_from_dhan_fallback(symbol)
+        if data: return data
+        
+    # 🌟 Fallback for Angel One Users: Direct NSE Scraper
+    return fetch_from_nse_direct(symbol)
+
+def fetch_from_nse_direct(symbol):
+    """Bypass NSE Blocks using Cookie Session"""
+    global nse_session
+    try:
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+        
+        # 1. First get cookies from main site
+        nse_session.get("https://www.nseindia.com", headers=nse_headers, timeout=5)
+        
+        # 2. Get API data
+        response = nse_session.get(url, headers=nse_headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [NSE DIRECT] SUCCESS for {symbol}\n")
+            return {
+                "records": data.get("records", {}),
+                "source": "NSE_DIRECT"
+            }
+        elif response.status_code == 401:
+            # Refresh Session if cookie expired
+            nse_session = requests.Session()
+            
+    except Exception as e:
+        with open("nse_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [NSE DIRECT ERROR] {str(e)}\n")
+            
+    return None
 
 def fetch_from_shoonya(symbol):
     """Fetch Option Chain from Shoonya NorenApi."""
