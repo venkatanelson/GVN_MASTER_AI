@@ -7,14 +7,30 @@ import shared_data
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AngelLiveFeed")
 
+import sys
+# Debug Path
+# logger.info(f"Python Path: {sys.path}")
+
 try:
-    from SmartApi import SmartConnect
+    import SmartApi
+    from SmartApi.smartconnect import SmartConnect
+    logger.info("✅ SmartApi found via method 1")
 except ImportError:
     try:
+        import smartapi
         from smartapi import SmartConnect
+        logger.info("✅ smartapi found via method 2")
     except ImportError:
-        logger.error("❌ Angel One Library (smartapi-python) not found. Please run: pip install smartapi-python")
-        SmartConnect = None
+        try:
+            # Last resort: try to find it in site-packages directly if path is weird
+            import site
+            logger.info(f"Site Packages: {site.getsitepackages()}")
+            SmartConnect = None
+        except:
+            SmartConnect = None
+
+if SmartConnect is None:
+    logger.error("❌ Angel One Library (smartapi-python) still not found. Switching to Direct HTTP mode.")
 
 class AngelLiveFeed:
     def __init__(self, api_key, client_id, password, totp_key):
