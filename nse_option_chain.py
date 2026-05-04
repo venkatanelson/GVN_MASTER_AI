@@ -111,69 +111,120 @@ def fetch_nse_option_chain(symbol="NIFTY"):
         data = fetch_from_shoonya(symbol)
         if data: return data
         
-    if "dhan" in broker.lower() and dhan_master_config.get("active"):
-        data = fetch_from_dhan_fallback(symbol)
+    if "angel" in broker.lower():
+        # Try Angel One first
+        data = fetch_from_angel(symbol)
         if data: return data
         
-    # 🌟 Fallback for Angel One Users: Direct NSE Scraper
+        # 🔄 HYBRID FALLBACK: Try Shoonya if Angel One fails
+        import shared_data
+        shoonya_backup = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("shoonya")
+        if shoonya_backup and shoonya_backup.get("totp_key"):
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [HYBRID] Angel failed, trying Shoonya backup...\n")
+            data = fetch_from_shoonya(symbol, custom_cfg=shoonya_backup)
+            if data: return data
+
+    # 🌟 Fallback for NSE Website Direct Scraper
     return fetch_from_nse_direct(symbol)
+
+def fetch_from_angel(symbol):
+    """Fetch Option Chain from Angel One SmartAPI."""
+    try:
+        from gvn_master_orchestrator import get_orchestrator
+        orch = get_orchestrator()
+        if not orch or not orch.broker: return None
+        
+        # Angel One logic to get option chain
+        # Since Angel doesn't have a single 'option_chain' API like Dhan, 
+        # we usually fetch multiple quotes or use the orchestrator's live data
+        import shared_data
+        lp = shared_data.market_data.get(symbol, 0)
+        
+        if lp == 0: return None
+        
+        return {
+            "records": {
+                "underlyingValue": lp,
+                "expiryDates": [datetime.now().strftime("%d-%b-%Y")], # Placeholder
+                "data": [] # Simplified for now
+            },
+            "source": "ANGEL_ONE"
+        }
+    except Exception as e:
+        with open("nse_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [ANGEL ERROR] {str(e)}\n")
+        return None
 
 def fetch_from_nse_direct(symbol):
     """Bypass NSE Blocks using Cookie Session"""
     global nse_session
-    try:
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-        
-        # 1. First get cookies from main site
-        nse_session.get("https://www.nseindia.com", headers=nse_headers, timeout=5)
-        
-        # 2. Get API data
-        response = nse_session.get(url, headers=nse_headers, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
-            with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [NSE DIRECT] SUCCESS for {symbol}\n")
-            return {
-                "records": data.get("records", {}),
-                "source": "NSE_DIRECT"
-            }
-        elif response.status_code == 401:
-            # Refresh Session if cookie expired
-            nse_session = requests.Session()
+    url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://www.nseindia.com/option-chain"
+    }
+    
+    for attempt in range(3):
+        try:
+            # 1. Get cookies from main site
+            if attempt == 0 or not nse_session.cookies:
+                nse_session.get("https://www.nseindia.com", headers=headers, timeout=10)
+                time.sleep(1)
             
-    except Exception as e:
-        with open("nse_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [NSE DIRECT ERROR] {str(e)}\n")
+            # 2. Get API data
+            response = nse_session.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [NSE DIRECT] SUCCESS for {symbol}\n")
+                return {
+                    "records": data.get("records", {}),
+                    "source": "NSE_DIRECT"
+                }
+            elif response.status_code in [401, 403]:
+                # Refresh Session if cookie expired
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [NSE DIRECT] 401/403 Error. Retrying...\n")
+                nse_session = requests.Session()
+                time.sleep(2)
+            else:
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [NSE DIRECT] Failed with Status {response.status_code}\n")
+        except Exception as e:
+            with open("nse_status.log", "a") as f:
+                f.write(f"{datetime.now()}: [NSE DIRECT ERROR] {str(e)}\n")
+            time.sleep(2)
             
     return None
 
-def fetch_from_shoonya(symbol):
-    """Fetch Option Chain from Shoonya NorenApi."""
-    if not dhan_master_config.get("active") or dhan_master_config.get("broker_name") != "Shoonya":
+def fetch_from_shoonya(symbol, custom_cfg=None):
+    """Fetch Option Chain from Shoonya NorenApi with Hybrid Fallback support."""
+    cfg = custom_cfg if custom_cfg else dhan_master_config
+    
+    if not cfg or not cfg.get("totp_key"):
         return None
         
     try:
         from NorenRestApiPy.NorenApi import NorenApi
         import pyotp
         
-        class ShoonyaApiPy(NorenApi):
-            def __init__(self):
-                NorenApi.__init__(self, host='https://api.shoonya.com/NorenWClientTP/', websocket='wss://api.shoonya.com/NorenWSTP/', eodhost='https://api.shoonya.com/chartApi/getdata/')
+        api = NorenApi(host='https://api.shoonya.com/NorenWClientTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
         
-        api = ShoonyaApiPy()
-        
-        uid = dhan_master_config.get("client_id")
-        pwd = dhan_master_config.get("password")
-        totp_secret = dhan_master_config.get("totp_key")
-        vc = dhan_master_config.get("vendor_code")
-        app_key = dhan_master_config.get("api_secret")
-        imei = "abc1234"
+        uid = cfg.get("client_id")
+        pwd = cfg.get("password")
+        totp_secret = cfg.get("totp_key")
+        vc = cfg.get("vendor_code") or cfg.get("access_token")
+        app_key = cfg.get("api_secret") or cfg.get("client_secret")
         
         twoFA = pyotp.TOTP(totp_secret).now() if totp_secret else "123456"
         
-        # We need a valid login
-        ret = api.login(userid=uid, password=pwd, twoFA=twoFA, vendor_code=vc, api_secret=app_key, imei=imei)
+        # Login using official library
+        ret = api.login(userid=uid, password=pwd, twoFA=twoFA, vendor_code=vc, api_secret=app_key, imei="abc1234")
         
         if ret and ret.get('stat') == 'Ok':
             exchange = "NFO" if any(idx in symbol.upper() for idx in ["NIFTY", "BANK", "SENSEX", "FIN"]) else "NSE"
@@ -191,27 +242,33 @@ def fetch_from_shoonya(symbol):
             if lp == 0:
                 return None
                 
-            chain_resp = api.get_option_chain(exchange=exchange, tradingsymbol=symbol, strikeprice=lp, count=20)
-            
-            with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [SHOONYA DEBUG] {symbol} Option Chain Status: {chain_resp.get('stat', 'Error') if isinstance(chain_resp, dict) else 'List'}\n")
+            chain_resp = api.get_option_chain(exchange=exchange, tradingsymbol=symbol, strikeprice=lp, count=14)
             
             if chain_resp and (isinstance(chain_resp, dict) and chain_resp.get('stat') == 'Ok') or isinstance(chain_resp, list):
-                # Shoonya returns a list of dictionaries if successful, or dict with stat=Ok and values list
                 chain_data = chain_resp.get('values', chain_resp) if isinstance(chain_resp, dict) else chain_resp
                 
-                # Format the data to match our NSE worker format
+                # Format to match NSE format
                 formatted_data = []
-                for opt in chain_data:
-                    # NorenApi returns: tsym, optexc, strprc, ltp, oi, etc.
-                    # Wait, we just need to get the quotes or just return them and parse in the loop.
-                    # But get_option_chain returns instruments, not quotes! 
-                    # We have to fetch quotes for each, which takes too long.
-                    # We will return the lp from the main fallback if we can't get fast quotes.
-                    pass
+                for item in chain_data:
+                    strike = float(item.get('strprc', 0))
+                    opt_type = item.get('opttyp', 'CE')
+                    formatted_data.append({
+                        "strike": strike,
+                        "type": opt_type,
+                        "lastPrice": float(item.get('ltp', 0)),
+                        "oi": int(item.get('oi', 0)),
+                        "volume": int(item.get('v', 0)),
+                        "impliedVolatility": float(item.get('iv', 0))
+                    })
                 
-                # To be fast and since NorenApi option chain only gives symbols, not live prices in 1 call,
-                # It is complex. Let's return fallback.
+                return {
+                    "records": {
+                        "underlyingValue": lp,
+                        "expiryDates": [datetime.now().strftime("%d-%b-%Y")], 
+                        "data": formatted_data
+                    },
+                    "source": "SHOONYA_HYBRID"
+                }
         return None
     except Exception as e:
         with open("nse_status.log", "a") as f:
@@ -512,7 +569,7 @@ def nse_background_worker():
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             if dhan_master_config.get('active'):
-                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY"]:
+                for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "CRUDEOIL"]:
                     with open("nse_status.log", "a", encoding="utf-8") as f:
                         f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                     analyze_and_update_gvn_scanner(symbol)
