@@ -103,6 +103,7 @@ class AngelLiveFeed:
                             import shared_data
                             shared_data.market_data["NIFTY"] = lp
                             logger.info(f"🚀 [HTTP FALLBACK] NIFTY LTP: {lp}")
+                            print(f"\n🔥 [GVN LIVE] NIFTY SPOT PRICE: {lp}") # 🌟 Added for visibility
         except Exception as e:
             logger.error(f"❌ HTTP Fallback Error: {e}")
 
