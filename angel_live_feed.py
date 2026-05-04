@@ -1,4 +1,13 @@
 
+import sys
+import os
+
+# 🚀 FORCE FIX: Add User Site-Packages to Path
+user_site = os.path.join(os.environ['APPDATA'], '..', 'Local', 'Packages', 'PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0', 'LocalCache', 'local-packages', 'Python311', 'site-packages')
+if os.path.exists(user_site):
+    sys.path.append(user_site)
+    # logger.info(f"✅ Added Local Path: {user_site}")
+
 import time
 import logging
 import threading
@@ -43,8 +52,8 @@ class AngelLiveFeed:
 
     def connect(self):
         if SmartConnect is None:
-            logger.error("❌ Cannot connect: Angel One library (smartapi-python) is not installed.")
-            return False
+            logger.warning("⚠️ SmartConnect library not found. Using Direct HTTP Fallback...")
+            return True # Pretend connected for fallback mode
         try:
             import pyotp
             totp = pyotp.TOTP(self.totp_key).now()
@@ -60,12 +69,58 @@ class AngelLiveFeed:
             logger.error(f"❌ Angel WebSocket Error: {e}")
             return False
 
+    def fetch_ltp_direct(self, symbol="NIFTY"):
+        """Fallback: Fetch LTP using Direct HTTP requests without SmartApi library."""
+        try:
+            import requests
+            import pyotp
+            totp = pyotp.TOTP(self.totp_key).now()
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-UserType": "USER",
+                "X-SourceID": "WEB",
+                "X-PrivateKey": self.api_key
+            }
+            
+            # Login first to get JWT
+            login_url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
+            payload = {"clientcode": self.client_id, "password": self.password, "totp": totp}
+            resp = requests.post(login_url, json=payload, headers=headers)
+            
+            if resp.status_code == 200:
+                jwt = resp.json().get('data', {}).get('jwtToken')
+                if jwt:
+                    headers["Authorization"] = f"Bearer {jwt}"
+                    # Fetch LTP (Nifty token is 26000)
+                    ltp_url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/marketdata/v1/getLTP"
+                    ltp_payload = {"exchange": "NSE", "symboltoken": "26000", "tradingsymbol": "NIFTY"}
+                    ltp_resp = requests.post(ltp_url, json=ltp_payload, headers=headers)
+                    if ltp_resp.status_code == 200:
+                        lp = ltp_resp.json().get('data', {}).get('ltp', 0)
+                        if lp > 0:
+                            import shared_data
+                            shared_data.market_data["NIFTY"] = lp
+                            logger.info(f"🚀 [HTTP FALLBACK] NIFTY LTP: {lp}")
+        except Exception as e:
+            logger.error(f"❌ HTTP Fallback Error: {e}")
+
     def start_feed(self):
         if not self.connect(): return
         
         self.is_running = True
-        threading.Thread(target=self._run_dummy_feed, daemon=True).start()
-        logger.info("🛰️ Angel One Live Feed Started (Dummy Mode for After-Hours)")
+        if SmartConnect:
+            threading.Thread(target=self._run_dummy_feed, daemon=True).start()
+        else:
+            # Run periodic HTTP polling
+            threading.Thread(target=self._run_http_polling, daemon=True).start()
+        logger.info("🛰️ Angel One Live Feed Engine Active")
+
+    def _run_http_polling(self):
+        while self.is_running:
+            self.fetch_ltp_direct("NIFTY")
+            time.sleep(5)
 
     def _run_dummy_feed(self):
         """Simulates or fetches updates periodically"""
