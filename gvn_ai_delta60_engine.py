@@ -1,3 +1,4 @@
+
 import time
 import json
 import logging
@@ -6,189 +7,153 @@ import nse_option_chain
 import gvn_levels_engine
 from gvn_telegram_engine import TelegramAlertManager
 from gvn_paper_trading_engine import PaperTradingManager
-# from broker_api import place_order_universal # Real broker execution
+from broker_api import place_order_universal
+import shared_data
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GVN_AI_Delta60")
 
 class GVNAiDelta60Engine:
     """
-    AI-driven Single Strike Selector & Executor
-    - Monitors option chain & support/resistance
-    - Normal Days: Delta 0.59 to 0.69
-    - Expiry Days: Delta 0.40 to 0.60
-    - Matches with GVN Pine Script Levels (0 to 1 methodology)
-    - Executes automatically in Paper Trading & Broker
+    GVN Master AI Brain v8.0 - Maximum Safety Edition
+    - Integrated Admin Kill Switch
+    - Auto Square-off on Kill/OFF status
+    - Dynamic Position Sizing (Capital Based)
+    - Multi-Stage Exit Strategy
     """
     
     def __init__(self, bot_token=None, chat_id=None):
         self.memory = {
-            "current_support": None,
-            "current_resistance": None,
-            "last_alert_time": 0
+            "active_trades": {},
+            "oi_trend": "NEUTRAL"
         }
         self.indices = ["NIFTY", "BANKNIFTY"]
         self.is_running = False
         
-        # Initialize Telegram Alert Manager
         if bot_token and chat_id:
             self.telegram = TelegramAlertManager(bot_token, chat_id)
         else:
             self.telegram = None
             
-        # Initialize Paper Trading for Demo Account Sync
         self.paper_trading = PaperTradingManager().get_executor()
-
-    def analyze_support_resistance(self, option_chain):
-        if not option_chain: return None, None
-        calls, puts = option_chain.get("CE", []), option_chain.get("PE", [])
-        if not calls or not puts: return None, None
-            
-        max_call = max(calls, key=lambda x: x.get("open_interest", 0) + x.get("volume", 0), default=None)
-        max_put = max(puts, key=lambda x: x.get("open_interest", 0) + x.get("volume", 0), default=None)
-        
-        return max_put.get("strike") if max_put else None, max_call.get("strike") if max_call else None
-
-    def detect_market_shift(self, new_support, new_resistance):
-        shift_detected = False
-        shift_msg = "Market Stable"
-        
-        old_sup, old_res = self.memory["current_support"], self.memory["current_resistance"]
-        
-        if old_sup and new_support and old_sup != new_support:
-            if new_support < old_sup:
-                shift_msg = f"📉 SUPPORT WEAK/BROKEN: Shifted down from {old_sup} to {new_support}."
-            else:
-                shift_msg = f"📈 SUPPORT STRONG: Shifted up from {old_sup} to {new_support}."
-            shift_detected = True
-            
-        if old_res and new_resistance and old_res != new_resistance:
-            if new_resistance > old_res:
-                shift_msg = f"🚀 RESISTANCE BROKEN: Shifted up from {old_res} to {new_resistance}."
-            else:
-                shift_msg = f"🧱 RESISTANCE WEAK: Shifted down from {old_res} to {new_resistance}."
-            shift_detected = True
-            
-        self.memory["current_support"] = new_support
-        self.memory["current_resistance"] = new_resistance
-        return shift_detected, shift_msg
-
-    def pick_single_momentum_strike(self, option_chain, spot_price):
-        """Pick EXACTLY ONE strike based on day logic and momentum"""
-        best_strike = None
-        closest_diff = 999
-        
-        # Logic: 0.40 - 0.60 on Expiry, 0.59 - 0.69 Normal
-        is_expiry = datetime.now().weekday() in [2, 3] # Wed/Thu typically expiry
-        target_delta = 0.50 if is_expiry else 0.64
-        min_d, max_d = (0.40, 0.60) if is_expiry else (0.59, 0.69)
-        
-        all_options = option_chain.get("CE", []) + option_chain.get("PE", [])
-        valid_strikes = []
-        
-        for opt in all_options:
-            delta = abs(opt.get("delta", 0.5))
-            if min_d <= delta <= max_d:
-                valid_strikes.append(opt)
-                
-        # Pick the SINGLE strike with highest momentum (volume/gamma)
-        if valid_strikes:
-            # Sort by proximity to target delta and highest volume
-            best_strike = sorted(valid_strikes, key=lambda x: (abs(abs(x.get("delta",0.5)) - target_delta), -x.get("volume", 0)))[0]
-                
-        return best_strike
-
-    def trigger_execution_and_alerts(self, symbol, strike_info, shift_msg, levels):
-        """Send JSON Alert, execute in Broker, and Sync with Demo Account"""
-        entry_price = strike_info.get("ltp", 0)
-        target = levels.get('i2', entry_price + 20)
-        sl = levels.get('sl', entry_price - 10)
-        
-        # 1. Prepare JSON Alert
-        trade_json = {
-            "Action": "WAIT FOR SIGNAL",
-            "Symbol": f"{symbol}{strike_info.get('strike')}{strike_info.get('option_type', 'CE')}",
-            "LTP": entry_price,
-            "Delta": round(abs(strike_info.get("delta", 0.60)), 2),
-            "Momentum_Expected": "HIGH",
-            "Target": target,
-            "StopLoss": sl,
-            "Market_Shift": shift_msg
-        }
-        
-        json_str = json.dumps(trade_json, indent=4)
-        telegram_msg = f"🤖 <b>GVN AI SINGLE STRIKE EXECUTION</b> 🤖\n<pre>{json_str}</pre>\n⚡ <i>0 to 1 Methodology Sync Complete</i>"
-        
-        # 2. Alert Telegram
-        if self.telegram:
-            self.telegram.bot.send_message(telegram_msg)
-        logger.info(f"🚀 AI EXECUTION SIGNAL:\n{telegram_msg}")
-        
-        # 3. Trigger Demo Account (Paper Trading)
-        logger.info("📝 Syncing with Demo Account (Wait for Signal Process)...")
-        self.paper_trading.execute_paper_buy(
-            symbol=symbol,
-            strike=strike_info.get("strike"),
-            option_type=strike_info.get("option_type", "CE"),
-            entry_price=entry_price,
-            target=target,
-            sl=sl,
-            quantity=50 # default qty
-        )
-        
-        # 4. Trigger Real Broker Execution (Placeholder)
-        logger.info("🔗 Sending Execution to Broker Account API...")
-        # place_order_universal(cfg={}, symbol=trade_json["Symbol"], txn_type="BUY", qty=50)
 
     def run_ai_loop(self):
         self.is_running = True
-        logger.info("🧠 [GVN AI] Single Strike Momentum Analyzer Started")
+        logger.info("🛡️ [GVN SAFETY BRAIN v8.0] Kill-Switch & Auto-Square-off Active...")
         
         while self.is_running:
             try:
+                # 🛡️ SAFETY CHECK: Is Algo ON or Kill Switch Active?
+                if not self._check_safety_status():
+                    time.sleep(5)
+                    continue
+
                 for index in self.indices:
-                    chain_response = nse_option_chain.fetch_nse_option_chain(index)
-                    if not chain_response or "records" not in chain_response: continue
-                        
-                    records = chain_response["records"]
-                    spot_price = records.get("underlyingValue", 25000)
+                    chain = nse_option_chain.fetch_nse_option_chain(index)
+                    if not chain or "records" not in chain: continue
                     
-                    # Convert NSE format to simple CE/PE dict
-                    formatted_chain = {"CE": [], "PE": []}
-                    for item in records.get("data", []):
-                        if "CE" in item: formatted_chain["CE"].append(item["CE"])
-                        if "PE" in item: formatted_chain["PE"].append(item["PE"])
-                        elif "type" in item:
-                            opt_type = item.get("type")
-                            if opt_type in formatted_chain:
-                                formatted_chain[opt_type].append(item)
-                                
-                    support, resistance = self.analyze_support_resistance(formatted_chain)
-                    shift_detected, shift_msg = self.detect_market_shift(support, resistance)
+                    records = chain["records"]
+                    spot = records.get("underlyingValue", shared_data.market_data.get(index, 25000))
                     
-                    # SINGLE STRIKE PICK
-                    best_strike = self.pick_single_momentum_strike(formatted_chain, spot_price)
+                    # 1. Update Market Score
+                    self._sync_sentiment(records)
                     
-                    # Fire only if shift detected or hourly sync
-                    if best_strike and (shift_detected or (time.time() - self.memory["last_alert_time"] > 3600)):
-                        # Sync with GVN Pine Script Levels (0 to 1)
-                        high_915 = best_strike.get("high_915", spot_price + 20)
-                        low_915 = best_strike.get("low_915", spot_price - 20)
-                        levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915)
-                        
-                        self.trigger_execution_and_alerts(index, best_strike, shift_msg, levels)
-                        self.memory["last_alert_time"] = time.time()
+                    # 2. Monitor & Execute
+                    strikes = self._pick_alpha_strikes(records, spot)
+                    for strike in strikes:
+                        self._manage_trade_cycle(index, strike)
                 
-                time.sleep(5)
+                time.sleep(2)
             except Exception as e:
-                logger.error(f"[GVN AI ERROR] {e}")
+                logger.error(f"❌ Safety Loop Error: {e}")
                 time.sleep(5)
 
-    def stop(self):
-        self.is_running = False
+    def _check_safety_status(self):
+        """Checks DB for Kill Switch or OFF status and squares off if needed"""
+        # This reads from the shared_data which is updated by app.py
+        is_killed = shared_data.market_pulse.get("admin_kill_switch", False)
+        is_off = shared_data.market_pulse.get("algo_status", "OFF") == "OFF"
+        
+        if is_killed or is_off:
+            if self.memory["active_trades"]:
+                logger.warning("🚨 [KILL SWITCH] Squaring off all positions immediately!")
+                if self.telegram: self.telegram.send_alert("🚨 <b>ADMIN KILL SWITCH ACTIVATED</b> 🚨\nSquaring off all positions!")
+                
+                # Close all active trades
+                for key in list(self.memory["active_trades"].keys()):
+                    trade = self.memory["active_trades"][key]
+                    # Simulate or Execute SELL Order for all lots
+                    self._fire_order(key.split('_')[0], {"ltp": 0, "strike": key.split('_')[0], "type": key.split('_')[1]}, "SELL", trade["total_lots"], "EMERGENCY SQUARE-OFF")
+                
+                self.memory["active_trades"] = {}
+            return False
+        return True
+
+    def _sync_sentiment(self, records):
+        tot_ce = records.get("filtered", {}).get("CE", {}).get("totOI", 1)
+        tot_pe = records.get("filtered", {}).get("PE", {}).get("totOI", 1)
+        ratio = tot_pe / tot_ce
+        shared_data.market_pulse["score"] = int(min(ratio * 50, 100))
+
+    def _pick_alpha_strikes(self, records, spot):
+        is_expiry = datetime.now().weekday() in [2, 3]
+        target_d = 0.50 if is_expiry else 0.62
+        alpha_grid = []
+        for item in records.get("data", []):
+            for t in ["CE", "PE"]:
+                if t in item:
+                    opt = item[t]
+                    delta = abs(opt.get("delta", 0.5))
+                    if 0.40 <= delta <= 0.75:
+                        alpha_grid.append({
+                            "strike": item["strikePrice"], "type": t,
+                            "ltp": opt.get("lastPrice", 0), "delta": delta,
+                            "high_915": opt.get("high_915", opt.get("lastPrice", 0) + 15),
+                            "low_915": opt.get("low_915", opt.get("lastPrice", 0) - 15)
+                        })
+        return sorted(alpha_grid, key=lambda x: abs(x["delta"] - target_d))[:14]
+
+    def _manage_trade_cycle(self, symbol, strike):
+        key = f"{strike['strike']}_{strike['type']}"
+        ltp = strike["ltp"]
+        levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
+        if not levels: return
+
+        if key not in self.memory["active_trades"]:
+            if (ltp <= levels["Level_7"] * 1.01 or (ltp >= levels["Level_5"] and ltp <= levels["Level_5"] * 1.03)) \
+               and shared_data.market_pulse["score"] >= 65:
+                self._execute_smart_entry(symbol, strike, ltp, levels)
+        else:
+            trade = self.memory["active_trades"][key]
+            # Multi-Stage Exit
+            if not trade["t1_hit"] and ltp >= trade["t1"]:
+                trade["t1_hit"], trade["sl"] = True, trade["entry"]
+                self._fire_order(symbol, strike, "SELL", trade["total_lots"] // 2, "Partial Exit (T1 Hit)")
+            elif ltp >= trade["t2"]:
+                self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (T2 Hit)")
+                del self.memory["active_trades"][key]
+            elif ltp <= trade["sl"]:
+                self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (SL Hit)")
+                del self.memory["active_trades"][key]
+
+    def _execute_smart_entry(self, symbol, strike, price, levels):
+        balance = shared_data.market_data.get("available_cash", 20000)
+        target_lots = max(1, min(5, int(balance / 10000)))
+        key = f"{strike['strike']}_{strike['type']}"
+        t1 = levels["Level_6"] if price < levels["Level_5"] else levels["Level_3"]
+        t2 = levels["Level_5"] if price < levels["Level_5"] else levels["Level_2"]
+        sl = levels["Level_7"] * 0.95
+        self.memory["active_trades"][key] = {"entry": price, "t1": t1, "t2": t2, "sl": sl, "t1_hit": False, "total_lots": target_lots}
+        self._fire_order(symbol, strike, "BUY", target_lots, f"Smart Entry ({target_lots} Lots)")
+        self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], price, t2, sl)
+
+    def _fire_order(self, symbol, strike, side, qty, reason):
+        full_symbol = f"{symbol}{strike['strike']}{strike['type']}"
+        alert = f"🛡️ <b>GVN SAFETY EXECUTION</b> 🛡️\n{full_symbol} {side} @ {strike['ltp']}\nQty: {qty} Lots\nReason: {reason}"
+        if self.telegram: self.telegram.send_alert(alert)
+        cfg = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel", {})
+        place_order_universal(cfg, full_symbol, side, qty * 50)
 
 if __name__ == "__main__":
     ai = GVNAiDelta60Engine()
-    print("Testing Engine Mechanics...")
-    # Mock data to verify JSON format
-    ai.trigger_execution_and_alerts("NIFTY", {"strike": 24200, "option_type": "PE", "ltp": 350, "delta": -0.62}, "SUPPORT WEAK: 24400 -> 24200", {"i2": 380, "sl": 320})
+    ai.run_ai_loop()
