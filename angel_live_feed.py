@@ -2,6 +2,11 @@
 import time
 import logging
 import threading
+import shared_data
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("AngelLiveFeed")
+
 try:
     from SmartApi import SmartConnect
 except ImportError:
@@ -10,10 +15,6 @@ except ImportError:
     except ImportError:
         logger.error("❌ Angel One Library (smartapi-python) not found. Please run: pip install smartapi-python")
         SmartConnect = None
-import shared_data
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("AngelLiveFeed")
 
 class AngelLiveFeed:
     def __init__(self, api_key, client_id, password, totp_key):
@@ -25,6 +26,9 @@ class AngelLiveFeed:
         self.is_running = False
 
     def connect(self):
+        if SmartConnect is None:
+            logger.error("❌ Cannot connect: Angel One library (smartapi-python) is not installed.")
+            return False
         try:
             import pyotp
             totp = pyotp.TOTP(self.totp_key).now()
@@ -55,15 +59,19 @@ class AngelLiveFeed:
             time.sleep(10)
 
 def start_angel_worker():
-    backup = shared_data.PERMANENT_CREDENTIALS_BACKUP
-    if backup.get("broker_name") == "AngelOne":
-        worker = AngelLiveFeed(
-            api_key=backup.get("api_key", "vS42B24z"),
-            client_id=backup.get("client_id"),
-            password=backup.get("password"),
-            totp_key=backup.get("totp_key")
-        )
-        worker.start_feed()
+    backup = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel", {})
+    if backup.get("client_id"):
+        try:
+            logger.info(f"🔄 Starting Angel Feed for {backup.get('client_id')}...")
+            worker = AngelLiveFeed(
+                api_key=backup.get("api_key", "vS42B24z"),
+                client_id=backup.get("client_id"),
+                password=backup.get("password"),
+                totp_key=backup.get("totp_key")
+            )
+            worker.start_feed()
+        except Exception as e:
+            print(f"⚠️ Angel Feed Startup Error: {e}")
 
 if __name__ == "__main__":
     start_angel_worker()
