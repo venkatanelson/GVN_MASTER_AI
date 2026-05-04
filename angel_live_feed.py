@@ -2,7 +2,14 @@
 import time
 import logging
 import threading
-from SmartApi import SmartConnect
+try:
+    from SmartApi import SmartConnect
+except ImportError:
+    try:
+        from smartapi import SmartConnect
+    except ImportError:
+        logger.error("❌ Angel One Library (smartapi-python) not found. Please run: pip install smartapi-python")
+        SmartConnect = None
 import shared_data
 
 logging.basicConfig(level=logging.INFO)

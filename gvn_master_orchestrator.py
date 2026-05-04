@@ -73,39 +73,46 @@ class GVNMasterOrchestrator:
             
         logger.info("📋 Initializing system components...")
         
-        broker = self.broker_config.get("broker_name", "").lower()
+        primary_broker = self.broker_config.get("broker_name", "").lower()
+        logger.info(f"📍 Primary Broker Selected: {primary_broker}")
         
-        if "shoonya" in broker:
+        # 1. Attempt Angel One Login
+        is_angel_primary = "angel" in primary_broker
+        angel_cfg = self.broker_config if is_angel_primary else shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel")
+        
+        if angel_cfg and angel_cfg.get("totp_key"):
             try:
-                token = shoonya_http_login(self.broker_config)
+                token = angel_http_login(angel_cfg)
                 if token:
-                    self.broker_config["session_token"] = token
-                    shared_data.broker_connection_status["Shoonya"] = True
-                    self.telegram_manager.alert_status("CONNECTED", "✅ Shoonya Connected")
-                    logger.info("✅ Shoonya authenticated")
-                else:
-                    shared_data.broker_connection_status["Shoonya"] = False
-                    self.telegram_manager.alert_status("DISCONNECTED", "❌ Shoonya auth failed")
-                    logger.error("❌ Shoonya authentication failed")
-            except Exception as e:
-                shared_data.broker_connection_status["Shoonya"] = False
-                logger.error(f"❌ Shoonya Login Error: {e}")
-                
-        elif "angel" in broker:
-            try:
-                token = angel_http_login(self.broker_config)
-                if token:
-                    self.broker_config["session_token"] = token
+                    self.broker_config["angel_token"] = token
                     shared_data.broker_connection_status["AngelOne"] = True
                     self.telegram_manager.alert_status("CONNECTED", "✅ Angel One Connected")
                     logger.info("✅ Angel One authenticated")
                 else:
                     shared_data.broker_connection_status["AngelOne"] = False
-                    self.telegram_manager.alert_status("DISCONNECTED", "❌ Angel One auth failed")
                     logger.error("❌ Angel One authentication failed")
             except Exception as e:
                 shared_data.broker_connection_status["AngelOne"] = False
                 logger.error(f"❌ Angel One Login Error: {e}")
+
+        # 2. Attempt Shoonya Login
+        is_shoonya_primary = "shoonya" in primary_broker
+        shoonya_cfg = self.broker_config if is_shoonya_primary else shared_data.PERMANENT_CREDENTIALS_BACKUP.get("shoonya")
+        
+        if shoonya_cfg and shoonya_cfg.get("totp_key"):
+            try:
+                token = shoonya_http_login(shoonya_cfg)
+                if token:
+                    self.broker_config["shoonya_token"] = token
+                    shared_data.broker_connection_status["Shoonya"] = True
+                    self.telegram_manager.alert_status("CONNECTED", "✅ Shoonya Connected")
+                    logger.info("✅ Shoonya authenticated")
+                else:
+                    shared_data.broker_connection_status["Shoonya"] = False
+                    logger.error("❌ Shoonya authentication failed")
+            except Exception as e:
+                shared_data.broker_connection_status["Shoonya"] = False
+                logger.error(f"❌ Shoonya Login Error: {e}")
         
         import threading
         if hasattr(self, 'ai_delta60_engine'):

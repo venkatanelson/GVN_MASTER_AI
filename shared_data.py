@@ -34,16 +34,17 @@ broker_connection_status = {
 }
 
 # 🧠 SAVING MEMORY: Permanent Backup for Broker Credentials
-# (User requested to hardcode these so they don't get lost on updates)
 PERMANENT_CREDENTIALS_BACKUP = {
-    "broker_name": "AngelOne",
-    "client_id": "P218754",
-    "totp_key": "U7IPZ7XFZELCONOX6SHPM4C7I4",
-    "password": "3061", # Broker PIN
-    "api_key": "vS42B24z", # Backup key if available
-    
-    # Secondary Broker (Shoonya) for Data Backup
+    "angel": {
+        "broker_name": "AngelOne",
+        "client_id": "P218754",
+        "totp_key": "U7IPZ7XFZELCONOX6SHPM4C7I4",
+        "password": "3061", # Broker PIN
+        "api_key": "vS42B24z",
+        "api_secret": "" # Optional
+    },
     "shoonya": {
+        "broker_name": "Shoonya",
         "client_id": "FA440429",
         "password": "Kalavathi@12",
         "api_secret": "Hjh4nR9yXnn4xF9i4ALKrj1AaZyJ4hlllChq5HHo4qXX9HOXNhdIhNCGXigRJ4d4",
