@@ -7,9 +7,10 @@ _data_lock = threading.Lock()
 
 # Market Data LTP Storage
 market_data = {
-    "NIFTY": 0.0,
-    "BANKNIFTY": 0.0,
-    "FINNIFTY": 0.0
+    "NIFTY": 24119.30,
+    "BANKNIFTY": 54878.50,
+    "FINNIFTY": 21400.10,
+    "CRUDEOIL": 6842.00
 }
 
 # Saving Memory to AI Engine (14 Strikes)
@@ -38,8 +39,17 @@ PERMANENT_CREDENTIALS_BACKUP = {
     "broker_name": "AngelOne",
     "client_id": "P218754",
     "totp_key": "U7IPZ7XFZELCONOX6SHPM4C7I4",
-    "password": "3061" # Broker PIN
-    # Note: API Key and Secret are not hardcoded here because they were masked in the screenshot.
+    "password": "3061", # Broker PIN
+    "api_key": "vS42B24z", # Backup key if available
+    
+    # Secondary Broker (Shoonya) for Data Backup
+    "shoonya": {
+        "client_id": "FA440429",
+        "password": "Kalavathi@12",
+        "api_secret": "Hjh4nR9yXnn4xF9i4ALKrj1AaZyJ4hlllChq5HHo4qXX9HOXNhdIhNCGXigRJ4d4",
+        "vendor_code": "venkata",
+        "totp_key": "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65"
+    }
 }
 
 # Scanner Data

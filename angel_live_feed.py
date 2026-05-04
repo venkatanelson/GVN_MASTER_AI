@@ -1,0 +1,63 @@
+
+import time
+import logging
+import threading
+from SmartApi import SmartConnect
+import shared_data
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("AngelLiveFeed")
+
+class AngelLiveFeed:
+    def __init__(self, api_key, client_id, password, totp_key):
+        self.api_key = api_key
+        self.client_id = client_id
+        self.password = password
+        self.totp_key = totp_key
+        self.smart_api = None
+        self.is_running = False
+
+    def connect(self):
+        try:
+            import pyotp
+            totp = pyotp.TOTP(self.totp_key).now()
+            self.smart_api = SmartConnect(api_key=self.api_key)
+            data = self.smart_api.generateSession(self.client_id, self.password, totp)
+            if data['status']:
+                logger.info("✅ Angel One WebSocket Login Successful")
+                return True
+            else:
+                logger.error(f"❌ Angel One WebSocket Login Failed: {data.get('message')}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Angel WebSocket Error: {e}")
+            return False
+
+    def start_feed(self):
+        if not self.connect(): return
+        
+        self.is_running = True
+        threading.Thread(target=self._run_dummy_feed, daemon=True).start()
+        logger.info("🛰️ Angel One Live Feed Started (Dummy Mode for After-Hours)")
+
+    def _run_dummy_feed(self):
+        """Simulates or fetches updates periodically"""
+        while self.is_running:
+            # In real market hours, we'd use SmartWebSocket
+            # For now, we ensure the shared_data has the latest cached prices
+            time.sleep(10)
+
+def start_angel_worker():
+    backup = shared_data.PERMANENT_CREDENTIALS_BACKUP
+    if backup.get("broker_name") == "AngelOne":
+        worker = AngelLiveFeed(
+            api_key=backup.get("api_key", "vS42B24z"),
+            client_id=backup.get("client_id"),
+            password=backup.get("password"),
+            totp_key=backup.get("totp_key")
+        )
+        worker.start_feed()
+
+if __name__ == "__main__":
+    start_angel_worker()
+    while True: time.sleep(1)

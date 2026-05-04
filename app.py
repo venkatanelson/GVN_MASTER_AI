@@ -192,6 +192,7 @@ def broker_status():
     broker_name = config.broker_name if config else "Shoonya"
     broker_key = broker_name.replace(" ", "") if broker_name else "Shoonya"
     is_connected = shared_data.broker_connection_status.get(broker_key, False) or shared_data.broker_connection_status.get(broker_name, False)
+
     
     return jsonify({
         "connected": is_connected,
@@ -454,6 +455,10 @@ from gvn_master_orchestrator import get_orchestrator
 
 # --- INITIALIZATION ---
 def init_gvn():
+    import shared_data
+    if shared_data.system_status.get("initialized"):
+        return
+    
     with app.app_context():
         db.create_all()
         # Robust Migration logic
@@ -593,13 +598,23 @@ def init_gvn():
                 except ImportError:
                     import shoonya_live_feed
                     shoonya_live_feed.start_live_feed_worker()
+            elif "angel" in broker:
+                try:
+                    import angel_live_feed
+                    angel_live_feed.start_angel_worker()
+                except Exception as e:
+                    print(f"⚠️ Angel Feed Failed: {e}")
             else:
                 import shoonya_live_feed
                 shoonya_live_feed.start_live_feed_worker()
         except Exception as e:
             print(f"⚠️ Feed Worker Start Failed: {e}")
 
-init_gvn()
+        shared_data.system_status["initialized"] = True
+
+# Start init only if we are in Werkzeug main process, or not using reloader
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+    init_gvn()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=True)
