@@ -218,17 +218,23 @@ def fetch_from_nse_direct(symbol):
             response = nse_session.get(url, headers=headers, timeout=15)
             
             if response.status_code == 200:
-                data = response.json()
-                if "records" in data and data["records"].get("data"):
-                    with open("nse_status.log", "a") as f:
-                        f.write(f"{datetime.now()}: [NSE DIRECT] SUCCESS for {symbol} - Count: {len(data['records']['data'])}\n")
-                    return {
-                        "records": data.get("records", {}),
-                        "source": "NSE_DIRECT"
-                    }
-                else:
-                    with open("nse_status.log", "a") as f:
-                        f.write(f"{datetime.now()}: [NSE DIRECT] Success but EMPTY data for {symbol}\n")
+                try:
+                    data = response.json()
+                    if "records" in data and data["records"].get("data"):
+                        with open("nse_status.log", "a") as f:
+                            f.write(f"{datetime.now()}: [NSE DIRECT] SUCCESS for {symbol} - Count: {len(data['records']['data'])}\n")
+                        return {
+                            "records": data.get("records", {}),
+                            "source": "NSE_DIRECT"
+                        }
+                    else:
+                        # Sometimes NSE returns empty records if cookies are stale
+                        with open("nse_status.log", "a") as f:
+                            f.write(f"{datetime.now()}: [NSE DIRECT] Success but EMPTY data. Forcing Refresh...\n")
+                        nse_session = requests.Session() # Reset session on empty data
+                        time.sleep(2)
+                except:
+                    pass
             elif response.status_code in [401, 403]:
                 # Refresh Session
                 nse_session = requests.Session()
