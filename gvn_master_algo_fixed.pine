@@ -1,0 +1,382 @@
+//@version=5
+// GVN Master Trading Algorithm - Production 2026
+// Consolidated from v3_ultimate with core i-level system
+// Author: GVN Trading System
+indicator("GVN Master Algo [PRODUCTION]", overlay=true)
+
+// ═════════════════════════════════════════════════════════════
+// ⚙️  USER INPUTS (Top Section)
+// ═════════════════════════════════════════════════════════════
+stratMode = input.string("Strategy 1", title="Select Strategy Mode", options=["Strategy 1", "Strategy 2", "Strategy 3"])
+lotSize = input.int(65, title="Lot Size (e.g., 65 for Nifty)", minval=1)
+noOfLots = input.int(1, title="Number of Lots to Trade", minval=1)
+gvn_secret = input.string("ANWZ22747T", title="GVN Dhan Secret Key")
+
+// Display Settings
+showMainLevels = input.bool(true, "Show Main Market Levels (N1, N2, C1)", group="Display Settings")
+showGVNLevels = input.bool(true, "Show GVN i-Levels (i0-i7)", group="Display Settings")
+showTradeBoxes = input.bool(true, "Show Entry Zone Boxes", group="Display Settings")
+showLabels = input.bool(false, "Show Level Labels", group="Display Settings")
+showAlertsOnChart = input.bool(true, "Show Alert Signals", group="Display Settings")
+
+// Alert Settings
+alertOnLevelBreak = input.bool(true, "Alert on Level Break", group="Alerts")
+alertOnEntry = input.bool(true, "Alert on Entry Signal", group="Alerts")
+
+finalQty = lotSize * noOfLots
+
+// ═════════════════════════════════════════════════════════════
+// CORE CALCULATIONS: 9:15 AM CANDLE DETECTION
+// ═════════════════════════════════════════════════════════════
+isNewDay = ta.change(time("D"))
+is915Candle = (hour == 9 and minute == 15)
+
+var float high915 = na
+var float low915 = na
+var float close915 = na
+var float n1 = na
+var float n2 = na
+
+if isNewDay
+    high915 := na
+    low915 := na
+    close915 := na
+    n1 := na 
+    n2 := na
+
+if is915Candle
+    high915 := high
+    low915 := low
+    close915 := close
+
+// Calculate Main Market Levels
+valid = not na(high915) and not na(low915)
+diff = valid ? (high915 - low915) : na
+result = diff / 2
+
+if valid
+    n1 := high915 + result
+    n2 := low915 + result
+
+c1 = (n1 + n2) / 2
+
+// Entry and Target Zones
+eLevel = n2 - math.floor(n2 * 3.2 / 1000)
+tLevel = n2 + math.floor(n2 * 7.1 / 1000)
+
+// ═════════════════════════════════════════════════════════════
+// GVN FIBONACCI LEVELS (i0-i7)
+// ═════════════════════════════════════════════════════════════
+// Core GVN Calculation
+gvn0_calc = n2 * 0.118 / 0.5
+gvn_i1_calc = n1 * 0.786 / 0.5
+
+// Assign i-levels
+gvn_i0 = gvn_i1_calc
+gvn_i1 = gvn0_calc
+gvn_spread = gvn_i1_calc - gvn0_calc
+
+gvn_i2 = gvn0_calc + 0.763 * gvn_spread
+gvn_i3 = gvn0_calc + 0.618 * gvn_spread
+gvn_i5 = gvn0_calc + 0.5 * gvn_spread
+gvn_i6 = gvn0_calc + 0.382 * gvn_spread
+gvn_i7 = gvn0_calc + 0.220 * gvn_spread
+
+// Support and Resistance
+support1 = math.min(gvn_i5, gvn_i6)
+resistance1 = math.max(gvn_i2, gvn_i3)
+
+// ═════════════════════════════════════════════════════════════
+// PLOT MAIN MARKET LEVELS
+// ═════════════════════════════════════════════════════════════
+plot(showMainLevels and valid ? n1 : na, "N1 (Market High)", color=color.new(color.green, 40), linewidth=2)
+plot(showMainLevels and valid ? n2 : na, "N2 (Market Low)", color=color.new(color.red, 40), linewidth=2)
+plot(showMainLevels and valid ? c1 : na, "C1 (Market Center)", color=color.new(color.orange, 40), linewidth=1)
+
+// ═════════════════════════════════════════════════════════════
+// PLOT GVN i-LEVELS
+// ═════════════════════════════════════════════════════════════
+plot(showGVNLevels and valid ? gvn_i0 : na, "GVN i0 (Resistance)", color=color.new(color.lime, 30), linewidth=2)
+plot(showGVNLevels and valid ? gvn_i1 : na, "GVN i1 (Support)", color=color.new(color.maroon, 30), linewidth=2)
+plot(showGVNLevels and valid ? gvn_i2 : na, "GVN i2 (R1)", color=color.new(color.aqua, 50), linewidth=1, style=plot.style_dashed)
+plot(showGVNLevels and valid ? gvn_i3 : na, "GVN i3 (R2)", color=color.new(color.teal, 50), linewidth=1, style=plot.style_dashed)
+plot(showGVNLevels and valid ? gvn_i5 : na, "GVN i5 (Midline)", color=color.new(color.gray, 60), linewidth=1, style=plot.style_dotted)
+plot(showGVNLevels and valid ? gvn_i6 : na, "GVN i6 (S1)", color=color.new(color.blue, 50), linewidth=1, style=plot.style_dashed)
+plot(showGVNLevels and valid ? gvn_i7 : na, "GVN i7 (S2)", color=color.new(color.navy, 50), linewidth=1, style=plot.style_dashed)
+
+// ═════════════════════════════════════════════════════════════
+// ENTRY ZONE HIGHLIGHTING
+// ═════════════════════════════════════════════════════════════
+tolerance = 0.25  // 0.25 point tolerance for entry detection
+
+isNearI2 = showTradeBoxes and valid and close >= (gvn_i2 - tolerance) and close <= (gvn_i2 + tolerance)
+isNearI5 = showTradeBoxes and valid and close >= (gvn_i5 - tolerance) and close <= (gvn_i5 + tolerance)
+isNearI7 = showTradeBoxes and valid and close >= (gvn_i7 - tolerance) and close <= (gvn_i7 + tolerance)
+
+bgcolor(isNearI2 ? color.new(color.lime, 80) : na, title="i2 Entry Zone")
+bgcolor(isNearI5 ? color.new(color.yellow, 80) : na, title="i5 Entry Zone")
+bgcolor(isNearI7 ? color.new(color.red, 80) : na, title="i7 Entry Zone")
+
+// ═════════════════════════════════════════════════════════════
+// TRADING SIGNALS & ALERTS
+// ═════════════════════════════════════════════════════════════
+
+// Level Break Detection
+levelBreakI2 = (close[1] < (gvn_i2 - 0.5) and close > (gvn_i2 + tolerance)) ? true : false
+levelBreakI5 = (close[1] < (gvn_i5 - 0.5) and close > (gvn_i5 + tolerance)) ? true : false
+
+buySignal = false
+if stratMode == "Strategy 1"
+    buySignal := isNearI5 and close > open  // Buy on close above i5 with bullish candle
+else if stratMode == "Strategy 2"
+    buySignal := levelBreakI5 and volume > ta.sma(volume, 20)  // Buy on i5 break with volume
+else if stratMode == "Strategy 3"
+    buySignal := isNearI2 and close > open  // Buy on i2 near with bullish candle
+
+// Plot signals
+plotshape(buySignal and showAlertsOnChart, title="Buy Signal", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small)
+
+// Alert notifications
+if alertOnEntry and buySignal
+    alert("GVN BUY SIGNAL: " + str.tostring(close) + " Qty: " + str.tostring(finalQty), alert.freq_once_per_bar)
+
+if alertOnLevelBreak and levelBreakI5
+    alert("GVN LEVEL BREAK: i5 @ " + str.tostring(gvn_i5), alert.freq_once_per_bar)
+
+// ═════════════════════════════════════════════════════════════
+// LABELS & INFO DISPLAY
+// ═════════════════════════════════════════════════════════════
+if showLabels and valid and barstate.islast
+    // Display current levels
+    label.new(bar_index, gvn_i0, "i0: " + str.tostring(math.round(gvn_i0, 2)), yloc=yloc.price, style=label.style_label_left, color=color.new(color.lime, 60), textcolor=color.white)
+    label.new(bar_index, gvn_i1, "i1: " + str.tostring(math.round(gvn_i1, 2)), yloc=yloc.price, style=label.style_label_left, color=color.new(color.maroon, 60), textcolor=color.white)
+    label.new(bar_index, gvn_i5, "i5: " + str.tostring(math.round(gvn_i5, 2)), yloc=yloc.price, style=label.style_label_left, color=color.new(color.gray, 60), textcolor=color.white)
+plot(tLevel, title="T Level", color=color.fuchsia, linewidth=1)
+
+gvn0_calculated_value = n2 * 0.118 / 0.5
+gvn_i1_calculated_value = n1 * 0.786 / 0.5
+
+gvn_i0_level = gvn_i1_calculated_value 
+gvn_i1_level = gvn0_calculated_value  
+
+gvn_i2 = gvn0_calculated_value + 0.763 * (gvn_i1_calculated_value - gvn0_calculated_value) 
+gvn_i3 = gvn0_calculated_value + 0.618 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i5 = gvn0_calculated_value + 0.5 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i6 = gvn0_calculated_value + 0.382 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i7 = gvn0_calculated_value + 0.220 * (gvn_i1_calculated_value - gvn0_calculated_value)
+
+plot(gvn_i0_level, title="GVN=i0", color=color.green) 
+plot(gvn_i1_level, title="GVN=i1", color=color.green) 
+plot(gvn_i2, title="GVN=i2", color=color.red, linewidth=2)
+plot(gvn_i3, title="GVN=i3", color=color.gray)
+plot(gvn_i5, title="GVN=i5", color=color.blue, linewidth=2)
+plot(gvn_i6, title="GVN=i6", color=color.purple)
+plot(gvn_i7, title="GVN=i7", color=color.black)
+
+sl_i0 = gvn_i0_level - 12 
+sl_i1 = gvn_i1_level - 12 
+sl_i2 = gvn_i2 - 12
+sl_i3 = gvn_i3 - 12
+sl_i5 = gvn_i5 - 12
+sl_i6 = gvn_i6 - 12
+sl_i7 = gvn_i7 - 12
+
+// Strategy 3 Dynamic Targets
+dynTarget_i1 = (stratMode == "Strategy 3") ? gvn_i5 : gvn_i7
+dynTarget_i5 = (stratMode == "Strategy 3") ? gvn_i2 : gvn_i3
+dynTarget_i7 = (stratMode == "Strategy 3") ? gvn_i5 : gvn_i6
+
+plot(sl_i0, title="SL i0", color=color.red)
+plot(sl_i1, title="SL i1", color=color.red)
+plot(sl_i2, title="SL i2", color=color.red)
+plot(sl_i3, title="SL i3", color=color.red)
+plot(sl_i5, title="SL i5", color=color.red)
+plot(sl_i6, title="SL i6", color=color.red)
+plot(sl_i7, title="SL i7", color=color.red)
+
+t_i0 = gvn_i0_level - 2 
+t_i2 = gvn_i2 - 2
+
+float entryBuffer = 1.0     
+float exitBuffer = 0.5      
+
+buffered_gvn_i0_buy_entry_price = gvn_i0_level + entryBuffer 
+buffered_gvn_i1_buy_entry_price = gvn_i1_level + entryBuffer 
+buffered_gvn_i2_buy_entry_price = gvn_i2 + entryBuffer
+buffered_gvn_i3_buy_entry_price = gvn_i3 + entryBuffer
+buffered_gvn_i5_buy_entry_price = gvn_i5 + entryBuffer
+buffered_gvn_i6_buy_entry_price = gvn_i6 + entryBuffer
+buffered_gvn_i7_buy_entry_price = gvn_i7 + entryBuffer
+
+buffered_sl_i0_long_exit_price = sl_i0 - exitBuffer 
+buffered_sl_i1_long_exit_price = sl_i1 - exitBuffer 
+buffered_sl_i2_long_exit_price = sl_i2 - exitBuffer
+buffered_sl_i3_long_exit_price = sl_i3 - exitBuffer
+buffered_sl_i5_long_exit_price = sl_i5 - exitBuffer
+buffered_sl_i6_long_exit_price = sl_i6 - exitBuffer
+buffered_sl_i7_long_exit_price = sl_i7 - exitBuffer
+
+buffered_t_i0_long_exit_price = t_i0 + exitBuffer 
+buffered_t_i2_long_exit_price = t_i0 + exitBuffer 
+
+var bool tradeActive_i0 = false
+var bool tradeActive_i1 = false 
+var bool tradeActive_i2 = false
+var bool tradeActive_i3 = false
+var bool tradeActive_i5 = false
+var bool tradeActive_i6 = false
+var bool tradeActive_i7 = false
+
+if isNewDay
+    tradeActive_i0 := false
+    tradeActive_i1 := false 
+    tradeActive_i2 := false
+    tradeActive_i3 := false
+    tradeActive_i5 := false
+    tradeActive_i6 := false
+    tradeActive_i7 := false
+
+// USING ta.crossover for BUYS and ta.crossunder for SL to prevent whipsaws
+buyCondition_i0 = valid and ta.crossover(close, buffered_gvn_i0_buy_entry_price) and not tradeActive_i0
+slCondition_i0 = tradeActive_i0 and ta.crossunder(close, buffered_sl_i0_long_exit_price)
+targetCondition_i0 = tradeActive_i0 and ta.crossover(close, buffered_t_i0_long_exit_price)
+
+buyCondition_i1 = valid and ta.crossover(close, buffered_gvn_i1_buy_entry_price) and not tradeActive_i1
+slCondition_i1 = tradeActive_i1 and ta.crossunder(close, buffered_sl_i1_long_exit_price)
+targetCondition_i1 = tradeActive_i1 and ta.crossover(close, dynTarget_i1 + exitBuffer)
+
+buyCondition_i2 = valid and ta.crossover(close, buffered_gvn_i2_buy_entry_price) and not tradeActive_i2
+slCondition_i2 = tradeActive_i2 and ta.crossunder(close, buffered_sl_i2_long_exit_price)
+targetCondition_i2 = tradeActive_i2 and ta.crossover(close, buffered_t_i2_long_exit_price)
+
+buyCondition_i3 = valid and ta.crossover(close, buffered_gvn_i3_buy_entry_price) and not tradeActive_i3
+slCondition_i3 = tradeActive_i3 and ta.crossunder(close, buffered_sl_i3_long_exit_price)
+targetCondition_i3 = tradeActive_i3 and ta.crossover(close, gvn_i2 + exitBuffer)
+
+// --- ADDING FILTERS FOR MOMENTUM & FAKE BREAKOUTS ---
+volAvg = ta.sma(volume, 20)
+isVolumeHigh = volume > volAvg
+isGreenCandle = close > open
+rsiValue = ta.rsi(close, 14)
+isRSIStrong = rsiValue > 50
+
+valid = isGreenCandle and isVolumeHigh and isRSIStrong
+
+buyCondition_i5 = valid and ta.crossover(close, buffered_gvn_i5_buy_entry_price) and not tradeActive_i5
+slCondition_i5 = tradeActive_i5 and ta.crossunder(close, buffered_sl_i5_long_exit_price)
+targetCondition_i5 = tradeActive_i5 and ta.crossover(close, dynTarget_i5 + exitBuffer)
+
+buyCondition_i6 = valid and ta.crossover(close, buffered_gvn_i6_buy_entry_price) and not tradeActive_i6
+slCondition_i6 = tradeActive_i6 and ta.crossunder(close, buffered_sl_i6_long_exit_price)
+targetCondition_i6 = tradeActive_i6 and ta.crossover(close, gvn_i5 + exitBuffer)
+
+buyCondition_i7 = valid and ta.crossover(close, buffered_gvn_i7_buy_entry_price) and not tradeActive_i7
+slCondition_i7 = tradeActive_i7 and ta.crossunder(close, buffered_sl_i7_long_exit_price)
+targetCondition_i7 = tradeActive_i7 and ta.crossover(close, dynTarget_i7 + exitBuffer)
+
+// --- Unified Exact Alerts ---
+
+// i0
+if buyCondition_i0
+    tradeActive_i0 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i0" }'
+    alert(msg, alert.freq_once_per_bar_close)
+if slCondition_i0
+    tradeActive_i0 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar_close)
+if targetCondition_i0
+    tradeActive_i0 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i1
+if buyCondition_i1
+    tradeActive_i1 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i1", "target": "' + str.tostring(math.round(dynTarget_i1,2)) + '", "sl": "' + str.tostring(math.round(sl_i1,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i1
+    tradeActive_i1 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i1
+    tradeActive_i1 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i2
+if buyCondition_i2
+    tradeActive_i2 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i2", "target": "' + str.tostring(math.round(t_i2,2)) + '", "sl": "' + str.tostring(math.round(sl_i2,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i2
+    tradeActive_i2 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i2
+    tradeActive_i2 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i3
+if buyCondition_i3
+    tradeActive_i3 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i3", "target": "' + str.tostring(math.round(gvn_i2,2)) + '", "sl": "' + str.tostring(math.round(sl_i3,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i3
+    tradeActive_i3 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i3
+    tradeActive_i3 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i5
+if buyCondition_i5
+    tradeActive_i5 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i5", "target": "' + str.tostring(math.round(dynTarget_i5,2)) + '", "sl": "' + str.tostring(math.round(sl_i5,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i5
+    tradeActive_i5 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i5
+    tradeActive_i5 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i6
+if buyCondition_i6
+    tradeActive_i6 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i6", "target": "' + str.tostring(math.round(gvn_i5,2)) + '", "sl": "' + str.tostring(math.round(sl_i6,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i6
+    tradeActive_i6 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i6
+    tradeActive_i6 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i7
+if buyCondition_i7
+    tradeActive_i7 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i7", "target": "' + str.tostring(math.round(dynTarget_i7,2)) + '", "sl": "' + str.tostring(math.round(sl_i7,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i7
+    tradeActive_i7 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i7
+    tradeActive_i7 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+// ====== VISUAL TARGET LINES (With Buffer) ======
+plot(buffered_t_i0_long_exit_price, title="Tgt_i0_i2", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)
+plot(dynTarget_i1 + exitBuffer, title="Tgt_i1", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)
+plot(dynTarget_i5 + exitBuffer, title="Tgt_i5", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)
+plot(dynTarget_i7 + exitBuffer, title="Tgt_i7", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)
+plot(gvn_i2 + exitBuffer, title="Tgt_i3", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)
+plot(gvn_i5 + exitBuffer, title="Tgt_i6", color=color.new(color.green, 30), style=plot.style_linebr, linewidth=2)

@@ -40,8 +40,8 @@ PERMANENT_CREDENTIALS_BACKUP = {
         "client_id": "P218754",
         "totp_key": "U7IPZ7XFZELCONOX6SHPM4C7I4",
         "password": "3061", # Broker PIN
-        "api_key": "vS42B24z",
-        "api_secret": "" # Optional
+        "api_key": "JGYxHp6d",
+        "api_secret": "ecce42b3-0010-48af-b432-cfab3513094a"
     },
     "shoonya": {
         "broker_name": "Shoonya",
