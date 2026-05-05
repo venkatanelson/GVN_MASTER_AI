@@ -42,8 +42,8 @@ def shoonya_http_login(cfg):
     """Dual-Strategy HTTP/2 Login for Shoonya (Force H2)"""
     client_id    = cfg.get("client_id")
     password     = cfg.get("password")
-    api_secret   = cfg.get("client_secret")
-    vendor_code  = cfg.get("access_token") 
+    api_secret   = cfg.get("client_secret") or cfg.get("api_secret")
+    vendor_code  = cfg.get("access_token") or cfg.get("vendor_code")
     totp_key     = cfg.get("totp_key")
 
     if not all([client_id, password, api_secret, vendor_code]):
@@ -65,43 +65,53 @@ def shoonya_http_login(cfg):
         'Accept': 'application/json'
     }
 
-    # Try both endpoints
-    for url in endpoints:
-        try:
-            payload = {
-                "apkversion": "py:0.0.22", 
-                "uid": client_id, 
-                "pwd": pwd_hash,
-                "factor2": totp, 
-                "vc": vendor_code, 
-                "appkey": app_key_hash,
-                "imei": "ABC123456789", 
-                "source": "API"
-            }
-            payload_data = {"jData": json.dumps(payload)}
-            
-            logger.info(f"🔄 Attempting Forced HTTP/2: {url.split('/')[-1]}")
-            
-            # Forcing HTTP/2 by disabling HTTP/1.1
-            with httpx.Client(http2=True, timeout=20.0) as client:
-                resp = client.post(url, data=payload_data, headers=headers)
-                
-                logger.info(f"📡 Protocol: {resp.http_version} | Status: {resp.status_code}")
-                
-                if resp.status_code == 200:
-                    res = resp.json()
-                    if res.get('stat') == 'Ok':
-                        logger.info(f"✅ Shoonya login successful ({resp.http_version})")
-                        return res.get('susertoken')
-                    else:
-                        logger.warning(f"⚠️ Shoonya API Error: {res.get('emsg')}")
-                elif resp.status_code == 502:
-                    logger.warning("⚠️ 502 Gateway Error: Server might be down or IP blocked.")
-                elif resp.status_code == 426:
-                    logger.warning("⚠️ 426 Upgrade Required: Server rejecting protocol.")
-                    
-        except Exception as e:
-            logger.error(f"❌ Error during login: {e}")
+    # Strategy 1: Use Official Shoonya Library (NorenApi)
+    try:
+        api = NorenApi(host='https://api.shoonya.com/NorenWClientTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
+        logger.info(f"🔄 Attempting Official API Login for {client_id}...")
+        
+        ret = api.login(userid=client_id, password=password, twoFA=totp, 
+                        vendor_code=vendor_code, api_secret=api_secret, imei="abc1234")
+        
+        if ret and ret.get('stat') == 'Ok':
+            logger.info("✅ Shoonya official login successful")
+            return ret.get('susertoken')
+        else:
+            logger.warning(f"⚠️ Shoonya Library Login Failed, trying direct HTTP...")
+    except Exception as e:
+        logger.error(f"⚠️ Shoonya Library Error: {e}. Trying direct HTTP fallback...")
+
+    # Strategy 2: Direct HTTP Post (QuickAuth) - Robust Fallback
+    try:
+        logger.info("📡 [FALLBACK] Attempting Direct HTTP QuickAuth...")
+        payload = {
+            "apkversion": "1.0.0",
+            "uid": client_id,
+            "pwd": pwd_hash,
+            "twofa": totp,
+            "vc": vendor_code,
+            "appkey": app_key_hash,
+            "imei": "abc1234",
+            "source": "API"
+        }
+        
+        # Note: Shoonya expects jData=... format
+        jData = "jData=" + json.dumps(payload)
+        resp = requests.post(endpoints[0], data=jData, headers=headers, timeout=10)
+        
+        if resp.status_code == 200:
+            res = resp.json()
+            if res.get('stat') == 'Ok':
+                logger.info("✅ Shoonya direct HTTP login successful")
+                return res.get('susertoken')
+            else:
+                logger.error(f"❌ Shoonya Direct Login Failed: {res.get('emsg')}")
+        else:
+            logger.error(f"❌ Shoonya HTTP Error {resp.status_code}")
+    except Exception as e:
+        logger.error(f"❌ Shoonya Fallback Error: {e}")
+
+    return None
                 
     logger.error("❌ All Shoonya login attempts failed.")
     return None
@@ -124,6 +134,54 @@ def dhan_http_test(cfg):
     except Exception as e:
         logger.error(f"Dhan test exception: {e}")
     return False
+
+# ─── ANGEL ONE BYPASS ───────────────────────────────────────
+def angel_http_login(cfg):
+    """Direct HTTP login for Angel One SmartAPI"""
+    client_code = cfg.get("client_id")
+    mpin        = cfg.get("password")       # 4-digit MPIN
+    api_key     = cfg.get("access_token") or cfg.get("api_key")   # Support both naming conventions
+    totp_key    = cfg.get("totp_key")
+    
+    if not all([client_code, mpin, api_key, totp_key]):
+        logger.warning("Missing Angel One credentials")
+        return None
+        
+    totp = get_totp(totp_key)
+    headers = {
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
+        "X-UserType":    "USER",
+        "X-SourceID":    "WEB",
+        "X-ClientLocalIP": "127.0.0.1",
+        "X-ClientPublicIP": "127.0.0.1",
+        "X-MACAddress":  "00:00:00:00:00:00",
+        "X-PrivateKey":  api_key,
+    }
+    payload = {
+        "clientcode": client_code,
+        "password":   mpin,
+        "totp":       totp,
+    }
+    try:
+        url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/user/v1/loginByPassword"
+        resp = requests.post(url, json=payload, headers=headers, timeout=12)
+        
+        if resp.status_code != 200:
+            logger.error(f"❌ Angel Login HTTP {resp.status_code}: {resp.text[:200]}")
+            return None
+            
+        data = resp.json()
+        if data.get('status') == True and data.get('data'):
+            jwt_token = data['data'].get('jwtToken', '')
+            logger.info("✅ Angel One login successful")
+            return jwt_token
+        else:
+            logger.error(f"❌ Angel Login Failed: {data.get('message', data)}")
+    except Exception as e:
+        logger.error(f"❌ Angel Connection Error: {e}")
+    return None
+
 
 # ─── UNIVERSAL ORDER EXECUTION ──────────────────────────────
 def place_order_universal(cfg, symbol, txn_type, qty):
@@ -151,7 +209,13 @@ def place_order_universal(cfg, symbol, txn_type, qty):
             # Fallback to API if configured
             order_id = place_dhan_official_api_order(cfg.get("client_id"), cfg.get("access_token"), symbol, txn_type, qty)
 
-    # 3. OTHER BROKERS (Generic Webhook)
+    # 3. ANGEL ONE
+    elif "angel" in broker:
+        token = cfg.get("angel_token") or angel_http_login(cfg)
+        if token:
+            order_id = _place_angel_order(cfg, token, symbol, txn_type, qty)
+
+    # 4. OTHER BROKERS (Generic Webhook)
     else:
         if cfg.get("webhook_url") and cfg.get("tv_secret"):
             success = place_generic_webhook_order(cfg["webhook_url"], cfg["tv_secret"], symbol, txn_type, qty)
@@ -161,6 +225,50 @@ def place_order_universal(cfg, symbol, txn_type, qty):
     _track_order(order_id, symbol, txn_type, qty, broker)
 
     return order_id
+
+def _place_angel_order(cfg, token, symbol, txn_type, qty):
+    """
+    Place order directly on Angel One via SmartAPI
+    """
+    try:
+        # 🌟 Angel One requires Symbol Token. We usually get it from our chain data.
+        # For indices, token is fixed. For others, we lookup.
+        token_id = "26000" if "NIFTY" in symbol.upper() else "99926000"
+        
+        url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/order/v1/placeOrder"
+        headers = {
+            "Content-Type": "application/json", "Accept": "application/json",
+            "X-UserType": "USER", "X-SourceID": "WEB",
+            "X-ClientLocalIP": "127.0.0.1", "X-ClientPublicIP": "127.0.0.1",
+            "X-MACAddress": "00:00:00:00:00:00",
+            "X-PrivateKey": cfg.get("api_key"), "Authorization": f"Bearer {token}"
+        }
+        
+        payload = {
+            "variety": "NORMAL",
+            "tradingsymbol": symbol,
+            "symboltoken": token_id, 
+            "transactiontype": txn_type.upper(),
+            "exchange": "NFO",
+            "ordertype": "MARKET",
+            "producttype": "CARRYFORWARD",
+            "duration": "DAY",
+            "quantity": str(qty)
+        }
+        
+        resp = requests.post(url, json=payload, headers=headers)
+        res = resp.json()
+        
+        if res.get('status') == True:
+            order_id = res.get('data', {}).get('orderid')
+            logger.info(f"✅ Angel One order placed: {order_id}")
+            return order_id
+        else:
+            logger.error(f"Angel order failed: {res.get('message')}")
+            return None
+    except Exception as e:
+        logger.error(f"Angel order exception: {e}")
+        return None
 
 def _place_shoonya_order(cfg, token, symbol, txn_type, qty):
     """

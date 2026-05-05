@@ -9,6 +9,7 @@ from gvn_telegram_engine import TelegramAlertManager
 from gvn_paper_trading_engine import PaperTradingManager
 from broker_api import place_order_universal
 import shared_data
+import gvn_data_bank
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GVN_AI_Delta60")
@@ -36,6 +37,9 @@ class GVNAiDelta60Engine:
             self.telegram = None
             
         self.paper_trading = PaperTradingManager().get_executor()
+        self.last_cleanup_date = None
+        self.last_snapshot_time = 0
+        gvn_data_bank.init_db()
 
     def run_ai_loop(self):
         self.is_running = True
@@ -47,6 +51,9 @@ class GVNAiDelta60Engine:
                 if not self._check_safety_status():
                     time.sleep(5)
                     continue
+
+                # 🧹 WEEKLY EXPIRY CLEANUP
+                self._handle_weekly_cleanup()
 
                 for index in self.indices:
                     chain = nse_option_chain.fetch_nse_option_chain(index)
@@ -60,6 +67,12 @@ class GVNAiDelta60Engine:
                     
                     # 2. Monitor & Execute
                     strikes = self._pick_alpha_strikes(records, spot)
+                    
+                    # 📸 PERIODIC SNAPSHOT (Every 5 minutes)
+                    if time.time() - self.last_snapshot_time > 300:
+                        self._save_market_snapshot(index, strikes)
+                        self.last_snapshot_time = time.time()
+
                     for strike in strikes:
                         self._manage_trade_cycle(index, strike)
                 
@@ -88,6 +101,22 @@ class GVNAiDelta60Engine:
                 self.memory["active_trades"] = {}
             return False
         return True
+
+    def _handle_weekly_cleanup(self):
+        """Runs cleanup at 6:00 PM (18:00) every Thursday (Expiry Day)"""
+        now = datetime.now()
+        # Thursday is weekday 3 (Monday is 0)
+        if now.weekday() == 3 and now.hour == 18 and now.minute == 0 and self.last_cleanup_date != now.date():
+            logger.info("🧹 [GVN WEEKLY CLEANUP] Starting Expiry Day database maintenance...")
+            gvn_data_bank.cleanup_old_data(days=7)
+            self.last_cleanup_date = now.date()
+            if self.telegram:
+                self.telegram.send_alert("🧹 <b>GVN WEEKLY CLEANUP</b>\nExpiry Day maintenance complete. Data Bank refreshed for next cycle.")
+
+    def _save_market_snapshot(self, symbol, strikes):
+        """Saves current strikes data to the Data Bank"""
+        gvn_data_bank.save_option_snapshot(symbol, strikes)
+        logger.info(f"📸 [GVN DATA BANK] Saved snapshot for {symbol}")
 
     def _sync_sentiment(self, records):
         tot_ce = records.get("filtered", {}).get("CE", {}).get("totOI", 1)
@@ -120,7 +149,7 @@ class GVNAiDelta60Engine:
         if not levels: return
 
         if key not in self.memory["active_trades"]:
-            if (ltp <= levels["Level_7"] * 1.01 or (ltp >= levels["Level_5"] and ltp <= levels["Level_5"] * 1.03)) \
+            if (ltp <= levels["i7"] * 1.01 or (ltp >= levels["i5"] and ltp <= levels["i5"] * 1.03)) \
                and shared_data.market_pulse["score"] >= 65:
                 self._execute_smart_entry(symbol, strike, ltp, levels)
         else:
@@ -140,9 +169,9 @@ class GVNAiDelta60Engine:
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
         key = f"{strike['strike']}_{strike['type']}"
-        t1 = levels["Level_6"] if price < levels["Level_5"] else levels["Level_3"]
-        t2 = levels["Level_5"] if price < levels["Level_5"] else levels["Level_2"]
-        sl = levels["Level_7"] * 0.95
+        t1 = levels["i6"] if price < levels["i5"] else levels["i3"]
+        t2 = levels["i5"] if price < levels["i5"] else levels["i2"]
+        sl = levels["i7"] * 0.95
         self.memory["active_trades"][key] = {"entry": price, "t1": t1, "t2": t2, "sl": sl, "t1_hit": False, "total_lots": target_lots}
         self._fire_order(symbol, strike, "BUY", target_lots, f"Smart Entry ({target_lots} Lots)")
         self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], price, t2, sl)
