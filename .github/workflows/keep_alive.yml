@@ -1,0 +1,16 @@
+name: Keep Render Server Awake
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent the Render server from going to sleep
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping_server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the GVN Algo Dashboard
+        run: |
+          # Keep Render awake by pinging
+          curl -s "https://gvn-master-ai.onrender.com/" > /dev/null

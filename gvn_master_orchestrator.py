@@ -1,0 +1,176 @@
+"""
+GVN Master Orchestrator: Central Hub for All 25-Point Trading System
+Coordinates Greeks, AI Sentiment, i-Levels, Execution, Alerts, and Paper Trading
+"""
+
+import logging
+from datetime import datetime
+import json
+from typing import Dict, Any, Optional
+
+# Import all engines
+try:
+    from gvn_greeks_engine import AlphaGridMonitor, StrikeSelector
+    from gvn_ai_sentiment_engine import UnifiedSentimentFilter
+    from gvn_levels_engine import calculate_gvn_levels, TradeSetupGenerator, is_expiry_day
+    from gvn_telegram_engine import TelegramAlertManager
+    from gvn_paper_trading_engine import PaperTradingManager
+    from gvn_webhook_executor import WebhookExecutor, TradeOrderFormatter
+    from broker_api import shoonya_http_login, dhan_http_test, angel_http_login
+    from gvn_live_execution_engine import GVNLiveExecutionEngine
+    from gvn_ai_delta60_engine import GVNAiDelta60Engine
+    from nse_option_chain import start_nse_worker
+    from truedata_connector import start_truedata_engine
+except ImportError as e:
+    print(f"⚠️ Warning: Some engines could not be imported: {e}")
+
+import shared_data
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("MasterOrchestrator")
+
+class GVNMasterOrchestrator:
+    def __init__(self, broker_config: Dict[str, Any] = None, telegram_config: Dict[str, Any] = None):
+        self.broker_config = broker_config if broker_config is not None else {}
+        self.telegram_config = telegram_config if telegram_config is not None else {}
+        
+        logger.info("🚀 Initializing GVN Master Orchestrator...")
+        
+        try:
+            self.greeks_monitor = AlphaGridMonitor(self.broker_config)
+            self.strike_selector = StrikeSelector()
+            self.sentiment_filter = UnifiedSentimentFilter()
+            self.telegram_manager = TelegramAlertManager(
+                self.telegram_config.get("bot_token", ""),
+                self.telegram_config.get("chat_id", "")
+            )
+            self.paper_trading = PaperTradingManager()
+            self.webhook_executor = WebhookExecutor(
+                webhook_url=self.broker_config.get("webhook_url"),
+                broker=self.broker_config.get("broker_name", "Dhan")
+            )
+            # Initialize Live Execution Engine
+            self.live_executor = GVNLiveExecutionEngine(
+                broker_api=None,  # Will attach broker instance later
+                telegram_bot_token=self.telegram_config.get("bot_token", ""),
+                telegram_chat_id=self.telegram_config.get("chat_id", "")
+            )
+            # Initialize AI Delta 60 Engine
+            self.ai_delta60_engine = GVNAiDelta60Engine(
+                bot_token=self.telegram_config.get("bot_token", ""),
+                chat_id=self.telegram_config.get("chat_id", "")
+            )
+        except Exception as e:
+            logger.error(f"❌ Error initializing engines: {e}")
+        
+        self.active_trades = []
+        self.is_live_mode = False
+        self.system_initialized = False
+        self.gvn_levels = None
+        self.current_sentiment = None
+
+    def start(self, config: Dict[str, Any] = None):
+        if config:
+            self.broker_config.update(config)
+            
+        logger.info("📋 Initializing system components...")
+        
+        primary_broker = self.broker_config.get("broker_name", "").lower()
+        logger.info(f"📍 Primary Broker Selected: {primary_broker}")
+        
+        # 1. Attempt Angel One Login
+        is_angel_primary = "angel" in primary_broker
+        angel_cfg = self.broker_config if is_angel_primary else shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel")
+        
+        if angel_cfg and angel_cfg.get("totp_key"):
+            try:
+                token = angel_http_login(angel_cfg)
+                if token:
+                    self.broker_config["angel_token"] = token
+                    shared_data.broker_connection_status["AngelOne"] = True
+                    # 🌟 SYNC TO NSE ENGINE
+                    from nse_option_chain import dhan_master_config
+                    dhan_master_config.update({
+                        "broker_name": "angel",
+                        "client_id": angel_cfg.get("client_id"),
+                        "access_token": token,
+                        "active": True
+                    })
+                    self.telegram_manager.alert_status("CONNECTED", "✅ Angel One Connected & NSE Scanner Active")
+                    logger.info("✅ Angel One authenticated & NSE Scanner Synced")
+                else:
+                    shared_data.broker_connection_status["AngelOne"] = False
+                    logger.error("❌ Angel One authentication failed")
+            except Exception as e:
+                shared_data.broker_connection_status["AngelOne"] = False
+                logger.error(f"❌ Angel One Login Error: {e}")
+
+        # 2. Attempt Shoonya Login
+        is_shoonya_primary = "shoonya" in primary_broker
+        shoonya_cfg = self.broker_config if is_shoonya_primary else shared_data.PERMANENT_CREDENTIALS_BACKUP.get("shoonya")
+        
+        # 🌟 Optimization: If Angel is primary and connected, skip Shoonya if it's not primary
+        if shared_data.broker_connection_status.get("AngelOne") and not is_shoonya_primary:
+            logger.info("⏭️ Skipping Shoonya login (Angel One is primary and connected)")
+            shoonya_cfg = None
+
+        if shoonya_cfg and shoonya_cfg.get("totp_key"):
+            try:
+                token = shoonya_http_login(shoonya_cfg)
+                if token:
+                    self.broker_config["shoonya_token"] = token
+                    shared_data.broker_connection_status["Shoonya"] = True
+                    # 🌟 SYNC TO NSE ENGINE (Fallback/Primary)
+                    from nse_option_chain import dhan_master_config
+                    dhan_master_config.update({
+                        "broker_name": "shoonya",
+                        "client_id": shoonya_cfg.get("client_id"),
+                        "access_token": token,
+                        "password": shoonya_cfg.get("password"),
+                        "totp_key": shoonya_cfg.get("totp_key"),
+                        "active": True
+                    })
+                    self.telegram_manager.alert_status("CONNECTED", "✅ Shoonya Connected & NSE Scanner Active")
+                    logger.info("✅ Shoonya authenticated & NSE Scanner Synced")
+                else:
+                    shared_data.broker_connection_status["Shoonya"] = False
+                    logger.error("❌ Shoonya authentication failed")
+            except Exception as e:
+                shared_data.broker_connection_status["Shoonya"] = False
+                logger.error(f"❌ Shoonya Login Error: {e}")
+        
+        import threading
+        if hasattr(self, 'ai_delta60_engine'):
+            threading.Thread(target=self.ai_delta60_engine.run_ai_loop, daemon=True).start()
+            logger.info("🧠 AI Delta 60 Engine background loop started.")
+
+        # 🚀 START NSE OPTION CHAIN WORKER
+        start_nse_worker()
+        logger.info("🔥 NSE Option Chain Worker started.")
+
+        # 🚀 START TRUEDATA HIGH-SPEED ENGINE
+        try:
+            start_truedata_engine()
+            logger.info("✅ TrueData High-Speed Engine Started")
+        except Exception as e:
+            logger.warning(f"⚠️ TrueData Start Failed: {e}")
+
+        self.system_initialized = True
+        shared_data.system_status["initialized"] = True
+        logger.info("✅ System initialization complete")
+
+    def on_market_tick(self, symbol: str, spot_price: float, volume: int, open_interest: int):
+        shared_data.update_market_data(symbol, spot_price)
+        # Logic for tick processing...
+        pass
+
+# Singleton pattern
+_orchestrator = None
+
+def get_orchestrator(broker_config=None, telegram_config=None):
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = GVNMasterOrchestrator(broker_config, telegram_config)
+    elif broker_config:
+        _orchestrator.broker_config.update(broker_config)
+    return _orchestrator

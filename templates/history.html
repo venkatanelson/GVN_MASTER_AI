@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="te">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN Algo - Full Trade History</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.5);
+            --bg-dark: #020617;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.1) 0px, transparent 50%);
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            border-top: 5px solid var(--primary);
+        }
+
+        h2 {
+            color: #ffffff;
+            margin-top: 0;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        /* P&L Box */
+        .pnl-box {
+            background: rgba(99, 102, 241, 0.1);
+            border-left: 5px solid var(--primary);
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pnl-label {
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .pnl-value {
+            font-size: 28px;
+            font-weight: 800;
+        }
+
+        .profit {
+            color: #10b981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .loss {
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+            margin-top: 10px;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            color: #94a3b8;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        td {
+            padding: 18px 15px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #e2e8f0;
+        }
+
+        td:first-child { border-radius: 12px 0 0 12px; }
+        td:last-child { border-radius: 0 12px 12px 0; }
+
+        .badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 800;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-pdf {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-clear {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-clear:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        /* Print Styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #ffffff;
+                color: #000000;
+                background-image: none;
+            }
+
+            .card {
+                background: #ffffff;
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+                color: #000000;
+                backdrop-filter: none;
+            }
+
+            h2, .pnl-label, td, th {
+                color: #000000 !important;
+            }
+            
+            .pnl-box {
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+            }
+
+            td {
+                background: none;
+                border-bottom: 1px solid #e2e8f0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header-actions no-print">
+            <a href="/" style="color: var(--primary); text-decoration: none; font-weight: 800; font-size: 14px;">&larr; Back to Dashboard</a>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="window.print()" class="btn btn-pdf">📄 Download PDF Statement</button>
+                <a href="/clear-history" class="btn btn-clear"
+                    onclick="return confirm('Are you sure you want to delete all history? This cannot be undone!')">🗑️
+                    Clear</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 Full Performance Statement</h2>
+            <p style="color: #94a3b8; font-size: 14px; margin-bottom: 25px;">Detailed breakdown of your GVN Algo performance over the last 30 days.</p>
+
+            <div class="pnl-box">
+                <span class="pnl-label">Cumulative Total P&L</span>
+                <span class="pnl-value {% if total_pnl >= 0 %}profit{% else %}loss{% endif %}">
+                    ₹ {{ "%.2f"|format(total_pnl) }}
+                </span>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timeline</th>
+                        <th>Net P&L (₹)</th>
+                        <th>Performance Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in history %}
+                    <tr>
+                        <td><b style="color: #fff;">{{ day.month }}</b></td>
+                        <td class="{% if day.pnl > 0 %}profit{% elif day.pnl < 0 %}loss{% endif %}" style="font-weight: 800; font-size: 16px;">
+                            {% if day.pnl > 0 %}+{% endif %}₹ {{ "%.2f"|format(day.pnl) }}
+                        </td>
+                        <td>
+                            {% if day.pnl > 0 %}
+                                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">PROFITABLE</span>
+                            {% elif day.pnl < 0 %}
+                                <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">LOSS</span>
+                            {% else %}
+                                <span class="badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);">BREAK-EVEN</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; padding: 50px; color: #94a3b8; font-weight: 600;">No data recorded yet. Start trading to see your history!</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 40px; border-top: 1px solid var(--glass-border); padding-top: 20px; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; line-height: 1.6;">
+                    Generated by GVN Master Algo AI Engine.<br>
+                    This statement is for informational purposes only. Past performance does not guarantee future results.
+                </p>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

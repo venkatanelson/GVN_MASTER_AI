@@ -1,0 +1,476 @@
+//@version=5
+indicator("GVN MASTER ALGO - SUPREME V3", overlay=true)
+
+// ==========================================
+// ⚙️ USER INPUTS
+// ==========================================
+stratMode = input.string("Strategy 1", title="Select Strategy Mode", options=["Strategy 1", "Strategy 2", "Strategy 3"])
+lotSize = input.int(65, title="Lot Size (e.g., 65 for Nifty)", minval=1)
+noOfLots = input.int(1, title="Number of Lots to Trade", minval=1)
+gvn_secret = input.string("ANWZ22747T", title="GVN Dhan Secret Key")
+
+enableOppSync = input.bool(true, "Enable Opposite Strike Sync", group="Ultra Advanced Filters")
+oppSymbol = input.symbol("", "Opposite Option Strike (e.g., NIFTY...PE)", group="Ultra Advanced Filters")
+enableLongCandleFilter = input.bool(false, "Enable Long Candle Fakeout Filter", group="Ultra Advanced Filters")
+enableTargetLockout = input.bool(true, "Enable Target Hit Lockout (One Trade at a Time)", group="Ultra Advanced Filters")
+enableMicroBreakout = input.bool(false, "Enable Micro-Breakout Filter (Close > Prev High)", group="Ultra Advanced Filters")
+enableVolSpike = input.bool(false, "Enable Volume Spike Filter", group="Ultra Advanced Filters")
+enableTrendFilter = input.bool(false, "Enable EMA Trend Confirmation", group="Ultra Advanced Filters")
+enableChoppinessFilter = input.bool(false, "Enable ADX Choppiness Filter (> 20)", group="Ultra Advanced Filters")
+enableAIFilter = input.bool(false, "Enable AI Smart Flow Filter (Delta & Volume)", group="Ultra Advanced Filters")
+
+showAI = input.bool(true, "Show AI Sentiment Dashboard", group="AI Dashboard Settings")
+aiBoxPos = input.string("Bottom Right", "AI Dashboard Position", options=["Top Left", "Middle Left", "Bottom Left", "Top Center", "Middle Center", "Bottom Center", "Top Right", "Middle Right", "Bottom Right"], group="AI Dashboard Settings")
+aiFontInput = input.string("tiny", "AI Dashboard Font Size", options=["tiny", "small", "normal", "large"], group="AI Dashboard Settings")
+aiLookback = input.int(20, "AI Volume Lookback", group="AI Dashboard Settings")
+showMomentumFlashes = input.bool(true, "Show Momentum Lightning Flashes ⚡", group="AI Dashboard Settings")
+showInstZones = input.bool(true, "Show Institutional S/R Zones", group="AI Dashboard Settings")
+atrPeriod = input.int(7, "ATR Length for MTF", minval=1, group="AI Dashboard Settings")
+factor = input.float(0.90, "ATR Factor for MTF", minval=0.08, step=0.01, group="AI Dashboard Settings")
+
+finalQty = lotSize * noOfLots
+
+// ==== Step 1: Detect New Day and 9:15 Candle ====
+isNewDay = ta.change(time("D"))
+is915Candle = (hour == 9 and minute == 15)
+
+var float high915 = na
+var float low915 = na
+var float close915 = na
+var float n1 = na
+var float n2 = na
+
+if isNewDay
+    high915 := na
+    low915 := na
+    close915 := na
+    n1 := na 
+    n2 := na
+
+if is915Candle
+    high915 := high
+    low915 := low
+    close915 := close
+
+valid = not na(high915) and not na(low915)
+diff = valid ? (high915 - low915) : na
+result = diff / 2
+
+if valid
+    n1 := high915 + result
+    n2 := low915 + result
+
+c1 = (n1 + n2) / 2
+
+eLevel = n2 - math.floor(n2 * 3.2 / 1000)
+tLevel = n2 + math.floor(n2 * 7.1 / 1000)
+
+plot(n1, title="N1", color=color.green, linewidth=2)
+plot(n2, title="N2", color=color.red, linewidth=2)
+plot(c1, title="C1", color=color.orange, linewidth=2)
+plot(eLevel, title="E Level", color=color.teal, linewidth=1)
+plot(tLevel, title="T Level", color=color.fuchsia, linewidth=1)
+
+gvn0_calculated_value = n2 * 0.118 / 0.5
+gvn_i1_calculated_value = n1 * 0.786 / 0.5
+
+gvn_i0_level = gvn_i1_calculated_value 
+gvn_i1_level = gvn0_calculated_value  
+
+gvn_i2 = gvn0_calculated_value + 0.763 * (gvn_i1_calculated_value - gvn0_calculated_value) 
+gvn_i3 = gvn0_calculated_value + 0.618 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i5 = gvn0_calculated_value + 0.5 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i6 = gvn0_calculated_value + 0.382 * (gvn_i1_calculated_value - gvn0_calculated_value)
+gvn_i7 = gvn0_calculated_value + 0.220 * (gvn_i1_calculated_value - gvn0_calculated_value)
+
+plot(gvn_i0_level, title="GVN=i0", color=color.green) 
+plot(gvn_i1_level, title="GVN=i1", color=color.green) 
+plot(gvn_i2, title="GVN=i2", color=color.red, linewidth=2)
+plot(gvn_i3, title="GVN=i3", color=color.gray)
+plot(gvn_i5, title="GVN=i5", color=color.blue, linewidth=2)
+plot(gvn_i6, title="GVN=i6", color=color.purple)
+plot(gvn_i7, title="GVN=i7", color=color.black)
+
+sl_i0 = gvn_i0_level - 12 
+sl_i1 = gvn_i1_level - 12 
+sl_i2 = gvn_i2 - 12
+sl_i3 = gvn_i3 - 12
+sl_i5 = gvn_i5 - 12
+sl_i6 = gvn_i6 - 12
+sl_i7 = gvn_i7 - 12
+
+// Strategy 3 Dynamic Targets
+dynTarget_i1 = (stratMode == "Strategy 3") ? gvn_i5 : gvn_i7
+dynTarget_i5 = (stratMode == "Strategy 3") ? gvn_i2 : gvn_i3
+dynTarget_i7 = (stratMode == "Strategy 3") ? gvn_i5 : gvn_i6
+
+plot(sl_i0, title="SL i0", color=color.red)
+plot(sl_i1, title="SL i1", color=color.red)
+plot(sl_i2, title="SL i2", color=color.red)
+plot(sl_i3, title="SL i3", color=color.red)
+plot(sl_i5, title="SL i5", color=color.red)
+plot(sl_i6, title="SL i6", color=color.red)
+plot(sl_i7, title="SL i7", color=color.red)
+
+t_i0 = gvn_i0_level - 2 
+t_i2 = gvn_i2 - 2
+
+float entryBuffer = 1.0     
+float exitBuffer = 0.5      
+
+buffered_gvn_i0_buy_entry_price = gvn_i0_level + entryBuffer 
+buffered_gvn_i1_buy_entry_price = gvn_i1_level + entryBuffer 
+buffered_gvn_i2_buy_entry_price = gvn_i2 + entryBuffer
+buffered_gvn_i3_buy_entry_price = gvn_i3 + entryBuffer
+buffered_gvn_i5_buy_entry_price = gvn_i5 + entryBuffer
+buffered_gvn_i6_buy_entry_price = gvn_i6 + entryBuffer
+buffered_gvn_i7_buy_entry_price = gvn_i7 + entryBuffer
+
+buffered_sl_i0_long_exit_price = sl_i0 - exitBuffer 
+buffered_sl_i1_long_exit_price = sl_i1 - exitBuffer 
+buffered_sl_i2_long_exit_price = sl_i2 - exitBuffer
+buffered_sl_i3_long_exit_price = sl_i3 - exitBuffer
+buffered_sl_i5_long_exit_price = sl_i5 - exitBuffer
+buffered_sl_i6_long_exit_price = sl_i6 - exitBuffer
+buffered_sl_i7_long_exit_price = sl_i7 - exitBuffer
+
+buffered_t_i0_long_exit_price = t_i0 + exitBuffer 
+buffered_t_i2_long_exit_price = t_i0 + exitBuffer 
+
+var bool tradeActive_i0 = false
+var bool tradeActive_i1 = false 
+var bool tradeActive_i2 = false
+var bool tradeActive_i3 = false
+var bool tradeActive_i5 = false
+var bool tradeActive_i6 = false
+var bool tradeActive_i7 = false
+
+if isNewDay
+    tradeActive_i0 := false
+    tradeActive_i1 := false 
+    tradeActive_i2 := false
+    tradeActive_i3 := false
+    tradeActive_i5 := false
+    tradeActive_i6 := false
+    tradeActive_i7 := false
+
+// ==========================================
+// ⚡ OPPOSITE STRIKE CORRELATION SYNC (CALL vs PUT) ⚡
+// ==========================================
+get_opp_base() =>
+    var float oH = na
+    var float oL = na
+    if hour(time) == 9 and minute(time) == 15
+        oH := high
+        oL := low
+    [oH, oL, close]
+
+safeOppSymbol = oppSymbol == "" ? syminfo.tickerid : oppSymbol
+[oppBaseH, oppBaseL, oppCloseLocal] = request.security(safeOppSymbol, timeframe.period, get_opp_base(), ignore_invalid_symbol=true)
+
+// Calculate Opposite GVN Levels
+oppGvn0 = (oppBaseL + (oppBaseH - oppBaseL)/2) * 0.118 / 0.5
+oppGvn100 = (oppBaseH + (oppBaseH - oppBaseL)/2) * 0.786 / 0.5
+oppGvnR = oppGvn100 - oppGvn0
+opp_i7 = oppGvn0 + 0.220 * oppGvnR
+opp_i5 = oppGvn0 + 0.5 * oppGvnR
+opp_i3 = oppGvn0 + 0.618 * oppGvnR
+
+// Distance from Nearest Support
+oppDistToFloor = math.min(math.abs(oppCloseLocal - opp_i7), math.abs(oppCloseLocal - opp_i5), math.abs(oppCloseLocal - opp_i3))
+oppCandleSizeAvg = ta.sma(high - low, 10)
+oppRoomInCandles = (oppCandleSizeAvg > 0) ? (oppDistToFloor / oppCandleSizeAvg) : 2.0
+
+// Minimum 2 candles distance constraint
+oppIsFarFromSupport = enableOppSync and not na(oppCloseLocal) ? (oppRoomInCandles >= 2.0) : true
+
+// ==========================================
+// 🎈 MAGNETIC WICK REJECTION & PRESSURE GAUGE
+// ==========================================
+candleTotalLen = high - low
+lowerWickP = candleTotalLen > 0 ? (math.abs(math.min(open, close) - low) / candleTotalLen) * 100 : 0
+upperWickP = candleTotalLen > 0 ? (math.abs(high - math.max(open, close)) / candleTotalLen) * 100 : 0
+
+isRejectingSupport = lowerWickP > 50
+isRejectingResistance = upperWickP > 50
+
+// ==========================================
+// 🤖 GVN AI SMART DASHBOARD (Volume, Time Zone, Inst & Flow)
+// ==========================================
+aiFontSize = aiFontInput == "tiny" ? size.tiny : aiFontInput == "small" ? size.small : aiFontInput == "normal" ? size.normal : size.large
+aiPosConvert(p) =>
+    p == "Top Left" ? position.top_left : p == "Middle Left" ? position.middle_left : p == "Bottom Left" ? position.bottom_left : p == "Top Center" ? position.top_center : p == "Middle Center" ? position.middle_center : p == "Bottom Center" ? position.bottom_center : p == "Top Right" ? position.top_right : p == "Middle Right" ? position.middle_right : position.bottom_right
+
+// 1. Calculate Volume Buying/Selling Pressure
+buyingVolume = math.sum(close > open ? volume : 0, aiLookback)
+sellingVolume = math.sum(close < open ? volume : 0, aiLookback)
+volRatio = buyingVolume / (sellingVolume == 0 ? 1 : sellingVolume)
+
+// 2. Trend Confirmation (Using VWAP & 52 HLC3)
+hcl3_52 = ta.sma(hlc3, 52)
+isPriceAboveVWAP = close > ta.vwap
+isPriceAboveHLC = close > hcl3_52
+
+// 3. AI Mode Decision
+string aiMode = "SIDEWAYS"
+color aiColor = color.yellow
+if volRatio > 1.2 and isPriceAboveVWAP and isPriceAboveHLC
+    aiMode := "BULLISH 🟢"
+    aiColor := color.rgb(163, 211, 151)
+else if volRatio < 0.8 and not isPriceAboveVWAP and not isPriceAboveHLC
+    aiMode := "BEARISH 🔴"
+    aiColor := color.rgb(226, 144, 144)
+
+// 4. SMART MONEY FLOW (Buyers / Sellers Control Delta)
+buyVolFlow = (close >= open) ? volume : 0
+sellVolFlow = (close < open) ? volume : 0
+deltaFlow = buyVolFlow - sellVolFlow
+avgDelta = ta.sma(deltaFlow, 10) 
+string flowText = avgDelta > 0 ? "BUYERS CONTROL 🟢" : "SELLERS CONTROL 🔴"
+color flowColor = avgDelta > 0 ? color.rgb(163, 211, 151) : color.rgb(226, 144, 144)
+
+// 5. Time Zone Momentum Prediction
+tHour = hour(time, "Asia/Kolkata")
+tMin = minute(time, "Asia/Kolkata")
+float timeVal = tHour + (tMin / 60.0)
+string timeZoneStatus = "DULL ZONE (Wait ⚠️)"
+color tzColor = color.rgb(120, 123, 134)
+if (timeVal >= 9.25 and timeVal <= 10.5) 
+    tzColor := color.rgb(255, 153, 0)
+    timeZoneStatus := avgDelta > 0 ? "BUYERS MOMENTUM 🟢 (Morning UP)" : "SELLERS MOMENTUM 🔴 (Morning DOWN)"
+else if (timeVal >= 13.5 and timeVal <= 15.0) 
+    tzColor := color.rgb(33, 150, 243)
+    timeZoneStatus := avgDelta > 0 ? "BUYERS MOMENTUM 🚀 (Breakout UP)" : "SELLERS MOMENTUM 🩸 (Breakout DOWN)"
+
+// 6. Volume Anomaly (Institutional Absorption)
+avgV = ta.sma(volume, 20)
+cBody = math.abs(close - open)
+avgB = ta.sma(cBody, 20)
+bool isInstPump = volume > (avgV * 2.5) and cBody <= avgB
+string instText = "📊 Normal Volume"
+color instColor = color.rgb(230,230,230)
+if isInstPump
+    instText := avgDelta > 0 ? "🚨 BIG BOYS BUYING" : "🚨 BIG BOYS SELLING"
+    instColor := color.aqua
+
+// 7. MTF SUPERTREND CONFIRMATION
+get_st_dir(f, p) =>
+    [_, dir] = ta.supertrend(f, p)
+    dir
+dir5  = request.security(syminfo.tickerid, "5", get_st_dir(factor, atrPeriod))
+dir15 = request.security(syminfo.tickerid, "15", get_st_dir(factor, atrPeriod))
+dir60 = request.security(syminfo.tickerid, "60", get_st_dir(factor, atrPeriod))
+mtfDots = "  " + (dir5 < 0 ? "🟢" : "🔴") + (dir15 < 0 ? "🟢" : "🔴") + (dir60 < 0 ? "🟢" : "🔴")
+
+// 8. Draw the AI Table
+var table aiTable = na
+if showAI
+    aiTable := table.new(aiPosConvert(aiBoxPos), 1, 5, border_width=2, border_color=color.black, frame_color=color.black, frame_width=2)
+if showAI and barstate.islast
+    table.cell(aiTable, 0, 0, "🤖 GVN AI ANALYSIS" + mtfDots, bgcolor=color.black, text_color=color.white, text_size=aiFontSize)
+    table.cell(aiTable, 0, 1, "Mode: " + aiMode + "\nVol Ratio: " + str.tostring(volRatio, "#.##"), bgcolor=aiColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 2, "Zone: " + timeZoneStatus, bgcolor=tzColor, text_color=color.white, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 3, "Inst: " + instText, bgcolor=instColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 4, "Flow: " + flowText, bgcolor=flowColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+
+// 9. Institutional Support/Resistance Boxes
+var box supportBox = na
+var box resistBox  = na
+if showInstZones and isInstPump
+    if avgDelta > 0
+        supportBox := box.new(left=bar_index, top=low, right=bar_index + 50, bottom=low - (high-low)*0.1, bgcolor=color.new(color.lime, 90), border_color=color.new(color.lime, 60), text="SUP", text_size=size.tiny, text_color=color.lime, text_halign=text.align_right)
+    else
+        resistBox := box.new(left=bar_index, top=high + (high-low)*0.1, right=bar_index + 50, bottom=high, bgcolor=color.new(color.red, 90), border_color=color.new(color.red, 60), text="RES", text_size=size.tiny, text_color=color.red, text_halign=text.align_right)
+if not na(supportBox)
+    box.set_right(supportBox, bar_index + 20)
+if not na(resistBox)
+    box.set_right(resistBox, bar_index + 20)
+
+// ==========================================
+// 🛡️ LONG CANDLE VALIDATION (Fakeout Filter)
+// ==========================================
+avgCandleSize = ta.sma(candleTotalLen, 20)
+isAbnormallyHuge = candleTotalLen > (avgCandleSize * 2.5)
+validBreakoutBuyCond = not isAbnormallyHuge or (close > high - (candleTotalLen * 0.25)) // Proper close near high
+validBreakoutBuy = enableLongCandleFilter ? validBreakoutBuyCond : true
+
+// ==========================================
+// 🎯 TARGET LOCKOUT (safeFromFakeout)
+// ==========================================
+// Prevent taking another trade if one is ALREADY ACTIVE (Wait for Target/SL Hit)
+safeFromFakeoutCond = not tradeActive_i0 and not tradeActive_i1 and not tradeActive_i2 and not tradeActive_i3 and not tradeActive_i5 and not tradeActive_i6 and not tradeActive_i7
+safeFromFakeout = enableTargetLockout ? safeFromFakeoutCond : true
+
+// ==========================================
+// PERFECT ALGO ENTRY CONFIRMATIONS (PRO)
+// ==========================================
+// 1. Micro-Breakout: Previous Candle High Break
+buyPrevHighBreakCond = close > high[1]
+buyPrevHighBreak = enableMicroBreakout ? buyPrevHighBreakCond : true
+
+// 2. Volume Anomaly (1.5x of moving average)
+volSMA = ta.sma(volume, 20)
+volSpikeCond = volSMA > 0 and (volume > volSMA * 1.5)
+volSpike = enableVolSpike ? volSpikeCond : true
+
+// 3. Trend Confirmation
+ema50 = ta.ema(close, 50)
+ema20 = ta.ema(close, 20)
+isUpTrend = ema20 > ema50 and close > ema50
+validTrend = enableTrendFilter ? isUpTrend : true
+
+// 4. Choppiness Filter
+[diplus, diminus, adx] = ta.dmi(14, 14)
+isTrending = adx > 20
+validMomentum = enableChoppinessFilter ? isTrending : true
+
+// 5. AI Flow Integration
+aiBullishStrong = (volRatio > 1.0) or (avgDelta > 0)
+validAI = enableAIFilter ? aiBullishStrong : true
+
+// The combined Perfect Entry condition (With our added Ultra Advanced Filters)
+perfectEntryConf = buyPrevHighBreak and volSpike and oppIsFarFromSupport and validBreakoutBuy and safeFromFakeout and validTrend and validMomentum and validAI
+
+// 6. MOMENTUM FLASH (Lightning Trick) ⚡
+cSpread = math.abs(close - open)
+avgSpread = ta.sma(cSpread, 20)
+accelFlash = cSpread > (avgSpread * 2.0) and volSpike
+
+plotshape(showMomentumFlashes and accelFlash and close > open, title="Bullish Flash", location=location.belowbar, color=color.new(color.yellow, 0), style=shape.circle, text="⚡", textcolor=color.yellow, size=size.tiny)
+plotshape(showMomentumFlashes and accelFlash and close < open, title="Bearish Flash", location=location.abovebar, color=color.new(color.orange, 0), style=shape.circle, text="⚡", textcolor=color.orange, size=size.tiny)
+
+// ==========================================
+// 🚀 🚨 ALERT LOGIC (RE-ACTIVATED ta.cross for TOUCH ENTRY) 🚨 🚀
+// ==========================================
+buyCondition_i0 = valid and ta.cross(close, buffered_gvn_i0_buy_entry_price) and not tradeActive_i0
+slCondition_i0 = tradeActive_i0 and ta.crossunder(close, buffered_sl_i0_long_exit_price)
+targetCondition_i0 = tradeActive_i0 and ta.cross(close, buffered_t_i0_long_exit_price)
+
+buyCondition_i1 = valid and ta.cross(close, buffered_gvn_i1_buy_entry_price) and not tradeActive_i1
+slCondition_i1 = tradeActive_i1 and ta.crossunder(close, buffered_sl_i1_long_exit_price)
+targetCondition_i1 = tradeActive_i1 and ta.cross(close, dynTarget_i1 + exitBuffer)
+
+buyCondition_i2 = valid and ta.cross(close, buffered_gvn_i2_buy_entry_price) and not tradeActive_i2
+slCondition_i2 = tradeActive_i2 and ta.crossunder(close, buffered_sl_i2_long_exit_price)
+targetCondition_i2 = tradeActive_i2 and ta.cross(close, buffered_t_i2_long_exit_price)
+
+buyCondition_i3 = valid and ta.cross(close, buffered_gvn_i3_buy_entry_price) and not tradeActive_i3
+slCondition_i3 = tradeActive_i3 and ta.crossunder(close, buffered_sl_i3_long_exit_price)
+targetCondition_i3 = tradeActive_i3 and ta.cross(close, gvn_i2 + exitBuffer)
+
+buyCondition_i5 = valid and ta.cross(close, buffered_gvn_i5_buy_entry_price) and not tradeActive_i5
+slCondition_i5 = tradeActive_i5 and ta.crossunder(close, buffered_sl_i5_long_exit_price)
+targetCondition_i5 = tradeActive_i5 and ta.cross(close, dynTarget_i5 + exitBuffer)
+
+buyCondition_i6 = valid and ta.cross(close, buffered_gvn_i6_buy_entry_price) and not tradeActive_i6
+slCondition_i6 = tradeActive_i6 and ta.crossunder(close, buffered_sl_i6_long_exit_price)
+targetCondition_i6 = tradeActive_i6 and ta.cross(close, gvn_i5 + exitBuffer)
+
+buyCondition_i7 = valid and ta.cross(close, buffered_gvn_i7_buy_entry_price) and not tradeActive_i7
+slCondition_i7 = tradeActive_i7 and ta.crossunder(close, buffered_sl_i7_long_exit_price)
+targetCondition_i7 = tradeActive_i7 and ta.cross(close, dynTarget_i7 + exitBuffer)
+
+// --- Unified Exact Alerts ---
+
+// i0
+if buyCondition_i0
+    tradeActive_i0 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i0 Touch" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i0
+    tradeActive_i0 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i0
+    tradeActive_i0 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i1
+if buyCondition_i1
+    tradeActive_i1 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i1 Touch", "target": "' + str.tostring(math.round(dynTarget_i1,2)) + '", "sl": "' + str.tostring(math.round(sl_i1,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i1
+    tradeActive_i1 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i1
+    tradeActive_i1 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i2
+if buyCondition_i2
+    tradeActive_i2 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i2 Touch", "target": "' + str.tostring(math.round(t_i2,2)) + '", "sl": "' + str.tostring(math.round(sl_i2,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i2
+    tradeActive_i2 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i2
+    tradeActive_i2 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i3
+if buyCondition_i3
+    tradeActive_i3 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i3 Touch", "target": "' + str.tostring(math.round(gvn_i2,2)) + '", "sl": "' + str.tostring(math.round(sl_i3,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i3
+    tradeActive_i3 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i3
+    tradeActive_i3 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i5
+if buyCondition_i5
+    tradeActive_i5 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i5 Touch", "target": "' + str.tostring(math.round(dynTarget_i5,2)) + '", "sl": "' + str.tostring(math.round(sl_i5,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i5
+    tradeActive_i5 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i5
+    tradeActive_i5 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i6
+if buyCondition_i6
+    tradeActive_i6 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i6 Touch", "target": "' + str.tostring(math.round(gvn_i5,2)) + '", "sl": "' + str.tostring(math.round(sl_i6,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i6
+    tradeActive_i6 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i6
+    tradeActive_i6 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// i7
+if buyCondition_i7
+    tradeActive_i7 := true
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(math.round(close,2)) + '", "transactionType": "BUY", "productType": "MARGIN", "eventType": "BUY_ACTIVE", "message": "Buy @i7 Touch", "target": "' + str.tostring(math.round(dynTarget_i7,2)) + '", "sl": "' + str.tostring(math.round(sl_i7,2)) + '" }'
+    alert(msg, alert.freq_once_per_bar)
+if slCondition_i7
+    tradeActive_i7 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed SL" }'
+    alert(msg, alert.freq_once_per_bar)
+if targetCondition_i7
+    tradeActive_i7 := false
+    msg = '{ "secret": "' + gvn_secret + '", "symbol": "' + syminfo.ticker + '", "quantity": "' + str.tostring(finalQty) + '", "orderType": "MARKET", "price": "' + str.tostring(close) + '", "transactionType": "SELL", "productType": "MARGIN", "status": "Closed Target" }'
+    alert(msg, alert.freq_once_per_bar)
+
+// --- Plot Targets for Visual Aid ---
+plot(t_i0, title="T i0", color=color.orange, style=plot.style_circles)
+plot(t_i2, title="T i2", color=color.orange, style=plot.style_circles)
+

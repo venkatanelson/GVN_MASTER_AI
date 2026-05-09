@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN Master Algo - Premium Trading</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00ff88;
+            --primary-dark: #00cc6a;
+            --accent: #00e1ff;
+            --bg-dark: #0b0f19;
+            --text-light: #f8fafc;
+            --glass-bg: rgba(11, 15, 25, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at top right, rgba(0, 225, 255, 0.1), transparent 40%),
+                radial-gradient(circle at bottom left, rgba(0, 255, 136, 0.1), transparent 40%),
+                linear-gradient(rgba(11, 15, 25, 0.9), rgba(11, 15, 25, 0.95)),
+                url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* GIANT BACKGROUND TEXT */
+        .bg-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 15vw;
+            font-weight: 900;
+            color: rgba(255, 255, 255, 0.02);
+            white-space: nowrap;
+            z-index: 0;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        header {
+            padding: 20px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 900;
+            background: linear-gradient(to right, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+
+        .admin-btn {
+            color: #fff;
+            text-decoration: none;
+            font-weight: 800;
+            padding: 12px 25px;
+            border: 2px solid #ff3366;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            background: rgba(255, 51, 102, 0.1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .admin-btn:hover { background: #ff3366; box-shadow: 0 0 20px rgba(255, 51, 102, 0.5); }
+
+        .container {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            padding: 60px 20px; z-index: 10; position: relative;
+        }
+
+        .hero-text { text-align: center; margin-bottom: 50px; }
+        .hero-text h1 { font-size: 4rem; margin-bottom: 15px; text-shadow: 0 4px 20px rgba(0,0,0,0.8); }
+        .hero-text span { color: var(--primary); }
+        .hero-text p { font-size: 1.3rem; color: #cbd5e1; }
+
+        .cards-container { display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1100px; }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 40px; width: 100%; max-width: 480px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            position: relative; overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        .glass-card:hover { transform: translateY(-5px); }
+        
+        .card-header { margin-bottom: 30px; text-align: center; }
+        .card-header h2 { font-size: 2.2rem; margin-bottom: 5px; color: #fff; text-transform: uppercase; letter-spacing: 1px; }
+        .card-header p { color: #94a3b8; font-size: 1rem; }
+
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; margin-bottom: 8px; color: #cbd5e1; font-size: 0.95rem; font-weight: 600; }
+        .input-group input {
+            width: 100%; padding: 15px; background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px;
+            color: #fff; font-size: 1.1rem; outline: none; transition: 0.3s;
+        }
+        .input-group input:focus { border-color: var(--primary); background: rgba(0, 0, 0, 0.8); }
+
+        .btn { width: 100%; padding: 16px; border: none; border-radius: 10px; font-size: 1.2rem; font-weight: 800; cursor: pointer; transition: 0.3s; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .btn-real { background: linear-gradient(135deg, var(--accent), #0077ff); color: #fff; box-shadow: 0 10px 20px -5px rgba(0, 225, 255, 0.4); }
+        .btn-real:hover { box-shadow: 0 15px 25px -5px rgba(0, 225, 255, 0.6); }
+
+        .btn-demo { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #000; box-shadow: 0 10px 20px -5px rgba(0, 255, 136, 0.4); }
+        .btn-demo:hover { box-shadow: 0 15px 25px -5px rgba(0, 255, 136, 0.6); }
+
+        .flashes { list-style: none; width: 100%; max-width: 600px; margin: 0 auto 20px; text-align: center; }
+        .flashes li { padding: 15px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; border-radius: 8px; margin-bottom: 10px; font-weight: 600; }
+
+        .footer { margin-top: 50px; text-align: center; color: #94a3b8; font-size: 1rem; border-top: 1px solid var(--glass-border); padding-top: 20px; width: 100%; max-width: 1000px; }
+        .footer span { color: var(--accent); font-weight: bold; }
+
+        @media (max-width: 768px) {
+            .hero-text h1 { font-size: 2.5rem; }
+            .bg-text { font-size: 25vw; }
+            header { flex-direction: column; gap: 15px; padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- GIANT BACKGROUND TEXT -->
+    <div class="bg-text">GVN MASTER ALGO</div>
+
+    <header>
+        <div class="logo">GVN MASTER ALGO</div>
+        <a href="/admin-control" class="admin-btn">Admin Dashboard</a>
+    </header>
+
+    <div class="container">
+        
+        <div class="hero-text">
+            <h1>The Elite <span>Trading Portal</span></h1>
+            <p>Access your High-Frequency Trading Account securely.</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class="flashes">
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        <div class="cards-container">
+            
+            <!-- REAL & EXISTING USER LOGIN -->
+            <div class="glass-card" style="border-top: 5px solid var(--accent);">
+                <div class="card-header">
+                    <h2 style="color: var(--accent);">User / Real Algo Login</h2>
+                    <p>For existing Demo & Real Account users</p>
+                </div>
+                <form action="/login" method="POST">
+                    <div class="input-group">
+                        <label>Registered Mobile Number / Email</label>
+                        <input type="text" name="login_phone" id="login_phone" placeholder="Enter details to access..." required>
+                    </div>
+                    <button type="submit" class="btn btn-real">Access P&L Dashboard</button>
+                </form>
+            </div>
+
+            <!-- DEMO ALGO REGISTRATION -->
+            <div class="glass-card" style="border-top: 5px solid var(--primary);">
+                <div class="card-header">
+                    <h2 style="color: var(--primary);">New Demo Algo</h2>
+                    <p>Start your 7-Day Free Auto-Trading Trial</p>
+                </div>
+                <form action="/demo-register" method="POST">
+                    <div class="input-group">
+                        <input type="text" name="username" placeholder="Full Name" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" name="phone" placeholder="Phone Number" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" name="email" placeholder="Email Address" required>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 30px;">
+                        <label>Select Virtual Capital (₹)</label>
+                        <input type="number" name="demo_capital" min="50000" max="100000" value="50000" required>
+                    </div>
+                    <button type="submit" class="btn btn-demo">Start Demo Trading Now</button>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- 🛡️ PROFESSIONAL LEGAL DISCLOSURE -->
+        <div class="glass-card" style="margin-top: 50px; max-width: 1000px; border-left: 5px solid #ff3366; padding: 25px; text-align: left;">
+            <h4 style="color: #ff3366; margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px;">⚠️ LEGAL DISCLOSURE & RISK WARNING</h4>
+            <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.6; margin-bottom: 15px;">
+                <b>GVN Algo</b> సాఫ్ట్ వేర్ కేవలం ఎడ్యుకేషనల్ మరియు డెమో పర్పస్ కోసం మాత్రమే. ఈ ప్రాజెక్ట్ యొక్క సక్సెస్ రేట్ ని అనలైజ్ చేయడానికి ఇది రూపొందించబడింది. షేర్ మార్కెట్ ట్రేడింగ్ లో గణనీయమైన ఆర్థిక రిస్క్ ఉంటుంది. మీ ట్రేడింగ్ నిర్ణయాల వల్ల కలిగే ఎటువంటి లాభనష్టాలకు GVN లేదా అడ్మిన్ బాధ్యత వహించదు.
+            </p>
+            <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 15px 0;">
+            <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.6; font-style: italic;">
+                GVN Algo is a proprietary algorithmic research platform intended solely for educational and simulation-based analysis. Algorithmic trading entails significant risk, and past performance is not indicative of future results. GVN and its administrators assume zero liability for any direct or consequential financial damages resulting from the use of this software. By accessing this platform, you acknowledge that all trading decisions are made at your sole discretion and risk.
+            </p>
+        </div>
+
+        <div class="footer">
+            Support Line 1: <span>+91 {{config.support_number_1}}</span> &nbsp;|&nbsp; Support Line 2: <span>+91 {{config.support_number_2}}</span>
+        </div>
+    </div>
+
+</body>
+</html>

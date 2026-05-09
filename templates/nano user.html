@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN Algo - User Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        
+        /* Subscription Cards */
+        .plans-container { display: flex; gap: 20px; margin-top: 30px; justify-content: center; }
+        .plan-card { background: #fff; border: 2px solid #e1e1e1; border-radius: 15px; padding: 20px; width: 280px; text-align: center; transition: 0.3s; }
+        .plan-card:hover { border-color: #007bff; transform: translateY(-5px); }
+        .plan-card h3 { color: #333; }
+        .price { font-size: 24px; font-weight: bold; color: #28a745; }
+        .old-price { text-decoration: line-through; color: #888; font-size: 16px; }
+        .discount-badge { background: #ff4757; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; display: inline-block; margin-bottom: 10px; }
+        
+        /* Control Section */
+        .settings-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
+        .card { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input[type="text"], input[type="password"] { width: 90%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        
+        .btn-buy { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        .status-btn { padding: 10px 30px; border-radius: 25px; border: none; font-weight: bold; cursor: pointer; }
+        .on { background: #28a745; color: white; }
+        .off { background: #dc3545; color: white; }
+        
+        .warning-box { background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-top: 30px; border-left: 5px solid #ffeeba; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>Welcome, {{ user.username }}</h1>
+            <p>Email: {{ user.email }} | <b>Subscription: {{ remaining_days }} Days Left</b></p>
+        </div>
+        <div>
+            <p>Algo Status</p>
+            <button class="status-btn {{ 'on' if user.algo_status == 'ON' else 'off' }}">
+                {{ user.algo_status }}
+            </button>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+        <div class="discount-badge" style="font-size: 18px;">🔥 Special Offer: {{ discount_percent }}% Instant Discount Applied! 🔥</div>
+    </div>
+
+    <div class="plans-container">
+        <div class="plan-card">
+            <h3>Basic</h3>
+            <p>1 Month Access</p>
+            <div class="old-price">₹3,000</div>
+            <div class="price">₹{{ 3000 - (3000 * discount_percent / 100) }}</div>
+            <p>Ideal for beginners</p>
+            <button class="btn-buy">Choose Basic</button>
+        </div>
+
+        <div class="plan-card" style="border-color: #ffd700;">
+            <div class="discount-badge">MOST POPULAR</div>
+            <h3>Premium</h3>
+            <p>3 Months Access</p>
+            <div class="old-price">₹9,000</div>
+            <div class="price">₹{{ 9000 - (9000 * discount_percent / 100) }}</div>
+            <p>Full Technical Support</p>
+            <button class="btn-buy" style="background: #ffd700; color: #333;">Choose Premium</button>
+        </div>
+
+        <div class="plan-card">
+            <h3>Ultimate</h3>
+            <p>12 Months Access</p>
+            <div class="old-price">₹36,000</div>
+            <div class="price">₹{{ 36000 - (36000 * discount_percent / 100) }}</div>
+            <p>Best Value for Long-term</p>
+            <button class="btn-buy">Choose Ultimate</button>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="card">
+            <h3>API Settings (Dhan)</h3>
+            <form>
+                <label>Webhook URL:</label>
+                <input type="text" placeholder="Enter Dhan Webhook URL" value="{{ user.dhan_url }}">
+                <label>Secret Key:</label>
+                <input type="password" placeholder="Enter Secret Key" value="{{ user.secret_key }}">
+                <button type="submit" class="btn-buy">Save & Secure</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3>Need Help?</h3>
+            <p><b>Technical Support:</b> +91 9848XXXXXX</p>
+            <p><b>Admin Contact:</b> +91 99XXXXXXX</p>
+            <p>ప్రశ్నలు ఉంటే మా టెక్నికల్ టీమ్‌ని సంప్రదించండి.</p>
+        </div>
+    </div>
+
+    <div class="warning-box">
+        <strong>⚠️ Risk Warning:</strong> అల్గో ట్రేడింగ్ అనేది మార్కెట్ రిస్క్ కు లోబడి ఉంటుంది. ట్రేడింగ్‌లో వచ్చే ఎటువంటి లాభనష్టాలకు <b>GVN Algo</b> బాధ్యత వహించదు. మేము కేవలం సాఫ్ట్‌వేర్ సర్వీస్ మాత్రమే అందిస్తున్నాము. యూజర్లు తమ సొంత రిస్క్ తో ట్రేడ్ చేయాలి.
+    </div>
+</div>
+
+</body>
+</html>
