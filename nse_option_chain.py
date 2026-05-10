@@ -719,23 +719,57 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         try: shared_data.demo_logs.append(msg)
                         except: pass
 
-                # ---- DEMO P&L TRACKER ----
+                # ---- DEMO P&L TRACKER (WITH TRAILING SL) ----
                 full_sym = f"{symbol}_{strike}_{opt_type}"
                 if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
                     entry = shared_data.demo_trade["entry_price"]
                     tgt = shared_data.demo_trade["target"]
                     sl = shared_data.demo_trade["sl"]
                     qty = shared_data.demo_trade["qty"]
-                    pnl = round((ltp - entry) * qty, 2)
+                    
+                    # Track Highest LTP for Trailing Stoploss
+                    highest_ltp = shared_data.demo_trade.get("highest_ltp", entry)
+                    if ltp > highest_ltp:
+                        shared_data.demo_trade["highest_ltp"] = ltp
+                        # Trail the SL by maintaining the initial 10% gap from the new high
+                        new_sl = round(ltp * 0.90, 2)
+                        if new_sl > sl:
+                            shared_data.demo_trade["sl"] = new_sl
+                            sl = new_sl  # Update local var for this loop
+                            msg = f"🔄 [TSL UPDATED] {full_sym} Trailing Stoploss moved to ₹{sl}"
+                            print(msg)
+                            try: shared_data.demo_logs.append(msg)
+                            except: pass
+
+                    pts = round(ltp - entry, 2)
+                    pnl = round(pts * qty, 2)
+                    pnl_str = f"{pts} pts * {qty} = ₹{pnl}"
+                    
+                    # 🕒 GVN SPECIAL: 3:15 PM AUTO-SQUARE-OFF LOGIC
+                    curr_time = data.get("timestamp", datetime.now())
+                    if curr_time.hour == 15 and curr_time.minute >= 15:
+                        msg = f"🏁 [3:15 PM SQUARE-OFF] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: {pnl_str} 🕒"
+                        print(msg)
+                        try: 
+                            shared_data.demo_logs.append(msg)
+                            from gvn_telegram_engine import TelegramAlertManager
+                            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+                            chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+                            if bot_token and chat_id:
+                                tg = TelegramAlertManager(bot_token, chat_id)
+                                tg.send_message(f"🔴 <b>3:15 PM AUTO-SQUARE-OFF</b>\n━━━━━━━━━━━━━━━\n🎯 Symbol: {full_sym}\n💸 Exit Price: ₹{ltp}\n💰 Final P&L: {pnl_str}\n━━━━━━━━━━━━━━━\n⚡ System closing all trades.")
+                        except: pass
+                        shared_data.demo_trade["active"] = False
+                        return # Stop processing this strike
                     
                     if ltp >= tgt:
-                        msg = f"✅ [PROFIT HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: +₹{pnl} 🎯"
+                        msg = f"✅ [PROFIT HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: +{pnl_str} 🎯"
                         print(msg)
                         try: shared_data.demo_logs.append(msg)
                         except: pass
                         shared_data.demo_trade["active"] = False
                     elif ltp <= sl:
-                        msg = f"❌ [LOSS HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: ₹{pnl} ⚠️"
+                        msg = f"❌ [TSL / LOSS HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: {pnl_str} ⚠️"
                         print(msg)
                         try: shared_data.demo_logs.append(msg)
                         except: pass
@@ -743,8 +777,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     else:
                         # Randomly log running P&L so terminal looks alive
                         import random
-                        if random.randint(1, 20) == 1:
-                            run_msg = f"⏳ [RUNNING] {full_sym} | LTP: {ltp} | P&L: ₹{pnl}"
+                        if random.randint(1, 15) == 1:
+                            run_msg = f"⏳ [RUNNING] {full_sym} | LTP: {ltp} | TSL: {sl} | P&L: {pnl_str}"
                             try: shared_data.demo_logs.append(run_msg)
                             except: pass
 
@@ -758,13 +792,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     except: pass
                     
                     # Activate Demo Trade
+                    qty_val = 50 if symbol == "NIFTY" else (15 if symbol == "BANKNIFTY" else (10 if symbol == "SENSEX" else 25))
                     shared_data.demo_trade = {
                         "active": True,
                         "symbol": full_sym,
                         "entry_price": ltp,
                         "target": round(ltp * 1.2, 2), # 20% Target
                         "sl": round(ltp * 0.9, 2),    # 10% SL
-                        "qty": 65 # Default Nifty
+                        "qty": qty_val
                     }
                     
                     # 🚀 SEND TELEGRAM ALERT

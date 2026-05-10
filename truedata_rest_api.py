@@ -158,6 +158,22 @@ class TrueDataRestAPI:
         params = {"symbol": symbol, "series": series, "response": "json"}
         return self._make_request("getLTPSpot", params)
 
+    # --- Historical Endpoints ---
+    def get_historical_data(self, symbol, from_date, to_date, resolution="1"):
+        """
+        Fetches historical Intraday candles for Playback/Backtesting
+        resolution: '1' for 1min, '5' for 5min, etc.
+        from_date / to_date format: 'YYMMDDHHMMSS'
+        """
+        params = {
+            "symbol": symbol,
+            "from": from_date,
+            "to": to_date,
+            "resolution": resolution,
+            "response": "json"
+        }
+        return self._make_request("gethistory", params, service="history")
+
     # --- Analytics & OI Endpoints ---
 
     def get_oi_gainers(self, top=20, series="XX"):

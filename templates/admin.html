@@ -38,11 +38,24 @@
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; margin-bottom: 20px; padding-bottom: 10px;">
         <h1 style="margin: 0;">🚀 GVN Algo Master Admin Control</h1>
         <div>
+            <button onclick="startPlayback('NIFTY')" class="btn btn-approve" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#10b981; box-shadow: 0 4px 8px rgba(16,185,129,0.3);">🎬 START DEMO PLAYBACK</button>
+            <a href="/admin/clear-demo-history" class="btn btn-stop" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#f59e0b; box-shadow: 0 4px 8px rgba(245,158,11,0.3);" onclick="return confirm('🧹 Clear all Demo Trades & History for Monday?');">🧹 CLEAR DEMO HISTORY</a>
             <a href="/admin/global-kill-switch" class="btn btn-stop" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#ff0000; box-shadow: 0 4px 8px rgba(255,0,0,0.3);" onclick="return confirm('⚠️ WARNING: This will FORCE EXIT ALL TRADES for ALL USERS across all brokers. Proceed?');">🚨 GLOBAL KILL SWITCH 🚨</a>
             <a href="/ai-dashboard" class="btn btn-approve" style="font-size: 14px; font-weight: bold; margin-right: 10px; background-color:#6366f1; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🤖 AI Paper Trade Engine</a>
             <a href="/" class="btn btn-stop" style="font-size: 14px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🚪 Logout / Home</a>
         </div>
     </div>
+    
+    <script>
+    async function startPlayback(symbol = 'NIFTY') {
+        const speed = prompt("Enter Playback Speed (e.g. 1.0, 2.0, 5.0):", "1.0");
+        if (speed) {
+            const response = await fetch(`/api/playback?speed=${speed}&symbol=${symbol}`);
+            const result = await response.json();
+            alert(`🎬 Playback for ${symbol} started at ${speed}x speed! Check User Dashboard for Live Signals.`);
+        }
+    }
+    </script>
 
     <!-- 🛡️ AI SECURITY SYSTEM DASHBOARD -->
     <div class="card" style="border-top: 5px solid #dc3545; background: #fff5f5;">
@@ -306,16 +319,114 @@
         <div style="background: #333; color: #00ff00; padding: 15px; border-radius: 8px; font-family: monospace; height: 100px; overflow-y: auto;" id="demo-terminal">
             > System Ready. Waiting for Demo Run...
         </div>
+        </div>
     </div>
     
+    <!-- 🌟 TRUEDATA OPTION CHAIN MODAL -->
+    <div id="optionChainModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
+        <div style="background: white; border-radius: 10px; width: 95%; max-width: 1200px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;">
+            <div style="background: #1a73e8; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px;">📊 TrueData Option Chain Playback (<span id="oc-symbol-display">NIFTY</span>)</h2>
+                    <span id="oc-update-time" style="font-size: 12px;">Waiting for TrueData...</span>
+                </div>
+                <button onclick="closeOptionChain()" style="background: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">X CLOSE</button>
+            </div>
+            <div style="padding: 10px; overflow-y: auto; flex: 1;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center;">
+                    <thead style="background: #f8f9fa;">
+                        <tr>
+                            <th colspan="8" style="color: #28a745; border: 1px solid #ddd;">CALLS (CE)</th>
+                            <th style="background: #e8f0fe; border: 1px solid #ddd;">STRIKE</th>
+                            <th colspan="8" style="color: #dc3545; border: 1px solid #ddd;">PUTS (PE)</th>
+                        </tr>
+                        <tr>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Volume</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">IV</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Vega</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Gamma</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Theta</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Delta</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">OI</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">LTP</th>
+                            <th style="background: #e8f0fe; border: 1px solid #ddd; padding: 5px;">STRIKE</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">LTP</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">OI</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Delta</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Theta</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Gamma</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Vega</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">IV</th>
+                            <th style="border: 1px solid #ddd; padding: 5px;">Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody id="oc-body">
+                        <tr><td colspan="17" style="padding: 20px;">🎬 Starting Playback Engine...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
+    let currentOCSymbol = 'NIFTY';
+    
+    function openOptionChain(symbol = 'NIFTY') {
+        currentOCSymbol = symbol;
+        document.getElementById('oc-symbol-display').innerText = symbol;
+        document.getElementById('optionChainModal').style.display = 'flex';
+        fetchOptionChainData();
+        if(window.ocInterval) clearInterval(window.ocInterval);
+        window.ocInterval = setInterval(fetchOptionChainData, 1500); // Fast poll for playback
+    }
+    
+    function closeOptionChain() {
+        document.getElementById('optionChainModal').style.display = 'none';
+        if(window.ocInterval) clearInterval(window.ocInterval);
+    }
+    
+    function fetchOptionChainData() {
+        fetch('/api/truedata-option-chain?symbol=' + currentOCSymbol)
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.getElementById('oc-update-time').innerText = "Spot Price: ₹" + data.spot_price + " | " + data.timestamp;
+                let html = '';
+                data.chain.forEach(row => {
+                    let is_atm = row.is_atm ? 'background: #fff3cd;' : '';
+                    html += `<tr style="${is_atm} border-bottom: 1px solid #eee;">
+                        <td style="padding: 5px;">${row.ce_vol || '0'}</td>
+                        <td style="padding: 5px;">${row.ce_iv || '0'}</td>
+                        <td style="padding: 5px;">${row.ce_vega || '0'}</td>
+                        <td style="padding: 5px;">${row.ce_gamma || '0'}</td>
+                        <td style="padding: 5px;">${row.ce_theta || '0'}</td>
+                        <td style="padding: 5px; color: ${Math.abs((row.ce_delta||0) - 0.60) < 0.05 ? '#28a745; font-weight:bold;' : '#000'}">${row.ce_delta || '0'}</td>
+                        <td style="padding: 5px; color: #28a745;">${row.ce_oi || '0'}</td>
+                        <td style="padding: 5px; font-weight: bold; color: #28a745;">₹${row.ce_ltp || '0'}</td>
+                        <td style="padding: 5px; background: #e8f0fe; font-weight: bold;">${row.strike}</td>
+                        <td style="padding: 5px; font-weight: bold; color: #dc3545;">₹${row.pe_ltp || '0'}</td>
+                        <td style="padding: 5px; color: #dc3545;">${row.pe_oi || '0'}</td>
+                        <td style="padding: 5px; color: ${Math.abs((Math.abs(row.pe_delta||0)) - 0.60) < 0.05 ? '#dc3545; font-weight:bold;' : '#000'}">${row.pe_delta || '0'}</td>
+                        <td style="padding: 5px;">${row.pe_theta || '0'}</td>
+                        <td style="padding: 5px;">${row.pe_gamma || '0'}</td>
+                        <td style="padding: 5px;">${row.pe_vega || '0'}</td>
+                        <td style="padding: 5px;">${row.pe_iv || '0'}</td>
+                        <td style="padding: 5px;">${row.pe_vol || '0'}</td>
+                    </tr>`;
+                });
+                document.getElementById('oc-body').innerHTML = html || '<tr><td colspan="17">No records found...</td></tr>';
+            }
+        })
+        .catch(err => {});
+    }
+
     async function startAdminDemo() {
         const symbol = document.getElementById('demoSymbol').value;
         const speed = document.getElementById('demoSpeed').value;
         const terminal = document.getElementById('demo-terminal');
         
         terminal.innerHTML += `<br>> 🚀 Starting Demo Run for ${symbol} at ${speed}x...`;
-        terminal.innerHTML += `<br>> 📡 Initializing Pine Script Logic & Telegram Webhooks...`;
+        terminal.innerHTML += `<br>> 📡 Initializing Pine Script Logic & TrueData Engine...`;
         terminal.scrollTop = terminal.scrollHeight;
         
         try {
@@ -323,7 +434,9 @@
             const result = await response.json();
             terminal.innerHTML += `<br>> ✅ Demo Engine Active! Polling Live Logs...`;
             terminal.scrollTop = terminal.scrollHeight;
-            alert(`🎬 Demo Playback for ${symbol} started at ${speed}x speed!`);
+            
+            // 🌟 Open Option Chain Immediately
+            openOptionChain(symbol);
             
             // Start polling logs
             let lastLogCount = 0;
@@ -334,7 +447,6 @@
                     if (logData.logs && logData.logs.length > lastLogCount) {
                         for (let i = lastLogCount; i < logData.logs.length; i++) {
                             let msg = logData.logs[i];
-                            // Add some colors based on content
                             if (msg.includes('🔥') || msg.includes('BUY') || msg.includes('SELL')) {
                                 msg = `<span style="color:#ffcc00; font-weight:bold;">${msg}</span>`;
                             } else if (msg.includes('PROFIT')) {

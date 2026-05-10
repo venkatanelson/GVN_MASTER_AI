@@ -383,6 +383,14 @@
                     <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
                     {% endif %}
 
+                    <!-- TRADE QUANTITY SETTING (FOR REAL ACCOUNTS) -->
+                    <div style="margin-left: 5px; display: inline-flex; align-items: center;">
+                        <select id="tradeQuantitySelect" style="background: rgba(15, 23, 42, 0.8) !important; border: 1px solid var(--primary) !important; color: white !important; border-radius: 50px !important; padding: 4px 12px !important; font-size: 11px; font-weight: 800; cursor: pointer; width: auto; height: auto;">
+                            <option value="1">Single Lot (1x)</option>
+                            <option value="2" selected>Double Lot (2x)</option>
+                        </select>
+                    </div>
+
                     <!-- GVN MASTER ROBOT CONTROL PANEL -->
                     <div class="card bg-dark border-primary mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -500,6 +508,23 @@
         </script>
 
 
+        <!-- 🛰️ GVN AI MASTER SCANNER STATUS (GLOBAL SYNC) -->
+        <div class="premium-card" id="global-scanner-card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(2, 6, 23, 0.9)); margin-bottom: 20px; transition: all 0.5s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div id="status-pulse-dot" class="dot dot-blue" style="width: 12px; height: 12px;"></div>
+                    <div>
+                        <h3 id="master-status-title" style="margin: 0; font-size: 14px; font-weight: 800; color: var(--warning); letter-spacing: 1px;">GVN AI MASTER SCANNER: IDLE</h3>
+                        <div id="master-status-desc" style="font-size: 18px; font-weight: 900; color: #fff; margin-top: 5px;">⌛ WAIT FOR SIGNAL...</div>
+                    </div>
+                </div>
+                <div id="master-pnl-display" style="text-align: right; display: none;">
+                    <small style="color: var(--text-dim); font-size: 10px; display: block;">LAST TRADE P&L</small>
+                    <span id="master-pnl-value" style="font-size: 24px; font-weight: 900; color: var(--secondary);">+₹ 0.00</span>
+                </div>
+            </div>
+        </div>
+
         <!-- 📺 GVN LIVE TV: DALAL STREET TICKER & ANALYSIS -->
         <div class="premium-card" style="border: 1px solid var(--primary); background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(99, 102, 241, 0.1)); padding: 0; overflow: hidden; margin-top: 20px;">
             <div style="background: rgba(99, 102, 241, 0.2); padding: 10px 20px; border-bottom: 1px solid var(--glass-border); display: flex; align-items: center; gap: 10px;">
@@ -510,40 +535,170 @@
             </div>
             <div style="padding: 20px;">
                 <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 250px;">
-                        <h4 style="margin: 0 0 10px 0; color: var(--secondary); font-size: 16px;">Active Demo Position</h4>
-                        <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2);">
-                            <span style="font-size: 20px; font-weight: 900; color: #fff;">NIFTY 23950 CE</span>
-                            <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div>
-                                    <small style="color: var(--text-dim); font-size: 10px;">ENTRY (i0 Bounce)</small>
-                                    <div style="font-size: 16px; font-weight: 800; color: var(--warning);">₹ 25.56</div>
-                                </div>
-                                <div>
-                                    <small style="color: var(--text-dim); font-size: 10px;">TARGET (i7)</small>
-                                    <div style="font-size: 16px; font-weight: 800; color: #10b981;">₹ 88.30</div>
+                    <!-- LEFT: POSITIONS & THEORY -->
+                    <div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 20px;">
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--secondary); font-size: 14px; font-weight: 800;">ACTIVE POSITION</h4>
+                            <div id="active-trade-box" style="background: rgba(0,0,0,0.4); padding: 18px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+                                <span id="active-trade-symbol" style="font-size: 18px; font-weight: 900; color: #fff; display: block; margin-bottom: 12px;">-- NO ACTIVE TRADE --</span>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div>
+                                        <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">ENTRY PRICE</small>
+                                        <div id="active-trade-entry" style="font-size: 18px; font-weight: 800; color: var(--warning);">₹ 0.00</div>
+                                    </div>
+                                    <div>
+                                        <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">TARGET</small>
+                                        <div id="active-trade-target" style="font-size: 18px; font-weight: 800; color: #10b981;">₹ 0.00</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--text-dim); font-size: 11px; text-transform: uppercase; font-weight: 800;">GVN AI ANALYSIS</h4>
+                            <p id="theory-text" style="margin: 0; font-size: 13px; line-height: 1.6; color: #cbd5e1; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; border-left: 3px solid var(--primary);">
+                                <span style="color: var(--warning); font-weight: 800;">⌛ Wait for Signal:</span> System is scanning institutional breakouts on the Alpha Grid.
+                            </p>
+                        </div>
+                        <!-- 📟 LIVE SYSTEM TERMINAL (WOW FACTOR) -->
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 11px; text-transform: uppercase; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                                <span class="dot dot-blue" style="width:6px; height:6px;"></span> LIVE SYSTEM LOGS
+                            </h4>
+                            <div id="ui-terminal" style="background: #000; height: 180px; border-radius: 12px; border: 1px solid var(--glass-border); padding: 10px; font-family: 'Courier New', monospace; font-size: 10px; color: #10b981; overflow-y: auto; line-height: 1.4; box-shadow: inset 0 0 15px rgba(16, 185, 129, 0.1);">
+                                <div style="color: #64748b;">[SYSTEM] Initializing GVN Master Engine...</div>
+                                <div style="color: #64748b;">[SYSTEM] Connecting to Angel One API...</div>
+                                <div style="color: #10b981;">[SUCCESS] Authentication Verified.</div>
+                                <div style="color: #6366f1;">[INFO] Scanning for Monday's Expiry setup...</div>
+                            </div>
+                        </div>
                     </div>
-                    <div style="flex: 2; min-width: 300px;">
-                        <h4 style="margin: 0 0 10px 0; color: var(--text-dim); font-size: 12px; text-transform: uppercase;">GVN Theory & Next Move</h4>
-                        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
-                            <span style="color: var(--warning); font-weight: 800;">⌛ Wait for Signal:</span> Position is currently running successfully from bottom support. 
-                            <br>We bought near the <strong>25 level</strong>. The primary target is <strong>₹ 88.30 (i7)</strong>. If it breaks i7, the momentum can suddenly jump to <strong>134.50 (i6)</strong>. 
-                            <br><span style="color: var(--danger); font-weight: bold;">Support/Stop:</span> Strictly hold above ₹ 25. If it falls below, exit the trade.
-                        </p>
+
+                    <!-- RIGHT: LIVE TV CHART -->
+                    <div style="flex: 2; min-width: 400px; height: 480px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); background: #000;">
+                        <div id="tradingview_gvn" style="height:100%;width:100%"></div>
                     </div>
                 </div>
             </div>
             <!-- SCROLLING TICKER -->
             <div style="background: rgba(0,0,0,0.5); padding: 8px 0; border-top: 1px solid var(--glass-border); display: flex; align-items: center; position: relative;">
                 <div style="background: var(--primary); color: white; font-weight: 900; padding: 4px 15px; font-size: 11px; z-index: 2; position: absolute; left: 0; box-shadow: 5px 0 15px rgba(0,0,0,0.5);">DALAL STREET LIVE</div>
-                <marquee scrollamount="5" style="color: var(--text-dim); font-size: 12px; font-weight: 600; padding-left: 140px;">
-                    <span style="color: var(--secondary);">🚀 23950 CE Active</span> &nbsp; | &nbsp; Support: 25.56 &nbsp; | &nbsp; Target: 88.30 &nbsp; | &nbsp; Status: HOLD &nbsp; | &nbsp; <span style="color: var(--warning);">⚠️ Wait for Target Signal</span> &nbsp; | &nbsp; NIFTY SPOT: <span id="ticker-nifty">23957.75</span> &nbsp; | &nbsp; GVN AI Sentiment: SIDEWAYS
+                <marquee id="ticker-scroll" scrollamount="5" style="color: var(--text-dim); font-size: 12px; font-weight: 600; padding-left: 140px;">
+                    <span id="ticker-content">... Waiting for System Pulse ...</span>
                 </marquee>
             </div>
         </div>
+
+        <script>
+        function updateDashboardStatus() {
+            fetch('/api/user-status')
+            .then(r => r.json())
+            .then(d => {
+                // 🛰️ MASTER SCANNER CARD LOGIC
+                const mCard = document.getElementById('global-scanner-card');
+                const mTitle = document.getElementById('master-status-title');
+                const mDesc = document.getElementById('master-status-desc');
+                const mPnlBox = document.getElementById('master-pnl-display');
+                const mPnlVal = document.getElementById('master-pnl-value');
+                const mDot = document.getElementById('status-pulse-dot');
+
+                if (d.state === "ACTIVE") {
+                    mCard.style.borderColor = 'var(--secondary)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: LIVE TRADE";
+                    mTitle.style.color = 'var(--secondary)';
+                    mDesc.innerText = "🚀 POSITION ACTIVE: " + d.trade_symbol;
+                    mPnlBox.style.display = 'none';
+                    mDot.className = "dot dot-blue"; // Use blue for active
+                } else if (d.state === "CLOSED") {
+                    mCard.style.borderColor = 'var(--primary)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: TRADE CLOSED";
+                    mTitle.style.color = 'var(--primary)';
+                    mDesc.innerText = "💰 TARGET ACHIEVED / SQUARE-OFF";
+                    mPnlBox.style.display = 'block';
+                    mPnlVal.innerText = '₹ ' + d.last_pnl;
+                    mPnlVal.className = parseFloat(d.last_pnl) >= 0 ? 'profit' : 'loss';
+                    mDot.className = "dot dot-blue";
+                } else {
+                    mCard.style.borderColor = 'var(--warning)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: IDLE";
+                    mTitle.style.color = 'var(--warning)';
+                    mDesc.innerText = "⌛ WAIT FOR SIGNAL...";
+                    mPnlBox.style.display = 'none';
+                    mDot.className = "dot dot-blue";
+                }
+
+                // Update Spot Price in Ticker
+                document.getElementById('ticker-nifty').innerText = d.nifty_spot;
+                
+                // Update Active Trade Box
+                const tradeBox = document.getElementById('active-trade-box');
+                const tradeSym = document.getElementById('active-trade-symbol');
+                const tradeEntry = document.getElementById('active-trade-entry');
+                const tradeTarget = document.getElementById('active-trade-target');
+                
+                if (d.state === "ACTIVE") {
+                    tradeBox.style.borderColor = 'var(--secondary)';
+                    tradeSym.innerText = d.trade_symbol;
+                    tradeSym.style.color = 'var(--secondary)';
+                    tradeEntry.innerText = '₹ ' + d.trade_entry;
+                    tradeTarget.innerText = '₹ ' + d.trade_target;
+                } else {
+                    tradeBox.style.borderColor = 'rgba(255,255,255,0.1)';
+                    tradeSym.innerText = '-- NO ACTIVE TRADE --';
+                    tradeSym.style.color = 'var(--text-dim)';
+                    tradeEntry.innerText = '₹ 0.00';
+                    tradeTarget.innerText = '₹ 0.00';
+                }
+                
+                // Update Theory Text
+                const theory = document.getElementById('theory-text');
+                theory.innerHTML = d.theory;
+                
+                // Update Ticker Content
+                const ticker = document.getElementById('ticker-content');
+                if (d.state === "ACTIVE") {
+                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | NIFTY SPOT: ${d.nifty_spot}`;
+                } else {
+                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | NIFTY SPOT: ${d.nifty_spot}`;
+                }
+                
+                // Update Robot Badges
+                const robotStatus = document.getElementById('scannerStatus');
+                if (d.state === "ACTIVE") {
+                    robotStatus.innerText = 'TRADE LIVE';
+                    robotStatus.className = 'badge bg-success';
+                } else {
+                    robotStatus.innerText = 'SCANNING';
+                    robotStatus.className = 'badge bg-warning text-dark';
+                }
+            });
+        }
+        function updateTerminal() {
+            fetch('/api/demo-logs')
+            .then(r => r.json())
+            .then(d => {
+                const term = document.getElementById('ui-terminal');
+                if (d.logs && d.logs.length > 0) {
+                    let html = '';
+                    d.logs.forEach(log => {
+                        let color = '#10b981'; // Default green
+                        if (log.includes('[ERROR]') || log.includes('Failed')) color = '#ef4444';
+                        if (log.includes('[SIGNAL]')) color = '#6366f1';
+                        if (log.includes('[INFO]')) color = '#64748b';
+                        html += `<div style="color: ${color}; margin-bottom: 4px;">> ${log}</div>`;
+                    });
+                    term.innerHTML = html;
+                    term.scrollTop = term.scrollHeight;
+                }
+            });
+        }
+        setInterval(updateTerminal, 2000);
+
+        setInterval(updateDashboardStatus, 2000);
+        updateDashboardStatus();
+        </script>
 
         <!-- 🤖 GVN FULL-AUTO COMMAND CENTER -->
         <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2); background: linear-gradient(135deg, rgba(6, 78, 59, 0.1), rgba(2, 6, 23, 0.8));">
@@ -700,62 +855,47 @@
             </div>
         </div>
 
-        <!-- 🖼️ ADVANCED GVN PRO CHART (LIVE SYNC) -->
-        <div class="premium-card" style="padding: 0; height: 600px; overflow: hidden; border: 1px solid var(--primary); box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);">
-            <div id="tv-chart-container" style="height: 100%; width: 100%;">
-                <!-- TradingView Widget BEGIN -->
-                <div class="tradingview-widget-container" style="height:100%;width:100%">
-                  <div id="tradingview_gvn" style="height:100%;width:100%"></div>
-                  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-                  <script type="text/javascript">
-                  // 🔧 GVN Symbol Map: Correct FREE TradingView symbols for Indian indices
-                  const GVN_TV_SYMBOLS = {
-                      'NIFTY':     'NSE:NIFTY1!',
-                      'BANKNIFTY': 'NSE:BANKNIFTY1!',
-                      'FINNIFTY':  'NSE:FINNIFTY1!',
-                      'SENSEX':    'BSE:SENSEX',
-                      'MCX':       'MCX:CRUDEOIL1!'
-                  };
+        <!-- 🖼️ CHART SCRIPT (Now integrated above) -->
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+            const GVN_TV_SYMBOLS = {
+                'NIFTY':     'NSE:NIFTY1!',
+                'BANKNIFTY': 'NSE:BANKNIFTY1!',
+                'FINNIFTY':  'NSE:FINNIFTY1!',
+                'SENSEX':    'BSE:SENSEX',
+                'MCX':       'MCX:CRUDEOIL1!'
+            };
 
-                  var tvWidgetInstance = null;
-                  function initTV(symbol = 'NSE:NIFTY1!') {
-                      if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
-                      tvWidgetInstance = new TradingView.widget({
-                        "autosize": true,
-                        "symbol": symbol,
-                        "interval": "1",
-                        "timezone": "Asia/Kolkata",
-                        "theme": "dark",
-                        "style": "1",
-                        "locale": "en",
-                        "toolbar_bg": "#f1f3f6",
-                        "enable_publishing": false,
-                        "withdateranges": true,
-                        "hide_side_toolbar": false,
-                        "allow_symbol_change": true,
-                        "details": true,
-                        "hotlist": false,
-                        "calendar": false,
-                        "show_popup_button": true,
-                        "popup_width": "1000",
-                        "popup_height": "650",
-                        "container_id": "tradingview_gvn"
-                      });
-                  }
-                  initTV();
+            var tvWidgetInstance = null;
+            function initTV(symbol = 'NSE:NIFTY1!') {
+                if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
+                tvWidgetInstance = new TradingView.widget({
+                    "autosize": true,
+                    "symbol": symbol,
+                    "interval": "1",
+                    "timezone": "Asia/Kolkata",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "en",
+                    "container_id": "tradingview_gvn",
+                    "hide_side_toolbar": false,
+                    "allow_symbol_change": true,
+                    "details": true,
+                    "show_popup_button": true,
+                    "popup_width": "1000",
+                    "popup_height": "650"
+                });
+            }
+            initTV();
 
-                  function changeTVSymbol(indexName) {
-                      const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY1!';
-                      if (window.lastTVSym !== sym) {
-                          window.lastTVSym = sym;
-                          initTV(sym);
-                      }
-                  }
-                  </script>
-                </div>
-                <!-- TradingView Widget END -->
-            </div>
-        </div>
+            function changeTVSymbol(indexName) {
+                const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY1!';
+                if (window.lastTVSym !== sym) {
+                    window.lastTVSym = sym;
+                    initTV(sym);
+                }
+            }
+        </script>
 
         <!-- Hidden GVN ZERO-TO-HERO SCANNER elements to prevent JS errors -->
         <div style="display: none;">
@@ -1319,7 +1459,7 @@
         }
         
         function fetchOptionChainData() {
-            fetch('/api/dhan-option-chain?symbol=' + currentOCSymbol)
+            fetch('/api/truedata-option-chain?symbol=' + currentOCSymbol)
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {

@@ -80,6 +80,13 @@ class AlertTemplates:
     @staticmethod
     def entry_alert(symbol, entry_price, target, sl):
         """Entry signal alert matching user screenshot format"""
+        try: entry_price = round(float(entry_price), 2)
+        except: pass
+        try: target = round(float(target), 2)
+        except: pass
+        try: sl = round(float(sl), 2)
+        except: pass
+        
         return f"""
 🚀 GVN MASTER ALGO - NEW ENTRY 🚀
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -94,8 +101,13 @@ class AlertTemplates:
     @staticmethod
     def exit_alert(symbol, exit_reason, exit_price, pnl):
         """Exit signal alert matching GVN formatting"""
+        try: exit_price = round(float(exit_price), 2)
+        except: pass
+        try: pnl = round(float(pnl), 2)
+        except: pass
+        
         status_emoji = "🎯" if "Target" in exit_reason else ("⛔" if "SL" in exit_reason else "⏹️")
-        pnl_emoji = "🟩" if pnl > 0 else "🟥"
+        pnl_emoji = "🟩" if float(pnl) > 0 else "🟥"
         return f"""
 {status_emoji} GVN MASTER ALGO - TRADE CLOSED {status_emoji}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━

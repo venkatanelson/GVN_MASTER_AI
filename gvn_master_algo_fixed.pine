@@ -33,23 +33,21 @@ is915Candle = (hour == 9 and minute == 15)
 
 var float high915 = na
 var float low915 = na
-var float close915 = na
 var float n1 = na
 var float n2 = na
 
 if isNewDay
     high915 := na
     low915 := na
-    close915 := na
     n1 := na 
     n2 := na
 
+// Step 1: Capture 9:15 Candle High/Low
 if is915Candle
     high915 := high
     low915 := low
-    close915 := close
 
-// Calculate Main Market Levels
+// Step 2: Draw Indicator Levels immediately after 9:15
 valid = not na(high915) and not na(low915)
 diff = valid ? (high915 - low915) : na
 result = diff / 2
