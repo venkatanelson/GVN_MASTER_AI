@@ -549,8 +549,23 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         # Determine Exchange
         exch = "MCX" if symbol == "MCX" else "NSE"
         data = fetch_nse_option_chain(symbol, exchange=exch)
-    
-    # 🌟 GVN SPECIAL: Force 24100 PE Levels if it's NIFTY (Run even if fetch fails)
+
+        # 🕒 GVN SPECIAL: Capture 9:15 AM Benchmark during LIVE Trading
+        if data and "records" in data:
+            try:
+                now = datetime.now()
+                if now.hour == 9 and 15 <= now.minute <= 20:
+                    symbol_data = shared_data.gvn_915_benchmark.get(symbol)
+                    if symbol_data and not symbol_data["captured"]:
+                        spot = data["records"].get("underlyingValue", 0)
+                        if spot > 0:
+                            if symbol_data["high"] == 0 or spot > symbol_data["high"]: symbol_data["high"] = spot
+                            if symbol_data["low"] == 0 or spot < symbol_data["low"]: symbol_data["low"] = spot
+                            # We mark captured=True only after 9:20 or if we have enough range
+                            if now.minute >= 19: 
+                                symbol_data["captured"] = True
+                                logger.info(f"✅ [BENCHMARK CAPTURED] {symbol}: High={symbol_data['high']}, Low={symbol_data['low']}")
+            except: pass
     if symbol == "NIFTY":
         # Check if already in scanner
         if not any("24100 PE" in x["strike"] for x in gvn_scanner_data[symbol]):
@@ -826,8 +841,16 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         try: shared_data.demo_logs.append(err_msg)
                         except: pass
 
-                h915 = ltp * 1.05 
-                l915 = ltp * 0.95
+                # 🌟 GVN SPECIAL: Calculate Levels based on 9:15 Benchmark
+                benchmark = shared_data.gvn_915_benchmark.get(symbol)
+                if benchmark and benchmark["high"] > 0 and benchmark["low"] > 0:
+                    h915 = benchmark["high"]
+                    l915 = benchmark["low"]
+                else:
+                    # Fallback to LTP-based levels if benchmark not yet captured
+                    h915 = ltp * 1.05 
+                    l915 = ltp * 0.95
+                
                 levels = calculate_gvn_levels(h915, l915)
                 score = 0
                 zone = "NORMAL"

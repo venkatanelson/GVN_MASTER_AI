@@ -109,10 +109,10 @@ class TrueDataRestAPI:
             else:
                 # 🌟 SMART FALLBACK based on symbol
                 if "CRUDE" in symbol.upper() or "MCX" in symbol.upper():
-                    expiry = "19-05-2026" # Crude Oil Monthly Expiry
+                    expiry = "14-05-2026" # Validated from Sample Code
                     exchange = "MCX"
                 else:
-                    expiry = "12-05-2026" # User Requested Nifty Expiry
+                    expiry = "12-05-2026" # User Verified Nifty Expiry
                 
         params = {"symbol": symbol, "expiry": expiry, "exchange": exchange, "response": "json"}
         return self._make_request("getoptionchain", params)
@@ -145,7 +145,7 @@ class TrueDataRestAPI:
             return res
         
         # Final fallback to avoid crash
-        if "CRUDE" in symbol.upper(): return ["19-05-2026"]
+        if "CRUDE" in symbol.upper(): return ["14-05-2026"]
         return ["12-05-2026"] 
 
     def get_ltp(self, symbol, strike, series, expiry):
