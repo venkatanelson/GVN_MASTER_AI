@@ -579,6 +579,10 @@
                                         <td style="padding: 6px 0; font-weight: 800; color: #3b82f6;">Expected Move</td>
                                         <td id="ai-move" style="padding: 6px 0; text-align: right; font-weight: 900;">Analyzing...</td>
                                     </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #a78bfa;">AI Insight</td>
+                                        <td id="ai-insight" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fff; font-style: italic;">Scanning...</td>
+                                    </tr>
                                     <tr>
                                         <td colspan="2" id="ai-condition" style="padding-top: 8px; font-size: 11px; color: #94a3b8; font-style: italic; text-align: center;">
                                             Waiting for data...
@@ -693,6 +697,7 @@
                 if(d.support) document.getElementById('ai-support').innerText = d.support;
                 if(d.resistance) document.getElementById('ai-resistance').innerText = d.resistance;
                 if(d.expected_move) document.getElementById('ai-move').innerText = d.expected_move;
+                if(d.ai_insight) document.getElementById('ai-insight').innerText = d.ai_insight;
                 if(d.condition) document.getElementById('ai-condition').innerText = d.condition;
                 
                 // Update Ticker Content
