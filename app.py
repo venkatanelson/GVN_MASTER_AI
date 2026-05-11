@@ -463,13 +463,18 @@ def user_status():
     if spot > 24000:
         support = "24,000"
         resistance = "24,200"
-        expected_move = "Consolidation / Upside to 24,150"
-        condition = "Strong Support at 24,000. Wait for i5 breakout."
+        expected_move = "Bullish Continuation / Target 24,150"
+        condition = "Breakout above 24,000. Buyers in full control."
+    elif spot >= 23900:
+        support = "23,900"
+        resistance = "24,000"
+        expected_move = "Consolidation / Target 24,000"
+        condition = "Strong bounce from 23,900 support. Approaching resistance."
     elif spot > 0:
         support = "23,800"
-        resistance = "24,000"
+        resistance = "23,950"
         expected_move = "Downside move to 23,800"
-        condition = "Support broken. Heavy Put OI increasing."
+        condition = "Support broken. Bears targeting 23,800."
 
     return jsonify({
         "nifty_spot": spot,
