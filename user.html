@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="te">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GVN MASTER ALGO V2.2 PREMIUM 🚀</title>
+    <!-- CACHE BUSTING & LIVE SYNC -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="X-Build-ID" content="{{ cache_id }}">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.5);
+            --secondary: #10b981;
+            --secondary-glow: rgba(16, 185, 129, 0.5);
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-dark: #020617;
+            --card-bg: rgba(15, 23, 42, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(15, 23, 42, 1) 0px, transparent 100%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        /* --- PREMIUM CARD SYSTEM --- */
+        .premium-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid var(--glass-border);
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header-card {
+            border-top: 4px solid var(--primary);
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+        }
+
+        /* --- BUTTONS --- */
+        .btn-premium {
+            background: linear-gradient(135deg, var(--primary), #4f46e5);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 13px;
+        }
+
+        .btn-premium:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px var(--primary-glow);
+        }
+
+        .btn-go {
+            background: linear-gradient(135deg, #10b981, #059669);
+            padding: 14px 32px;
+            border-radius: 50px;
+            font-weight: 900;
+            color: white;
+            border: none;
+            cursor: pointer;
+            animation: pulse-green 2s infinite;
+            font-size: 14px;
+        }
+        
+        .btn-stop {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        /* --- P&L GRID --- */
+        .pnl-grid {
+            display: flex;
+            overflow-x: auto;
+            gap: 15px;
+            padding-bottom: 15px;
+            margin-top: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .pnl-item {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+            text-align: center;
+            min-width: 150px;
+            flex: 0 0 auto;
+        }
+
+        .profit { color: var(--secondary); font-weight: 800; }
+        .loss { color: var(--danger); font-weight: 800; }
+
+        /* --- TABS --- */
+        .tab-container {
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 8px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 12px;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: var(--bg-dark);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        /* --- HEARTBEAT --- */
+        .heartbeat {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 16px;
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            position: relative;
+        }
+        
+        .dot::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        .dot-blue { background: #3b82f6; }
+        .dot-blue::after { background: #3b82f6; }
+        
+        @keyframes pulse-dot {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        
+        /* --- OPTION CHAIN MODAL --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: var(--bg-dark);
+            border: 1px solid var(--primary);
+            border-radius: 20px;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        
+        .oc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .oc-table th, .oc-table td {
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .oc-table th {
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--primary);
+            position: sticky;
+            top: 0;
+        }
+        
+        .oc-table .atm-row {
+            background: rgba(255, 255, 255, 0.05);
+            border-top: 2px solid var(--warning);
+            border-bottom: 2px solid var(--warning);
+        }
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 16px;
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            position: relative;
+        }
+        
+        .dot::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s infinite;
+        }
+
+        .dot-blue { background: #3b82f6; }
+        .dot-blue::after { background: #3b82f6; }
+
+        /* --- INPUTS --- */
+        input, select {
+            background: rgba(15, 23, 42, 0.8) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: white !important;
+            padding: 12px 16px !important;
+            border-radius: 12px !important;
+            width: 100%;
+            margin-bottom: 15px;
+            font-family: inherit;
+        }
+    <style>
+        /* 🔒 LOCK & SECURITY STYLES */
+        .locked-content {
+            filter: blur(15px);
+            pointer-events: none;
+            user-select: none;
+        }
+        .lock-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 6, 23, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+        }
+        .watermark {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            font-size: 6vw;
+            color: rgba(255, 255, 255, 0.04);
+            pointer-events: none;
+            z-index: 10000;
+            white-space: nowrap;
+            user-select: none;
+            font-weight: 900;
+        }
+        .live-pulse {
+            animation: pulse-rainbow 2s infinite linear;
+        }
+        @keyframes pulse-rainbow {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body style="user-select: none;" oncontextmenu="return false;">
+    <!-- 🔒 SECURITY WATERMARK -->
+    <div class="watermark">GVN SECURE - {{ user.phone }}</div>
+
+    {% if user.is_locked and not user.is_admin %}
+    <div class="lock-overlay" id="mainLockOverlay">
+        <div class="premium-card" style="max-width: 450px; padding: 40px; border: 2px solid var(--primary); box-shadow: 0 0 100px rgba(99, 102, 241, 0.4);">
+            <div style="font-size: 80px; margin-bottom: 25px;">🔒</div>
+            <h1 style="font-weight: 900; margin-bottom: 10px; color: white; letter-spacing: 2px;">ACCESS RESTRICTED</h1>
+            <p style="color: var(--text-dim); margin-bottom: 30px; font-size: 14px; line-height: 1.6;">Your GVN AI Master Engine is currently locked. To access live "Zero-to-Hero" signals and i-Level levels, please activate your premium subscription.</p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button onclick="document.getElementById('paymentModal').style.display='flex'; document.getElementById('mainLockOverlay').style.display='none';" class="btn-premium" style="background: var(--secondary);">ACTIVATE NOW</button>
+                <a href="https://wa.me/{{ config.support_number_1 }}" class="btn-premium" style="background: rgba(255,255,255,0.1);">SUPPORT</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="container {{ 'locked-content' if user.is_locked else '' }}">
+        <!-- FLASH MESSAGES -->
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div style="background: white; padding: 15px; border-radius: 12px; border-left: 5px solid var(--primary); margin-bottom: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); color: #333; font-weight: bold;">
+                🔔 {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- HEADER SECTION -->
+        <div class="premium-card header-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+            <div style="flex: 1; min-width: 300px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+                    {% if user.user_type == 'DEMO' %}
+                    <span style="background: var(--warning); color: #000; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">DEMO ACCOUNT</span>
+                    {% else %}
+                    <span style="background: var(--secondary); color: #fff; padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 900;">LIVE REAL ACCOUNT</span>
+                    {% endif %}
+
+                    <!-- TRADE QUANTITY SETTING (FOR REAL ACCOUNTS) -->
+                    <div style="margin-left: 5px; display: inline-flex; align-items: center;">
+                        <select id="tradeQuantitySelect" style="background: rgba(15, 23, 42, 0.8) !important; border: 1px solid var(--primary) !important; color: white !important; border-radius: 50px !important; padding: 4px 12px !important; font-size: 11px; font-weight: 800; cursor: pointer; width: auto; height: auto;">
+                            <option value="1">Single Lot (1x)</option>
+                            <option value="2" selected>Double Lot (2x)</option>
+                        </select>
+                    </div>
+
+                    <!-- GVN MASTER ROBOT CONTROL PANEL -->
+                    <div class="card bg-dark border-primary mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 text-primary"><i class="fas fa-robot me-2"></i>GVN MASTER ROBOT v2.5</h5>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="robotToggle" onchange="toggleRobot(this.checked)">
+                                <label class="form-check-label text-light" for="robotToggle" id="robotStatusText">OFF</label>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Scanner</small>
+                                    <span id="scannerStatus" class="badge bg-secondary">IDLE</span>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Execution</small>
+                                    <span id="execStatus" class="badge bg-secondary">PAUSED</span>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted d-block">Build</small>
+                                    <span class="badge bg-info">v2.5.1</span>
+                                </div>
+                            </div>
+                            
+                            <div id="robotActiveInfo" style="display:none;">
+                                <div class="alert alert-info py-2 small mb-0">
+                                    <i class="fas fa-satellite-dish fa-spin me-2"></i> Monitoring Priority Strikes (Delta 0.59-0.69)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DEMO TRADE LOGS -->
+                    <div class="card bg-dark border-info mb-4">
+                        <div class="card-header bg-info-subtle text-info">
+                            <h6 class="mb-0 small font-weight-bold">DEMO TRADE LOGS (AI SIGNALS)</h6>
+                        </div>
+                        <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-dark table-hover table-sm small mb-0">
+                                <thead class="sticky-top bg-dark">
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Strike</th>
+                                        <th>Level</th>
+                                        <th>Signal</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="demoLogsTable">
+                                    <tr><td colspan="5" class="text-center text-muted py-3">No active signals</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 🌟 LIVE BROKER STATUS BADGE — auto-updates every 30s -->
+                    <span id="live-broker-badge" style="padding: 4px 14px; border-radius: 50px; font-size: 11px; font-weight: 900; border: 1px solid var(--glass-border); color: var(--text-dim);">
+                        🔄 CHECKING BROKER...
+                    </span>
+                    <span id="live-data-source" style="padding: 3px 10px; border-radius: 50px; font-size: 10px; font-weight: 800; background: rgba(255,255,255,0.05); color: var(--text-dim);">
+                        DATA: --
+                    </span>
+                </div>
+                <!-- Live reason tooltip shown below -->
+                <div id="broker-reason" style="font-size: 10px; color: var(--text-dim); margin-bottom: 6px; min-height: 14px;"></div>
+                <h1 style="margin: 0; font-size: 28px; font-weight: 900;">Welcome back, {{ user.username }}</h1>
+                <p style="margin: 8px 0 0 0; color: var(--text-dim); font-size: 14px;">
+                    {{ user.email }} | <span style="color: var(--primary); font-weight: 800;">Subscription: {{ remaining_days }} Days Left</span> | <span style="color: #10b981; font-weight: 800;">v{{ build_version }}</span>
+                </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="text-align: right;">
+                    <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: 900; color: var(--text-dim); text-transform: uppercase;">Algo Master Switch</p>
+                    <a href="/toggle-algo/{{ user.id }}" style="text-decoration: none;">
+                        <button class="btn-premium" style="background: {{ 'var(--secondary)' if user.algo_status == 'ON' else 'var(--danger)' }}; min-width: 120px;">
+                            {{ '🟢 ' + user.algo_status if user.algo_status == "ON" else '🔴 ' + user.algo_status }}
+                        </button>
+                    </a>
+                </div>
+                <a href="/logout" class="btn-premium" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 12px 16px;">🚪</a>
+            </div>
+        </div>
+
+        <script>
+        // 🌟 LIVE BROKER STATUS POLLING — every 30 seconds
+        function refreshBrokerStatus() {
+            fetch('/api/broker-status')
+            .then(r => r.json())
+            .then(d => {
+                const badge = document.getElementById('live-broker-badge');
+                const src   = document.getElementById('live-data-source');
+                const rsn   = document.getElementById('broker-reason');
+                if (d.connected) {
+                    badge.innerText = `✅ ${d.broker_name.toUpperCase()} CONNECTED`;
+                    badge.style.background = 'rgba(16,185,129,0.15)';
+                    badge.style.color = '#10b981';
+                    badge.style.borderColor = '#10b981';
+                } else {
+                    badge.innerText = `❌ ${d.broker_name.toUpperCase()} NOT CONNECTED`;
+                    badge.style.background = 'rgba(239,68,68,0.15)';
+                    badge.style.color = '#ef4444';
+                    badge.style.borderColor = '#ef4444';
+                }
+                src.innerText = `DATA: ${d.data_source || '--'} | SPOT: ${d.nifty_spot || '0'}`;
+                rsn.innerText = d.reason || '';
+                rsn.style.color = d.connected ? '#10b981' : '#f59e0b';
+            })
+            .catch(() => {
+                document.getElementById('live-broker-badge').innerText = '⚠️ SERVER OFFLINE';
+            });
+        }
+        refreshBrokerStatus();
+        setInterval(refreshBrokerStatus, 30000);
+        </script>
+
+
+        <!-- 🛰️ GVN AI MASTER SCANNER STATUS (GLOBAL SYNC) -->
+        <div class="premium-card" id="global-scanner-card" style="border: 2px solid var(--warning); background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(2, 6, 23, 0.9)); margin-bottom: 20px; transition: all 0.5s ease;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div id="status-pulse-dot" class="dot dot-blue" style="width: 12px; height: 12px;"></div>
+                    <div>
+                        <h3 id="master-status-title" style="margin: 0; font-size: 14px; font-weight: 800; color: var(--warning); letter-spacing: 1px;">GVN AI MASTER SCANNER: IDLE</h3>
+                        <div id="master-status-desc" style="font-size: 18px; font-weight: 900; color: #fff; margin-top: 5px;">⌛ WAIT FOR SIGNAL...</div>
+                    </div>
+                </div>
+                <div id="master-pnl-display" style="text-align: right; display: none;">
+                    <small style="color: var(--text-dim); font-size: 10px; display: block;">LAST TRADE P&L</small>
+                    <span id="master-pnl-value" style="font-size: 24px; font-weight: 900; color: var(--secondary);">+₹ 0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📺 GVN LIVE TV: DALAL STREET TICKER & ANALYSIS -->
+        <div class="premium-card" style="border: 1px solid var(--primary); background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(99, 102, 241, 0.1)); padding: 0; overflow: hidden; margin-top: 20px;">
+            <div style="background: rgba(99, 102, 241, 0.2); padding: 10px 20px; border-bottom: 1px solid var(--glass-border); display: flex; align-items: center; gap: 10px;">
+                <span class="heartbeat" style="background: transparent; border: none; padding: 0;">
+                    <div class="dot dot-blue"></div>
+                </span>
+                <span style="font-weight: 900; font-size: 14px; color: #fff; letter-spacing: 1px;">GVN LIVE TV & ANALYSIS</span>
+            </div>
+            <div style="padding: 20px;">
+                <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                    <!-- LEFT: POSITIONS & THEORY -->
+                    <div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 20px;">
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--secondary); font-size: 14px; font-weight: 800;">ACTIVE POSITION</h4>
+                            <div id="active-trade-box" style="background: rgba(0,0,0,0.4); padding: 18px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+                                <span id="active-trade-symbol" style="font-size: 18px; font-weight: 900; color: #fff; display: block; margin-bottom: 12px;">-- NO ACTIVE TRADE --</span>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div>
+                                        <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">ENTRY PRICE</small>
+                                        <div id="active-trade-entry" style="font-size: 18px; font-weight: 800; color: var(--warning);">₹ 0.00</div>
+                                    </div>
+                                    <div>
+                                        <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">TARGET</small>
+                                        <div id="active-trade-target" style="font-size: 18px; font-weight: 800; color: #10b981;">₹ 0.00</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--text-dim); font-size: 11px; text-transform: uppercase; font-weight: 800;">GVN AI ANALYSIS</h4>
+                            <p id="theory-text" style="margin: 0; font-size: 13px; line-height: 1.6; color: #cbd5e1; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; border-left: 3px solid var(--primary);">
+                                <span style="color: var(--warning); font-weight: 800;">⌛ Wait for Signal:</span> System is scanning institutional breakouts on the Alpha Grid.
+                            </p>
+                        </div>
+                        
+                        <!-- 🛡️ SUPPORT & RESISTANCE AI DATA -->
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: #f59e0b; font-size: 11px; text-transform: uppercase; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                                <span class="dot dot-blue" style="width:6px; height:6px;"></span> MARKET CONDITION & KEY LEVELS
+                            </h4>
+                            <div style="background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                                <table style="width: 100%; font-size: 12px; color: #cbd5e1; border-collapse: collapse;">
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #10b981;">Strong Support</td>
+                                        <td id="ai-support" style="padding: 6px 0; text-align: right; font-weight: 900;">Scanning...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #ef4444;">Strong Resistance</td>
+                                        <td id="ai-resistance" style="padding: 6px 0; text-align: right; font-weight: 900;">Scanning...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #3b82f6;">Expected Move</td>
+                                        <td id="ai-move" style="padding: 6px 0; text-align: right; font-weight: 900;">Analyzing...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #a78bfa;">AI Insight</td>
+                                        <td id="ai-insight" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fff; font-style: italic;">Scanning...</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="2" id="ai-condition" style="padding-top: 8px; font-size: 11px; color: #94a3b8; font-style: italic; text-align: center;">
+                                            Waiting for data...
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- 📟 LIVE SYSTEM TERMINAL (WOW FACTOR) -->
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 11px; text-transform: uppercase; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                                <span class="dot dot-blue" style="width:6px; height:6px;"></span> LIVE SYSTEM LOGS
+                            </h4>
+                            <div id="ui-terminal" style="background: #000; height: 180px; border-radius: 12px; border: 1px solid var(--glass-border); padding: 10px; font-family: 'Courier New', monospace; font-size: 10px; color: #10b981; overflow-y: auto; line-height: 1.4; box-shadow: inset 0 0 15px rgba(16, 185, 129, 0.1);">
+                                <div style="color: #64748b;">[SYSTEM] Initializing GVN Master Engine...</div>
+                                <div style="color: #64748b;">[SYSTEM] Connecting to Angel One API...</div>
+                                <div style="color: #10b981;">[SUCCESS] Authentication Verified.</div>
+                                <div style="color: #6366f1;">[INFO] Scanning for Monday's Expiry setup...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: LIVE TV CHART -->
+                    <div style="flex: 2; min-width: 400px; height: 480px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); background: #000;">
+                        <div id="tradingview_gvn" style="height:100%;width:100%"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- SCROLLING TICKER -->
+            <div style="background: rgba(0,0,0,0.5); padding: 8px 0; border-top: 1px solid var(--glass-border); display: flex; align-items: center; position: relative;">
+                <div style="background: var(--primary); color: white; font-weight: 900; padding: 4px 15px; font-size: 11px; z-index: 2; position: absolute; left: 0; box-shadow: 5px 0 15px rgba(0,0,0,0.5);">DALAL STREET LIVE</div>
+                <marquee id="ticker-scroll" scrollamount="5" style="color: var(--text-dim); font-size: 12px; font-weight: 600; padding-left: 140px;">
+                    <span id="ticker-content">... Waiting for System Pulse ...</span>
+                </marquee>
+            </div>
+        </div>
+
+        <script>
+        function updateDashboardStatus() {
+            fetch(`/api/user-status?symbol=${currentActiveIndex}`)
+            .then(r => r.json())
+            .then(d => {
+                // 🛰️ MASTER SCANNER CARD LOGIC
+                const mCard = document.getElementById('global-scanner-card');
+                const mTitle = document.getElementById('master-status-title');
+                const mDesc = document.getElementById('master-status-desc');
+                const mPnlBox = document.getElementById('master-pnl-display');
+                const mPnlVal = document.getElementById('master-pnl-value');
+                const mDot = document.getElementById('status-pulse-dot');
+
+                if (d.state === "ACTIVE") {
+                    mCard.style.borderColor = 'var(--secondary)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: LIVE TRADE";
+                    mTitle.style.color = 'var(--secondary)';
+                    mDesc.innerText = "🚀 POSITION ACTIVE: " + d.trade_symbol;
+                    mPnlBox.style.display = 'none';
+                    mDot.className = "dot dot-blue"; 
+                } else if (d.state === "CLOSED") {
+                    mCard.style.borderColor = 'var(--primary)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: TRADE CLOSED";
+                    mTitle.style.color = 'var(--primary)';
+                    mDesc.innerText = "💰 TARGET ACHIEVED / SQUARE-OFF";
+                    mPnlBox.style.display = 'block';
+                    mPnlVal.innerText = '₹ ' + d.last_pnl;
+                    mPnlVal.className = parseFloat(d.last_pnl) >= 0 ? 'profit' : 'loss';
+                    mDot.className = "dot dot-blue";
+                } else {
+                    mCard.style.borderColor = 'var(--warning)';
+                    mCard.style.background = 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(2, 6, 23, 0.9))';
+                    mTitle.innerText = "GVN AI MASTER SCANNER: IDLE";
+                    mTitle.style.color = 'var(--warning)';
+                    mDesc.innerText = "⌛ WAIT FOR SIGNAL...";
+                    mPnlBox.style.display = 'none';
+                    mDot.className = "dot dot-blue";
+                }
+
+                // Update Spot Price
+                const spotPrice = d.spot || 0;
+                const tickerSpot = document.getElementById('visible-spot-price');
+                if (tickerSpot) tickerSpot.innerText = spotPrice;
+                
+                const uiSpot = document.getElementById('ui-nifty-price');
+                if (uiSpot) uiSpot.innerText = spotPrice;
+
+                // Update Active Trade Box
+                const tradeBox = document.getElementById('active-trade-box');
+                const tradeSym = document.getElementById('active-trade-symbol');
+                const tradeEntry = document.getElementById('active-trade-entry');
+                const tradeTarget = document.getElementById('active-trade-target');
+                
+                if (d.state === "ACTIVE") {
+                    tradeBox.style.borderColor = 'var(--secondary)';
+                    tradeSym.innerText = d.trade_symbol;
+                    tradeSym.style.color = 'var(--secondary)';
+                    tradeEntry.innerText = '₹ ' + d.trade_entry;
+                    tradeTarget.innerText = '₹ ' + d.trade_target;
+                } else {
+                    tradeBox.style.borderColor = 'rgba(255,255,255,0.1)';
+                    tradeSym.innerText = '-- NO ACTIVE TRADE --';
+                    tradeSym.style.color = 'var(--text-dim)';
+                    tradeEntry.innerText = '₹ 0.00';
+                    tradeTarget.innerText = '₹ 0.00';
+                }
+                
+                // Update Theory Text
+                const theory = document.getElementById('theory-text');
+                theory.innerHTML = d.theory;
+                
+                // Update AI Key Levels
+                if(d.support) document.getElementById('ai-support').innerText = d.support;
+                if(d.resistance) document.getElementById('ai-resistance').innerText = d.resistance;
+                if(d.expected_move) document.getElementById('ai-move').innerText = d.expected_move;
+                if(d.ai_insight) document.getElementById('ai-insight').innerText = d.ai_insight;
+                if(d.condition) document.getElementById('ai-condition').innerText = d.condition;
+                
+                // Update Ticker Content
+                const ticker = document.getElementById('ticker-content');
+                if (d.state === "ACTIVE") {
+                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | ${currentActiveIndex} SPOT: ${spotPrice}`;
+                } else {
+                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | ${currentActiveIndex} SPOT: ${spotPrice}`;
+                }
+                
+                // Update Robot Badges
+                const robotStatus = document.getElementById('scannerStatus');
+                if (d.state === "ACTIVE") {
+                    robotStatus.innerText = 'TRADE LIVE';
+                    robotStatus.className = 'badge bg-success';
+                } else {
+                    robotStatus.innerText = 'SCANNING';
+                    robotStatus.className = 'badge bg-warning text-dark';
+                }
+            });
+        }
+        function updateTerminal() {
+            fetch('/api/demo-logs')
+            .then(r => r.json())
+            .then(d => {
+                const term = document.getElementById('ui-terminal');
+                if (d.logs && d.logs.length > 0) {
+                    let html = '';
+                    d.logs.forEach(log => {
+                        let color = '#10b981'; // Default green
+                        if (log.includes('[ERROR]') || log.includes('Failed')) color = '#ef4444';
+                        if (log.includes('[SIGNAL]')) color = '#6366f1';
+                        if (log.includes('[INFO]')) color = '#64748b';
+                        html += `<div style="color: ${color}; margin-bottom: 4px;">> ${log}</div>`;
+                    });
+                    term.innerHTML = html;
+                    term.scrollTop = term.scrollHeight;
+                }
+            });
+        }
+        setInterval(updateTerminal, 2000);
+
+        setInterval(updateDashboardStatus, 2000);
+        updateDashboardStatus();
+        </script>
+
+        <!-- 🤖 GVN FULL-AUTO COMMAND CENTER -->
+        <div class="premium-card" style="border: 1px solid rgba(16, 185, 129, 0.2); background: linear-gradient(135deg, rgba(6, 78, 59, 0.1), rgba(2, 6, 23, 0.8));">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 20px; font-weight: 900;">GVN FULL-AUTO ALGO</h2>
+                    <p style="font-size: 12px; color: var(--text-dim); margin-top: 5px;">AI is scanning Alpha Grid for automatic entries...</p>
+                </div>
+                <a href="/toggle-auto-mode/{{ user.id }}" style="text-decoration: none;">
+                    <button class="btn-go {{ 'btn-stop' if user.full_auto_mode else '' }}">
+                        {{ 'STOP (MANUAL)' if user.full_auto_mode else 'GO (AUTO-TRADE)' }}
+                    </button>
+                </a>
+            </div>
+            <div style="margin-top: 20px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 10px 20px; border-radius: 50px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span style="font-size: 14px;">🔥</span>
+                <span style="font-size: 11px; font-weight: 900; color: #10b981; letter-spacing: 0.5px;">GLOBAL APPRECIATION OFFER! 10% DISCOUNT on all plans today.</span>
+            </div>
+        </div>
+
+        <!-- 🧠 SAVING MEMORY TO AI ENGINE -->
+        <div class="premium-card" style="border-top: 4px solid #8b5cf6; background: rgba(15, 23, 42, 0.8); margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px; font-weight: 900; color: #fff;">🧠 Saving Memory to AI Engine (14 Strikes)</h2>
+                    <p style="font-size: 12px; color: var(--text-dim); margin-top: 5px;">Pine Script Logical Thinkings integration active. Auto-trading system is monitoring this memory bank for custom strategy triggers.</p>
+                </div>
+                <div style="background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); padding: 8px 16px; border-radius: 50px;">
+                    <span style="font-size: 12px; font-weight: 800; color: #a78bfa;">STATUS: LINKED TO AUTO-ALGO ✅</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFORMANCE ANALYST -->
+        <h2 style="margin-top: 30px;">📊 My 30-Day Performance Analyst</h2>
+        <div class="pnl-grid">
+            <div class="pnl-item" style="border-top: 4px solid var(--warning);">
+                <small style="color: var(--text-dim); text-transform: uppercase;">TOTAL P&L (30 DAYS)</small>
+                <div class="{% if pnl_total_30d >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 24px;">
+                    ₹ {{ "%.2f"|format(pnl_total_30d) }}
+                </div>
+            </div>
+            {% for day in daily_history %}
+            <div class="pnl-item" style="border-top: 4px solid var(--primary);">
+                <small style="color: var(--text-dim);">{{ day.date }}</small>
+                <div class="{% if day.pnl >= 0 %}profit{% else %}loss{% endif %}" style="font-size: 18px;">
+                    ₹ {{ "%.2f"|format(day.pnl) }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="/history" class="btn-premium" style="background: var(--secondary);">📄 Download Full P&L Statement (PDF)</a>
+        </div>
+
+        <!-- 🤖 GVN AI MASTER PULSE -->
+        <div class="premium-card" style="border-top: 6px solid var(--primary); position: relative;">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 16px;">
+                <div style="text-align: center; background: #fff; padding: 25px; border-radius: 20px; max-width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                    <span style="font-size: 40px;">🔒</span>
+                    <h4 style="color: #000; margin: 15px 0 5px 0;">AI Engine Locked</h4>
+                    <p style="color: #64748b; font-size: 12px; margin-bottom: 15px;">Unlock Premium to view Live Call VS Put Memory Analysis, Rainbow Momentum & Alpha Breakouts.</p>
+                    <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="width: 100%; background: #10b981;">Unlock AI Engine</button>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+                <h3 style="margin: 0; font-weight: 900;">⚡ GVN AI Market Pulse</h3>
+                <div class="tab-container">
+                    <button onclick="switchIndex('NIFTY')" id="tab-NIFTY" class="tab-btn active">NIFTY</button>
+                    <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
+                    <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
+                    <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
+                    <button onclick="switchIndex('MCX')" id="tab-MCX" class="tab-btn">MCX (Crude)</button>
+                    <div class="flex items-center gap-2">
+                        <select id="playbackSymbol" class="bg-gray-800 text-white rounded px-2 py-1 text-xs">
+                            <option value="NIFTY">NIFTY</option>
+                            <option value="BANKNIFTY">BANKNIFTY</option>
+                            <option value="FINNIFTY">FINNIFTY</option>
+                            <option value="SENSEX">SENSEX</option>
+                            <option value="MCX">MCX (Crude)</option>
+                        </select>
+                        <button onclick="startPlayback(document.getElementById('playbackSymbol').value)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center gap-2 text-xs transition-all shadow-lg shadow-blue-900/20">
+                            🔄 Playback Mode
+                        </button>
+                    </div>
+                </div>
+                <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); padding: 5px 15px; border-radius: 50px;">
+                    <small style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; text-align: center;">LIVE SPOT</small>
+                    <span id="visible-spot-price" style="font-weight: 900; color: #fff; font-size: 18px;">0.00</span>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; align-items: center;">
+                <div style="text-align: center;">
+                    <div style="width: 220px; height: 110px; margin: auto; overflow: hidden; position: relative;">
+                        <div id="pulse-gauge" style="width: 220px; height: 220px; border-radius: 50%; background: conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg); transform: rotate(-90deg); transition: 1.5s;"></div>
+                        <div style="position: absolute; bottom: 0; left: 20px; width: 180px; height: 90px; background: var(--bg-dark); border-radius: 90px 90px 0 0;"></div>
+                        <div id="gauge-needle" style="position: absolute; bottom: 0; left: 50%; width: 4px; height: 95px; background: white; transform-origin: bottom center; transform: rotate(-90deg); transition: 1.5s;"></div>
+                    </div>
+                    <h2 id="pulse-sentiment" style="margin-top: 15px; font-weight: 900; font-size: 28px;">NEUTRAL</h2>
+                    <small id="pulse-score" style="color: var(--text-dim); font-weight: 800;">AI SCORE: 50.0</small>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
+                        <small style="color: var(--text-dim); font-size: 10px;">Trend</small>
+                        <span id="pulse-trend" style="font-weight: 900; font-size: 18px; color: var(--warning);">SIDEWAYS</span>
+                    </div>
+                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
+                        <small style="color: var(--text-dim); font-size: 10px;">Inst. Activity</small>
+                        <span id="pulse-inst" style="font-weight: 900; font-size: 18px;">QUIET</span>
+                    </div>
+                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
+                        <small style="color: var(--text-dim); font-size: 10px;">Vol. Strength</small>
+                        <span id="pulse-vol" style="font-weight: 900; font-size: 18px;">NORMAL</span>
+                    </div>
+                    <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
+                        <small style="color: var(--text-dim); font-size: 10px;">Update</small>
+                        <span id="pulse-time" style="font-weight: 900; font-size: 16px; color: var(--primary);">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📍 GVN DUAL-PULSE CONFIRMATION BOARD -->
+        <div class="premium-card" style="border-left: 5px solid var(--primary); margin-top: 25px; padding: 25px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9)); position: relative;">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; border-radius: 16px;"></div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                    <div>
+                        <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">🛰️ GVN DUAL-PULSE CONFIRMATION</h3>
+                        <p id="movement-text" style="font-size: 24px; font-weight: 900; color: #fff; margin: 0;">📡 SCANNING ALPHA GRID...</p>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <span id="sync-badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 900; border: 1px solid var(--glass-border);">SYNC: PENDING</span>
+                            <span id="vol-accel-badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 900; border: 1px solid var(--glass-border);">ACCEL: NORMAL</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 15px;">
+                        <div id="ce-pulse-box" onclick="changeStrike('CALL')" style="text-align: center; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); min-width: 110px; cursor: pointer;">
+                            <small style="color: var(--secondary); font-size: 9px; font-weight: 800; display: block; margin-bottom: 5px;">ACTIVE CALL (Click)</small>
+                            <span id="ce-strike-name" style="font-size: 15px; font-weight: 900; color: #fff;">N/A</span>
+                        </div>
+                        <div id="pe-pulse-box" onclick="changeStrike('PUT')" style="text-align: center; background: rgba(239, 68, 68, 0.1); padding: 12px; border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); min-width: 110px; cursor: pointer;">
+                            <small style="color: var(--danger); font-size: 9px; font-weight: 800; display: block; margin-bottom: 5px;">ACTIVE PUT (Click)</small>
+                            <span id="pe-strike-name" style="font-size: 15px; font-weight: 900; color: #fff;">N/A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🖼️ CHART SCRIPT (Now integrated above) -->
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+            const GVN_TV_SYMBOLS = {
+                'NIFTY':     'NSE:NIFTY1!',
+                'BANKNIFTY': 'NSE:BANKNIFTY1!',
+                'FINNIFTY':  'NSE:FINNIFTY1!',
+                'SENSEX':    'BSE:SENSEX',
+                'MCX':       'MCX:CRUDEOIL1!'
+            };
+
+            var tvWidgetInstance = null;
+            function initTV(symbol = 'NSE:NIFTY1!') {
+                if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
+                tvWidgetInstance = new TradingView.widget({
+                    "autosize": true,
+                    "symbol": symbol,
+                    "interval": "1",
+                    "timezone": "Asia/Kolkata",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "en",
+                    "container_id": "tradingview_gvn",
+                    "hide_side_toolbar": false,
+                    "allow_symbol_change": true,
+                    "details": true,
+                    "show_popup_button": true,
+                    "popup_width": "1000",
+                    "popup_height": "650"
+                });
+            }
+            initTV();
+
+            function changeTVSymbol(indexName) {
+                const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY1!';
+                if (window.lastTVSym !== sym) {
+                    window.lastTVSym = sym;
+                    initTV(sym);
+                }
+            }
+        </script>
+
+        <!-- Hidden GVN ZERO-TO-HERO SCANNER elements to prevent JS errors -->
+        <div style="display: none;">
+            <span id="oc-symbol-name">NIFTY</span>
+            <span id="ui-nifty-price">0.00</span>
+            <tbody id="scanner-body"></tbody>
+        </div>
+
+        <!-- TODAY'S LIVE SIGNALS -->
+        <div class="premium-card" style="margin-top: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; font-weight: 900;">⚡ Today's Live Signals</h3>
+                {% if user.is_admin %}
+                <a href="/admin/clear-today-trades" class="btn-premium" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 6px 12px; font-size: 10px;">Clear History</a>
+                {% endif %}
+            </div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">TIME</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">SYMBOL</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">STATUS</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ENTRY</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">EXIT</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">P&L (₹)</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in parsed_trades %}
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                            <td style="padding: 15px; font-size: 13px;">{{ t.time }}</td>
+                            <td style="padding: 15px;"><span style="font-weight: 800; color: var(--primary);">{{ t.symbol }}</span></td>
+                            <td style="padding: 15px;">
+                                <span style="background: {{ 'rgba(245, 158, 11, 0.1)' if t.status == 'Running' else 'rgba(16, 185, 129, 0.1)' }}; color: {{ 'var(--warning)' if t.status == 'Running' else 'var(--secondary)' }}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">{{ t.status.upper() }}</span>
+                            </td>
+                            <td style="padding: 15px; font-weight: 800;">₹ {{ t.entry_price }}</td>
+                            <td style="padding: 15px;">{{ '₹ ' + (t.exit_price|string) if t.status == 'Closed' else '-' }}</td>
+                            <td style="padding: 15px; font-weight: 900;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
+                                <span class="{{ 'live-pnl' if t.status == 'Running' else '' }}" data-trade-id="{{ t.id }}">
+                                    {{ '+' if t.pnl > 0 else '' }}₹ {{ "%.2f"|format(t.pnl) }}
+                                </span>
+                            </td>
+                            <td style="padding: 15px;">
+                                {% if t.status == 'Running' %}
+                                <a href="/force-close-trade/{{ t.id }}" class="btn-premium" style="background: var(--danger); padding: 6px 12px; font-size: 10px;">Square Off</a>
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" style="padding: 50px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for signals...</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- STRIKE SELECTION -->
+        <div class="premium-card" style="border-left: 5px solid var(--secondary);">
+            <h3 style="margin-bottom: 15px;">🎯 GVN Active Strike Selection</h3>
+            <p style="font-size: 12px; color: var(--text-dim); margin-bottom: 20px;">Type your preferred strikes (e.g., 23950 CE) to monitor them on the AI Pulse board.</p>
+            
+            <form action="/save_api_settings" method="POST">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                {# 🌟 FIX: Preserve all broker credentials so Strike update doesn't wipe them #}
+                <input type="hidden" name="broker_name" value="{{ broker_config.broker_name if broker_config else 'Dhan' }}">
+                <input type="hidden" name="client_id" value="{{ broker_config.client_id if broker_config and broker_config.client_id else '' }}">
+                <input type="hidden" name="webhook_url" value="{{ broker_config.webhook_url if broker_config else '' }}">
+                <input type="hidden" name="secret_key" value="********">
+                <input type="hidden" name="access_token" value="********">
+                <input type="hidden" name="client_secret" value="********">
+                <input type="hidden" name="totp_key" value="********">
+                <input type="hidden" name="broker_password" value="********">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <p style="font-size: 10px; color: var(--secondary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CALL STRIKE (CE)</p>
+                        <input type="text" name="call_strike" placeholder="e.g. 23950 CE" value="{{ broker_config.call_strike if broker_config and broker_config.call_strike else '' }}">
+                    </div>
+                    <div>
+                        <p style="font-size: 10px; color: var(--danger); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">PUT STRIKE (PE)</p>
+                        <input type="text" name="put_strike" placeholder="e.g. 24300 PE" value="{{ broker_config.put_strike if broker_config and broker_config.put_strike else '' }}">
+                    </div>
+                </div>
+                <button type="submit" class="btn-premium" style="width: 100%; background: var(--secondary);">Update Active Strikes</button>
+            </form>
+        </div>
+
+        <!-- SETTINGS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px;">
+            <div class="premium-card">
+                <h3 style="margin-bottom: 15px;">🔢 Trade Quantity</h3>
+                <form action="/update-lots" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <select name="trade_lots" onchange="this.form.submit()">
+                        <option value="1" {% if user.trade_lots == 1 %}selected{% endif %}>1x (Standard)</option>
+                        <option value="2" {% if user.trade_lots == 2 %}selected{% endif %}>2x (Double)</option>
+                        <option value="5" {% if user.trade_lots == 5 %}selected{% endif %}>5x (Aggressive)</option>
+                    </select>
+                </form>
+            </div>
+            <div class="premium-card">
+                <h3 style="margin-bottom: 15px;">🔑 API Settings</h3>
+                <form action="/save_api_settings" method="POST">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 0 0 5px 5px; text-transform: uppercase;">TradingView Webhook Details</p>
+                    <p style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">WEBHOOK URL (COPY THIS TO TRADINGVIEW)</p>
+                    <input type="text" name="webhook_url" placeholder="Webhook URL" value="{{ broker_config.webhook_url if broker_config else user.dhan_webhook_url }}">
+                    
+                    <p style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TRADINGVIEW SECRET KEY</p>
+                    <div style="position: relative;">
+                        <input type="password" id="tv_secret" name="secret_key" placeholder="Create a Secret Key (e.g., GVN@123)" value="{{ decrypted_keys.tv_secret if decrypted_keys and decrypted_keys.tv_secret else '' }}">
+                        <span onclick="toggleVisibility('tv_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+                    
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 15px 0 5px 5px; text-transform: uppercase;">Select Trading Broker</p>
+                    <select name="broker_name" style="width: 100%; padding: 12px 15px; border-radius: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); color: white; margin-bottom: 15px; outline: none; font-size: 14px;">
+                        <option value="Dhan" {% if broker_config and broker_config.broker_name == 'Dhan' %}selected{% endif %}>Dhan HQ (Recommended)</option>
+                        <option value="Fyers" {% if broker_config and broker_config.broker_name == 'Fyers' %}selected{% endif %}>Fyers API V3 (Free Data)</option>
+                        <option value="Shoonya" {% if broker_config and broker_config.broker_name == 'Shoonya' %}selected{% endif %}>Shoonya by Finvasia (Free Data & 0 Brokerage)</option>
+                        <option value="AngelOne" {% if broker_config and broker_config.broker_name == 'AngelOne' %}selected{% endif %}>Angel One SmartAPI (Free Data)</option>
+                        <option value="Zerodha" {% if broker_config and broker_config.broker_name == 'Zerodha' %}selected{% endif %}>Zerodha Kite</option>
+                        <option value="Upstox" {% if broker_config and broker_config.broker_name == 'Upstox' %}selected{% endif %}>Upstox</option>
+                        <option value="KotakNeo" {% if broker_config and broker_config.broker_name == 'KotakNeo' %}selected{% endif %}>Kotak Neo</option>
+                        <option value="AliceBlue" {% if broker_config and broker_config.broker_name == 'AliceBlue' %}selected{% endif %}>Alice Blue</option>
+                        <option value="FlatTrade" {% if broker_config and broker_config.broker_name == 'FlatTrade' %}selected{% endif %}>FlatTrade</option>
+                    </select>
+
+                    <p style="font-size: 11px; color: var(--text-dim); margin: 5px 0 15px 5px; text-transform: uppercase;">Broker API Credentials (Auto-Saved)</p>
+                    
+                    <p id="label_client_id" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT ID / APP ID</p>
+                    <input type="text" id="api_client_id" name="client_id" placeholder="Client ID / App ID" value="{{ decrypted_keys.client_id if decrypted_keys else '' }}">
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Example: FA440429_U</small>
+                    
+                    <p id="label_access_token" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">ACCESS TOKEN / API KEY</p>
+                    <div style="position: relative;">
+                        <input type="password" id="api_access_token" name="access_token" placeholder="Access Token / API Key" value="{{ decrypted_keys.access_token if decrypted_keys else '' }}">
+                        <span onclick="toggleVisibility('api_access_token')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+                    <small id="hint_access_token" style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: Your 'Algo ID' (e.g., gvnalgo)</small>
+
+                    <p id="label_client_secret" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">CLIENT SECRET / APP SECRET</p>
+                    <div style="position: relative;">
+                        <input type="password" id="api_client_secret" name="client_secret" placeholder="Client Secret / App Secret" value="{{ decrypted_keys.client_secret if decrypted_keys else '' }}">
+                        <span onclick="toggleVisibility('api_client_secret')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: Your 'Secret Code' (Long string)</small>
+
+                    <p id="label_totp" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">TOTP SECRET / PIN</p>
+                    <div style="position: relative;">
+                        <input type="password" id="api_totp" name="totp_key" placeholder="TOTP Secret / PIN" value="{{ decrypted_keys.totp_key if decrypted_keys else '' }}">
+                        <span onclick="toggleVisibility('api_totp')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Shoonya: 16-char code from QR Popup (e.g., II5QTH...)</small>
+
+
+                    <p id="label_broker_password" style="font-size: 10px; color: var(--primary); margin: 0 0 5px 5px; font-weight: bold; letter-spacing: 1px;">BROKER PASSWORD</p>
+                    <div style="position: relative;">
+                        <input type="password" id="api_broker_password" name="broker_password" placeholder="Broker Password" value="{{ decrypted_keys.broker_password if decrypted_keys else '' }}">
+                        <span onclick="toggleVisibility('api_broker_password')" style="position: absolute; right: 15px; top: 12px; cursor: pointer;">👁️</span>
+                    </div>
+                    <small style="color: var(--text-dim); font-size: 9px; display: block; margin: -10px 0 15px 5px;">Your actual Shoonya login password</small>
+
+                    
+                    <button type="submit" class="btn-premium" style="width: 100%; margin-top: 10px; background: linear-gradient(135deg, #6366f1, #4f46e5); font-size: 14px; padding: 15px;">🚀 CONNECT & SYNC BROKER</button>
+                </form>
+                <script>
+                    function toggleVisibility(id) {
+                        var x = document.getElementById(id);
+                        if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
+                    }
+
+                    document.querySelector('select[name="broker_name"]').addEventListener('change', function() {
+                        const broker = this.value;
+                        const clientId = document.getElementById('api_client_id');
+                        const accessToken = document.getElementById('api_access_token');
+                        const clientSecret = document.getElementById('api_client_secret');
+                        const totpKey = document.getElementById('api_totp');
+                        const brokerPassword = document.getElementById('api_broker_password');
+
+
+                        const lblClientId = document.getElementById('label_client_id');
+                        const lblAccessToken = document.getElementById('label_access_token');
+                        const lblClientSecret = document.getElementById('label_client_secret');
+                        const lblTotpKey = document.getElementById('label_totp');
+                        const lblBrokerPassword = document.getElementById('label_broker_password');
+
+                        if (broker === 'Shoonya') {
+                            clientId.placeholder = "Shoonya User ID";
+                            lblClientId.innerText = "SHOONYA USER ID (CLIENT ID)";
+                            accessToken.placeholder = "Vendor Code (API Key)";
+                            lblAccessToken.innerText = "VENDOR CODE (API KEY)";
+                            clientSecret.placeholder = "API Secret";
+                            lblClientSecret.innerText = "API SECRET";
+                            totpKey.placeholder = "TOTP Secret Key (16 chars)";
+                            lblTotpKey.innerText = "TOTP SECRET KEY (16 CHARS)";
+                            brokerPassword.placeholder = "Shoonya Password";
+                            lblBrokerPassword.innerText = "SHOONYA PASSWORD";
+                        } else if (broker === 'Dhan') {
+                            clientId.placeholder = "Dhan Client ID";
+                            lblClientId.innerText = "DHAN CLIENT ID";
+                            accessToken.placeholder = "Dhan Access Token";
+                            lblAccessToken.innerText = "DHAN ACCESS TOKEN";
+                            clientSecret.placeholder = "Dhan Client Secret (Optional)";
+                            lblClientSecret.innerText = "DHAN CLIENT SECRET (OPTIONAL)";
+                            totpKey.placeholder = "Dhan TOTP Secret";
+                            lblTotpKey.innerText = "DHAN TOTP SECRET (OPTIONAL)";
+                            brokerPassword.placeholder = "Broker Password (Optional)";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD (OPTIONAL)";
+                        } else if (broker === 'AngelOne') {
+                            clientId.placeholder = "Angel One Client ID";
+                            lblClientId.innerText = "ANGEL ONE CLIENT ID";
+                            accessToken.placeholder = "SmartAPI Key";
+                            lblAccessToken.innerText = "SMARTAPI KEY";
+                            clientSecret.placeholder = "SmartAPI Secret";
+                            lblClientSecret.innerText = "SMARTAPI SECRET";
+                            totpKey.placeholder = "Angel One TOTP Secret or PIN";
+                            lblTotpKey.innerText = "ANGEL ONE TOTP SECRET OR PIN";
+                            brokerPassword.placeholder = "Broker Password (PIN)";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD (PIN)";
+                        } else if (broker === 'Fyers') {
+                            clientId.placeholder = "Fyers App ID (Client ID)";
+                            lblClientId.innerText = "FYERS APP ID (CLIENT ID)";
+                            accessToken.placeholder = "Access Token (App ID Hash)";
+                            lblAccessToken.innerText = "ACCESS TOKEN (APP ID HASH)";
+                            clientSecret.placeholder = "Secret Key";
+                            lblClientSecret.innerText = "SECRET KEY";
+                            totpKey.placeholder = "PIN";
+                            lblTotpKey.innerText = "PIN";
+                            brokerPassword.placeholder = "Fyers Password";
+                            lblBrokerPassword.innerText = "FYERS PASSWORD";
+                        } else {
+                            clientId.placeholder = "Client ID / App ID";
+                            lblClientId.innerText = "CLIENT ID / APP ID";
+                            accessToken.placeholder = "Access Token / API Key";
+                            lblAccessToken.innerText = "ACCESS TOKEN (API KEY)";
+                            clientSecret.placeholder = "Client Secret / App Secret";
+                            lblClientSecret.innerText = "CLIENT SECRET / APP SECRET";
+                            totpKey.placeholder = "TOTP Secret / PIN";
+                            lblTotpKey.innerText = "TOTP SECRET / PIN";
+                            brokerPassword.placeholder = "Broker Password";
+                            lblBrokerPassword.innerText = "BROKER PASSWORD";
+                        }
+
+                    });
+
+                    // Trigger the event on page load to set correct placeholders
+                    document.querySelector('select[name="broker_name"]').dispatchEvent(new Event('change'));
+                </script>
+            </div>
+        </div>
+    </div>
+
+    <!-- 💳 PAYMENT MODAL -->
+    <div id="paymentModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 10000; align-items: center; justify-content: center;">
+        <div style="background: #0f172a; border: 1px solid var(--primary); padding: 30px; border-radius: 24px; width: 400px; max-width: 90vw;">
+            <h2 style="color: var(--primary); margin-top: 0;">🔓 Unlock Premium</h2>
+            <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; margin-bottom: 20px; text-align: center;">
+                <p style="font-size: 12px; color: var(--text-dim);">Pay via PhonePe/UPI to:</p>
+                <p style="font-size: 20px; font-weight: 900; margin: 10px 0;">93814 90610</p>
+                <p style="font-size: 11px; color: var(--text-dim);">(Name: Venkata Nelson)</p>
+                <hr style="opacity: 0.1; margin: 15px 0;">
+                <p style="font-size: 11px; color: #10b981; font-weight: 800;">OR START FREE</p>
+                <a href="/unlock-premium/{{ user.id }}" class="btn-premium" style="display: block; width: 100%; text-decoration: none; background: #10b981; color: white; margin-top: 10px; font-size: 12px;">Activate Free Premium (30 Days)</a>
+            </div>
+            <button onclick="document.getElementById('paymentModal').style.display='none'; document.getElementById('mainLockOverlay').style.display='flex';" class="btn-premium" style="width: 100%; background: rgba(255,255,255,0.1);">Close</button>
+        </div>
+    </div>
+
+    <!-- 🤖 GVN AI WIDGET -->
+    <div onclick="toggleAIChat()" style="position: fixed; bottom: 30px; right: 30px; width: 80px; height: 80px; background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 25px rgba(168, 85, 247, 0.6); z-index: 1000; font-weight: 900; color: white; font-size: 15px; text-align: center; line-height: 1.2; animation: pulse-ai 2s infinite; border: 2px solid rgba(255,255,255,0.2);">GVN<br>AI</div>
+    
+    <style>
+        @keyframes pulse-ai {
+            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        .ai-quick-btn {
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--primary);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: 0.3s;
+            font-weight: 800;
+        }
+        .ai-quick-btn:hover { background: var(--primary); }
+    </style>
+
+    <div id="aiChatWindow" style="display: none; position: fixed; bottom: 120px; right: 30px; width: 360px; height: 520px; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 24px; flex-direction: column; z-index: 1000; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.7); backdrop-filter: blur(20px);">
+        <div style="background: linear-gradient(135deg, #6366f1, #a855f7); padding: 18px; color: white; font-weight: 900; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🤖</span>
+                <span>GVN AI Double Engine</span>
+            </div>
+            <span style="cursor: pointer; font-size: 18px;" onclick="toggleAIChat()">✕</span>
+        </div>
+        
+        <div id="aiChatBody" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px 12px 12px 0; max-width: 85%; border-left: 3px solid #a855f7;">
+                Hello! I am GVN AI. How can I help you optimize your trades today?
+            </div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px;">
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='What is the current Nifty Trend?'; sendAIPrompt();">Nifty Trend</button>
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Is CE safe to buy right now?'; sendAIPrompt();">CE Safe?</button>
+                <button class="ai-quick-btn" onclick="document.getElementById('aiChatInput').value='Run Deep Scan on Option Chain'; sendAIPrompt();" style="background: linear-gradient(135deg, #ec4899, #a855f7); border: none;">DEEP SCAN</button>
+            </div>
+        </div>
+        
+        <div style="padding: 15px; border-top: 1px solid var(--glass-border); display: flex; gap: 10px; background: rgba(0,0,0,0.2);">
+            <input type="text" id="aiChatInput" placeholder="Ask GVN AI..." style="margin-bottom: 0; background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 12px !important; border-radius: 50px !important;">
+            <button onclick="sendAIPrompt()" class="btn-premium" style="padding: 0 20px; border-radius: 50px; background: linear-gradient(135deg, #a855f7, #ec4899); box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);">➤</button>
+        </div>
+    </div>
+
+    <script>
+        let currentActiveIndex = 'NIFTY';
+
+        function toggleAIChat() {
+            const win = document.getElementById('aiChatWindow');
+            win.style.display = win.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        async function sendAIPrompt() {
+            const input = document.getElementById('aiChatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            
+            let n_spot = document.getElementById('ui-nifty-price')?.innerText || "0";
+            input.value = '';
+            const body = document.getElementById('aiChatBody');
+            body.innerHTML += `<div style="align-self: flex-end; background: var(--primary); padding: 10px; border-radius: 12px; max-width: 80%;">${msg}</div>`;
+            body.scrollTop = body.scrollHeight;
+
+            try {
+                const res = await fetch('/api/ai-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, nifty_price: n_spot })
+                });
+                const data = await res.json();
+                body.innerHTML += `<div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; max-width: 80%;">${data.reply.replace(/\n/g, '<br>')}</div>`;
+            } catch(e) {
+                body.innerHTML += `<div style="color: var(--danger); padding: 10px;">AI Offline.</div>`;
+            }
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function switchIndex(idx) {
+            currentActiveIndex = idx;
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active');
+            });
+            const activeTab = document.getElementById('tab-' + idx);
+            if (activeTab) activeTab.classList.add('active');
+            updateScanner();
+        }
+
+        function updateScanner() {
+            fetch('/api/gvn-scanner')
+                .then(r => r.json())
+                .then(res => {
+                    // 🌟 Update Monitored Strikes
+                    if (res.user_strikes) {
+                        document.getElementById('ce-strike-name').innerText = res.user_strikes.CALL || 'N/A';
+                        document.getElementById('pe-strike-name').innerText = res.user_strikes.PUT || 'N/A';
+                    } else if (res.monitored_strikes) {
+                        document.getElementById('ce-strike-name').innerText = res.monitored_strikes.CALL.symbol || 'N/A';
+                        document.getElementById('pe-strike-name').innerText = res.monitored_strikes.PUT.symbol || 'N/A';
+                    }
+
+                    document.getElementById('oc-symbol-name').innerText = currentActiveIndex;
+                    if (res.nifty_spot !== undefined) {
+                        // Dynamically show the spot price for the active index
+                        let activePrice = res.nifty_spot;
+                        if(currentActiveIndex !== 'NIFTY') {
+                             if(res.summary && res.summary[currentActiveIndex]) activePrice = res.summary[currentActiveIndex].spot;
+                        }
+                        document.getElementById('ui-nifty-price').innerText = activePrice;
+                        document.getElementById('visible-spot-price').innerText = activePrice;
+                    }
+                    const body = document.getElementById('scanner-body');
+                    const data = res.data[currentActiveIndex] || [];
+                    const pulse = res.market_pulse ? res.market_pulse[currentActiveIndex] : null;
+
+                    if (pulse) {
+                        document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
+                        document.getElementById('pulse-score').innerText = `AI SCORE: ${pulse.score}`;
+                        document.getElementById('pulse-trend').innerText = pulse.trend;
+                        document.getElementById('pulse-inst').innerText = pulse.inst_activity;
+                        document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
+                        document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
+                        
+                        // 🌟 DYNAMIC CHART UPDATE — switch to correct free index symbol
+                        const correctSym = GVN_TV_SYMBOLS[currentActiveIndex] || 'NSE:NIFTY50';
+                        if (window.lastChartSymbol !== correctSym) {
+                            changeTVSymbol(currentActiveIndex);
+                            window.lastChartSymbol = correctSym;
+                        }
+                        
+                        // 🌟 UPDATE DUAL-PULSE CONFIRMATION BOARD
+                        document.getElementById('movement-text').innerText = pulse.confirmation || '📡 SCANNING ALPHA GRID...';
+                        document.getElementById('sync-badge').innerText = `SYNC: ${pulse.confirmation ? pulse.confirmation.split(' ')[0] : 'PENDING'}`;
+                        
+                        // Update CE/PE Strikes in Pulse Board
+                        const ce_item = data.find(d => d.strike.includes('CE'));
+                        const pe_item = data.find(d => d.strike.includes('PE'));
+                        
+                        if(ce_item) {
+                            document.getElementById('ce-strike-name').innerText = ce_item.strike.split(' ')[1] || ce_item.strike;
+                            document.getElementById('ce-pulse-box').style.borderColor = ce_item.ltp > (ce_item.levels ? ce_item.levels.i5 : 0) ? 'var(--secondary)' : 'rgba(16, 185, 129, 0.2)';
+                        }
+                        if(pe_item) {
+                            document.getElementById('pe-strike-name').innerText = pe_item.strike.split(' ')[1] || pe_item.strike;
+                            document.getElementById('pe-pulse-box').style.borderColor = pe_item.ltp > (pe_item.levels ? pe_item.levels.i5 : 0) ? 'var(--danger)' : 'rgba(239, 68, 68, 0.2)';
+                        }
+                        
+                        document.getElementById('vol-accel-badge').innerText = `ACCEL: ${pulse.volume || 'NORMAL'}`;
+
+                        // 🌟 DYNAMIC COLORING & RAINBOW GAUGE
+                        const sentimentEl = document.getElementById('pulse-sentiment');
+                        const gauge = document.getElementById('pulse-gauge');
+                        
+                        if(pulse.color === 'rainbow') {
+                            sentimentEl.style.background = "linear-gradient(to right, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff)";
+                            sentimentEl.style.webkitBackgroundClip = "text";
+                            sentimentEl.style.webkitTextFillColor = "transparent";
+                            gauge.style.background = "conic-gradient(from 180deg at 50% 50%, #ff0000 0%, #ff7f00 15%, #ffff00 30%, #00ff00 45%, #0000ff 60%, #4b0082 75%, #8f00ff 90%, #ff0000 100%)";
+                            gauge.classList.add('live-pulse');
+                        } else {
+                            sentimentEl.style.webkitTextFillColor = "";
+                            sentimentEl.style.background = "";
+                            sentimentEl.style.color = pulse.color === 'green' ? '#10b981' : (pulse.color === 'red' ? '#ef4444' : '#f59e0b');
+                            gauge.style.background = `conic-gradient(from 180deg at 50% 50%, #ef4444 0deg, #f59e0b 90deg, #10b981 180deg)`;
+                            gauge.classList.remove('live-pulse');
+                        }
+
+                        // 🌟 SHOW AI LABELS (Pine Script Logic)
+                        document.getElementById('pulse-inst').innerHTML = pulse.labels ? pulse.labels.map(l => `<div style="font-size:10px; margin-bottom:2px; font-weight:800;">${l}</div>`).join('') : 'LOW';
+
+                        const angle = (pulse.score - 50) * 1.8;
+                        document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
+                    }
+
+                    let html = '';
+                    data.forEach(item => {
+                        let levelHtml = '';
+                        if(item.levels) {
+                            levelHtml = `<div style="font-size:9px; color:var(--text-dim); margin-top:5px;">
+                                i5: ${Math.round(item.levels.i5)} | i7: ${Math.round(item.levels.i7)}
+                            </div>`;
+                        }
+                        
+                        html += `
+                            <tr style="background: rgba(255,255,255,0.02);">
+                                <td style="padding: 15px; font-weight: 800; border-radius: 12px 0 0 12px; border-left: 4px solid var(--primary);">
+                                    ${item.strike}
+                                    ${levelHtml}
+                                </td>
+                                <td style="padding: 15px;">₹ ${item.ltp}<br><small style="color:var(--text-dim);">Δ ${item.delta}</small></td>
+                                <td style="padding: 15px;">${item.zone}</td>
+                                <td style="padding: 15px; font-weight: 900; color: ${item.ai_signal.includes('BUY') ? '#10b981' : '#ef4444'}">
+                                    ${item.trigger_signal ? `<span class="live-pulse" style="color: #6366f1;">⚡ ${item.trigger_signal}</span>` : item.ai_signal}
+                                </td>
+                                <td style="padding: 15px; font-weight: 900; border-radius: 0 12px 12px 0;">${item.score}%</td>
+                            </tr>
+                        `;
+                    });
+                    body.innerHTML = html || '<tr><td colspan="5" style="text-align: center;">📡 Analysis in progress...</td></tr>';
+                });
+        }
+
+        function updateLivePnL() {
+            document.querySelectorAll('.live-pnl').forEach(cell => {
+                const id = cell.getAttribute('data-trade-id');
+                fetch(`/api/live_trade_price/${id}`)
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.status === 'success') {
+                            const pnl = d.loss_points * -1;
+                            cell.innerText = (pnl >= 0 ? '+' : '') + `₹ ${pnl.toFixed(2)}`;
+                            cell.parentElement.className = pnl >= 0 ? 'profit' : 'loss';
+                        }
+                    });
+            });
+        }
+
+        function changeTVSymbol(symbol) {
+            console.log("Switching Chart to:", symbol);
+            // Re-initialize to ensure all tools and indicators are fresh for the new symbol
+            initTV(symbol.includes(':') ? symbol : `NSE:${symbol}`);
+        }
+
+        setInterval(updateScanner, 10000);
+        setInterval(updateLivePnL, 3000);
+        updateScanner();
+        
+        // Initial Chart Load
+        setTimeout(() => changeTVSymbol(`NSE:${currentActiveIndex}`), 2000);
+    </script>
+    <!-- 🌟 OPTION CHAIN MODAL -->
+    <div id="optionChainModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px;">
+                <div>
+                    <h2 style="margin: 0; color: var(--primary);">📊 GVN Live Option Chain (<span id="oc-symbol-display">NIFTY</span>)</h2>
+                    <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 13px;" id="oc-update-time">Waiting for data...</p>
+                </div>
+                <button onclick="closeOptionChain()" style="background: var(--danger); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold;">X CLOSE</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="oc-table">
+                    <thead>
+                        <tr>
+                            <th colspan="4">CALLS (CE)</th>
+                            <th>STRIKE</th>
+                            <th colspan="4">PUTS (PE)</th>
+                        </tr>
+                        <tr>
+                            <th>OI</th>
+                            <th>Δ / Θ</th>
+                            <th>i1 / i5 / i7</th>
+                            <th>LTP</th>
+                            <th style="background: var(--primary); color: white;">STRIKE</th>
+                            <th>LTP</th>
+                            <th>i1 / i5 / i7</th>
+                            <th>Δ / Θ</th>
+                            <th>OI</th>
+                        </tr>
+                    </thead>
+                    <tbody id="oc-body">
+                        <tr><td colspan="9">Loading TrueData API Data...</td></tr>
+
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentOCSymbol = 'NIFTY';
+        
+        function openOptionChain(symbol = 'NIFTY') {
+            currentOCSymbol = symbol;
+            document.getElementById('oc-symbol-display').innerText = symbol;
+            document.getElementById('oc-body').innerHTML = '<tr><td colspan="9">Fetching ' + symbol + ' Data...</td></tr>';
+            document.getElementById('optionChainModal').style.display = 'flex';
+            fetchOptionChainData();
+            // Start auto-refreshing while open
+            if(window.ocInterval) clearInterval(window.ocInterval);
+            window.ocInterval = setInterval(fetchOptionChainData, 3000);
+        }
+        
+        function closeOptionChain() {
+            document.getElementById('optionChainModal').style.display = 'none';
+            if(window.ocInterval) clearInterval(window.ocInterval);
+        }
+        
+        function fetchOptionChainData() {
+            fetch('/api/truedata-option-chain?symbol=' + currentOCSymbol)
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    document.getElementById('oc-update-time').innerText = "Last Updated: " + data.timestamp + " | Spot Price: " + data.spot_price;
+                    let html = '';
+                    data.chain.forEach(row => {
+                        let is_atm = row.is_atm ? 'class="atm-row"' : '';
+                        // 🌟 GVN REACTION LOGIC: Highlight if price is at i1 level
+                        let ce_react = (row.ce_ltp && row.ce_gvn_i1 && Math.abs(row.ce_ltp - row.ce_gvn_i1) < 2) ? 'style="background:rgba(16,185,129,0.3);"' : '';
+                        let pe_react = (row.pe_ltp && row.pe_gvn_i1 && Math.abs(row.pe_ltp - row.pe_gvn_i1) < 2) ? 'style="background:rgba(239,68,68,0.3);"' : '';
+
+                        html += `<tr ${is_atm}>
+                            <td style="color: #ef4444; font-size: 11px;">${row.ce_oi || '-'}</td>
+                            <td style="font-size: 10px;">${row.ce_delta || '0'}<br><span style="color:var(--text-dim);">${row.ce_theta || '0'}</span></td>
+                            <td style="color: var(--primary); font-weight: bold; font-size: 11px;">
+                                ${row.ce_gvn_i1 || '-'}<br>
+                                <span style="color:var(--text-dim); font-size: 9px;">${row.ce_gvn_i5 || '-'} / ${row.ce_gvn_i7 || '-'}</span>
+                            </td>
+                            <td ${ce_react} style="font-weight: bold; color: #10b981;">₹${row.ce_ltp || '-'}</td>
+                            <td style="background: rgba(99,102,241,0.1); font-weight: 900; color: white;">${row.strike}</td>
+                            <td ${pe_react} style="font-weight: bold; color: #ef4444;">₹${row.pe_ltp || '-'}</td>
+                            <td style="color: var(--primary); font-weight: bold; font-size: 11px;">
+                                ${row.pe_gvn_i1 || '-'}<br>
+                                <span style="color:var(--text-dim); font-size: 9px;">${row.pe_gvn_i5 || '-'} / ${row.pe_gvn_i7 || '-'}</span>
+                            </td>
+                            <td style="font-size: 10px;">${row.pe_delta || '0'}<br><span style="color:var(--text-dim);">${row.pe_theta || '0'}</span></td>
+                            <td style="color: #10b981; font-size: 11px;">${row.pe_oi || '-'}</td>
+                        </tr>`;
+                    });
+                    document.getElementById('oc-body').innerHTML = html;
+                } else {
+                    document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">Error: ${data.message}</td></tr>`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('oc-body').innerHTML = `<tr><td colspan="9" style="color: red;">API Connection Failed. Is Dhan feed active?</td></tr>`;
+            });
+        }
+    </script>
+    <script>
+        let robotActive = false;
+
+        function toggleRobot(active) {
+            robotActive = active;
+            const statusText = document.getElementById('robotStatusText');
+            const infoBox = document.getElementById('robotActiveInfo');
+            const scannerBadge = document.getElementById('scannerStatus');
+            const execBadge = document.getElementById('execStatus');
+
+            if (active) {
+                statusText.innerText = "RUNNING";
+                statusText.classList.add('text-success');
+                infoBox.style.display = "block";
+                scannerBadge.className = "badge bg-success";
+                scannerBadge.innerText = "SCANNING";
+                execBadge.className = "badge bg-warning text-dark";
+                execBadge.innerText = "READY";
+                
+                // Notify backend
+                fetch('/api/robot/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({active: true})
+                });
+            } else {
+                statusText.innerText = "OFF";
+                statusText.classList.remove('text-success');
+                infoBox.style.display = "none";
+                scannerBadge.className = "badge bg-secondary";
+                scannerBadge.innerText = "IDLE";
+                execBadge.className = "badge bg-secondary";
+                execBadge.innerText = "PAUSED";
+
+                fetch('/api/robot/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({active: false})
+                });
+            }
+        }
+
+        function updateDemoLogs(signals) {
+            const tbody = document.getElementById('demoLogsTable');
+            if (!signals || signals.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No active signals</td></tr>';
+                return;
+            }
+
+            let html = '';
+            signals.reverse().forEach(s => {
+                html += `<tr>
+                    <td>${s.time}</td>
+                    <td><span class="badge bg-primary">${s.strike}</span></td>
+                    <td>₹${s.level}</td>
+                    <td class="text-info">${s.signal}</td>
+                    <td><span class="badge bg-warning text-dark">${s.action}</span></td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // Auto-refresh demo logs
+        setInterval(() => {
+            fetch('/api/gvn-scanner')
+            .then(r => r.json())
+            .then(data => {
+                if (robotActive) {
+                    updateDemoLogs(data.demo_signals);
+                }
+            });
+        }, 3000);
+
+        async function startPlayback(symbol = 'MCX') {
+            const speed = prompt("Enter Playback Speed (e.g. 1.0, 2.0, 5.0):", "1.0");
+            if (speed) {
+                const response = await fetch(`/api/playback?speed=${speed}&symbol=${symbol}`);
+                const result = await response.json();
+                alert(`🎬 Playback for ${symbol} started at ${speed}x speed! Check console/scanner.`);
+            }
+        }
+    </script>
+</body>
+</html>
