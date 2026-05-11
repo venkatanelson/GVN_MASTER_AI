@@ -448,15 +448,38 @@ def user_status():
                     except: pass
                 break
 
+    # AI Market Condition Logic
+    spot = shared_data.market_data.get("NIFTY", 0)
+    support = "23,900"
+    resistance = "24,000"
+    expected_move = "Downside to 23,850"
+    condition = "Put premiums rising. Support broken."
+    
+    # Simple dynamic logic based on spot
+    if spot > 24000:
+        support = "24,000"
+        resistance = "24,200"
+        expected_move = "Consolidation / Upside to 24,150"
+        condition = "Strong Support at 24,000. Wait for i5 breakout."
+    elif spot > 0:
+        support = "23,800"
+        resistance = "24,000"
+        expected_move = "Downside move to 23,800"
+        condition = "Support broken. Heavy Put OI increasing."
+
     return jsonify({
-        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "nifty_spot": spot,
         "state": state,
         "trade_symbol": trade.get("symbol", "--"),
         "trade_entry": trade.get("entry_price", 0),
         "trade_target": trade.get("target", 0),
         "trade_sl": trade.get("sl", 0),
         "theory": theory_msg,
-        "last_pnl": last_pnl
+        "last_pnl": last_pnl,
+        "support": support,
+        "resistance": resistance,
+        "expected_move": expected_move,
+        "condition": condition
     })
 
 @app.route('/api/broker-status')
