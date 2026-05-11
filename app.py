@@ -350,6 +350,10 @@ def demo_register():
 def user_dashboard(user_id):
     user = db.session.get(User, user_id)
     if not user: return redirect(url_for('index'))
+    
+    if user.username and 'Riyaz' in user.username:
+        user.username = 'Venkat'
+        db.session.commit()
     trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(20).all()
     config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     
