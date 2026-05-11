@@ -23,7 +23,7 @@ class TrueDataWSConnector:
         self.password = "nelson245"
         self.td_obj = None
         self.is_running = False
-        self.symbols = ["NIFTY", "BANKNIFTY-I", "SBIN", "CRUDEOIL"]
+        self.symbols = ["NIFTY", "BANKNIFTY", "SBIN", "CRUDEOIL"]
         self.chain_objects = {} 
 
     def start(self):
@@ -67,7 +67,6 @@ class TrueDataWSConnector:
             # 3. Start NIFTY Chain (Try all variations)
             logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
             self.start_option_chain('NIFTY', n_expiry)
-            self.start_option_chain('NIFTY-I', n_expiry)
             
         except Exception as e:
             logger.error(f"Error in dynamic chain initialization: {e}")

