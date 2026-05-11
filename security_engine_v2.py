@@ -72,26 +72,35 @@ class SecurityShield:
                 self._log_security_event("BLOCKED_IP_ACCESS", ip, request.path, "IP permanently blocked")
                 return abort(403, description="🛑 GVN SECURITY: Your IP is blocked due to suspicious activity.")
 
-            # 3. Rate Limiting / Bot Detection
+            # 3. Bot Detection (User-Agent Filtering)
+            ua = request.headers.get('User-Agent', '').lower()
+            malicious_bots = ['python-requests', 'curl', 'wget', 'postman', 'headless', 'scraper', 'zgrab', 'masscan']
+            if any(bot in ua for bot in malicious_bots):
+                # Check if it's a legitimate internal request first
+                if ip not in ['127.0.0.1', 'localhost']:
+                    self._log_security_event("BOT_DETECTED", ip, request.path, f"Blocked malicious UA: {ua}")
+                    return abort(403, description="🤖 Security Alert: Bot activity detected and blocked.")
+
+            # 4. Rate Limiting / Bot Detection
             if self._is_suspicious(ip):
                 self.block_ip(ip, "High Frequency Request (DDoS/Bot)")
                 self._log_security_event("DDoS_ATTEMPT", ip, request.path, "Rate limit exceeded")
                 return abort(429, description="🚨 Security Alert: Too many requests. Try again later.")
 
-            # 4. Path Traversal / Common Attack Patterns
+            # 5. Path Traversal / Common Attack Patterns
             path = request.path.lower()
-            suspicious_patterns = ['.php', '.env', 'wp-admin', 'config', 'setup', 'eval(', 'base64_decode', '../', 'shell']
+            suspicious_patterns = ['.php', '.env', 'wp-admin', 'config', 'setup', 'eval(', 'base64_decode', '../', 'shell', '.git', 'etc/passwd']
             if any(p in path for p in suspicious_patterns):
                 self.block_ip(ip, f"Accessing restricted path: {path}")
                 self._log_security_event("MALICIOUS_PATH", ip, path, "Suspicious pattern detected")
                 return abort(403, description="🛑 Access Denied")
 
-            # 5. SQL Injection patterns
-            suspicious_sql_patterns = ["' OR '1'='1", "UNION SELECT", "DROP TABLE", "INSERT INTO", "DELETE FROM"]
+            # 6. SQL Injection / Script Injection patterns
+            suspicious_sql_patterns = ["' OR '1'='1", "UNION SELECT", "DROP TABLE", "INSERT INTO", "DELETE FROM", "<SCRIPT>", "JAVASCRIPT:"]
             full_data = str(request.args) + str(request.form) + str(request.get_json() or {})
             if any(pattern in full_data.upper() for pattern in suspicious_sql_patterns):
-                self.block_ip(ip, "SQL Injection Attempt")
-                self._log_security_event("SQL_INJECTION", ip, request.path, "SQL injection pattern detected")
+                self.block_ip(ip, "Injection Attempt")
+                self._log_security_event("INJECTION_ATTEMPT", ip, request.path, "Pattern detected")
                 return abort(403)
 
     def _compute_initial_hashes(self):
