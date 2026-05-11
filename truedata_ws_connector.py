@@ -23,7 +23,7 @@ class TrueDataWSConnector:
         self.password = "nelson245"
         self.td_obj = None
         self.is_running = False
-        self.symbols = ["NIFTY 50", "BANKNIFTY-I", "SBIN", "CRUDEOIL"]
+        self.symbols = ["NIFTY", "NIFTY 50", "BANKNIFTY-I", "SBIN", "CRUDEOIL"]
         self.chain_objects = {} 
 
     def start(self):
@@ -45,17 +45,32 @@ class TrueDataWSConnector:
             logger.error(f"❌ Failed to connect to TrueData WS: {e}")
 
     def initialize_default_chains(self):
-        """Starts option chains matching the sample code's working examples"""
+        """Starts option chains with dynamic expiry detection from REST API"""
         try:
-            # Using CRUDEOIL as it was in the sample code
-            crude_expiry = dt(2026, 5, 14)
-            self.start_option_chain('CRUDEOIL', crude_expiry)
+            from shared_data import td_api
             
-            # Trying NIFTY 50 for option chain if permitted
-            nifty_expiry = dt(2026, 5, 14)
-            self.start_option_chain('NIFTY 50', nifty_expiry)
+            # 1. Fetch Dynamic Expiries
+            nifty_expiries = []
+            crude_expiries = []
+            if td_api:
+                nifty_expiries = td_api.get_expiry_list("NIFTY")
+                crude_expiries = td_api.get_expiry_list("CRUDEOIL")
+            
+            # Default fallbacks if API fails or td_api is None
+            n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y") if (nifty_expiries and isinstance(nifty_expiries, list)) else dt(2026, 5, 14)
+            c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list)) else dt(2026, 5, 14)
+            
+            # 2. Start CRUDEOIL Chain
+            logger.info(f"📈 Initializing CRUDEOIL Chain for {c_expiry.date()}")
+            self.start_option_chain('CRUDEOIL', c_expiry)
+            
+            # 3. Start NIFTY Chain (Try both variations)
+            logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
+            self.start_option_chain('NIFTY', n_expiry)
+            self.start_option_chain('NIFTY 50', n_expiry)
+            
         except Exception as e:
-            logger.error(f"Error initializing default chains: {e}")
+            logger.error(f"Error in dynamic chain initialization: {e}")
 
     def _setup_callbacks(self):
         @self.td_obj.trade_callback
