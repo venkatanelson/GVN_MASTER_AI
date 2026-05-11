@@ -658,8 +658,8 @@
                 }
 
                 // Update Spot Price in Ticker
-                document.getElementById('ticker-nifty').innerText = d.nifty_spot;
-                
+                const tickerNifty = document.getElementById('ticker-nifty');
+                if (tickerNifty) tickerNifty.innerText = d.nifty_spot;
                 // Update Active Trade Box
                 const tradeBox = document.getElementById('active-trade-box');
                 const tradeSym = document.getElementById('active-trade-symbol');
