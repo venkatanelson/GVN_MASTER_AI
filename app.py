@@ -423,6 +423,7 @@ def user_dashboard(user_id):
 @app.route('/api/user-status')
 def user_status():
     """Provides high-fidelity state for the User Dashboard (Signal, P&L, Active Trade)."""
+    symbol = request.args.get('symbol', 'NIFTY').upper()
     trade = getattr(shared_data, 'demo_trade', {"active": False})
     logs = getattr(shared_data, 'demo_logs', [])
     
@@ -432,7 +433,7 @@ def user_status():
         state = "ACTIVE"
     else:
         # Check if last log was a close event
-        if logs and ("[PROFIT HIT]" in logs[-1] or "SQUARE-OFF" in logs[-1] or "TSL" in logs[-1]):
+        if logs and any(x in logs[-1] for x in ["[PROFIT HIT]", "SQUARE-OFF", "TSL", "SL HIT"]):
             state = "CLOSED"
 
     # Extract latest relevant message
@@ -440,9 +441,8 @@ def user_status():
     last_pnl = 0
     if logs:
         for log in reversed(logs):
-            if any(x in log for x in ["[SIGNAL]", "[RUNNING]", "[PROFIT HIT]", "[TSL]", "SQUARE-OFF"]):
+            if any(x in log for x in ["[SIGNAL]", "[RUNNING]", "[PROFIT HIT]", "[TSL]", "SQUARE-OFF", "SL HIT"]):
                 theory_msg = log
-                # Extract P&L if possible
                 if "P&L:" in log:
                     try: 
                         pnl_part = log.split("P&L:")[1].strip()
@@ -452,37 +452,41 @@ def user_status():
                     except: pass
                 break
 
-    # AI Market Condition Logic
-    spot = shared_data.market_data.get("NIFTY", 0)
-    support = "23,900"
-    resistance = "24,000"
-    expected_move = "Downside to 23,850"
-    condition = "Put premiums rising. Support broken."
+    # 🎯 DYNAMIC KEY LEVELS LOGIC
+    spot = shared_data.market_data.get(symbol, 0)
     
-    # Simple dynamic logic based on spot
-    if spot > 24000:
-        support = "24,000"
-        resistance = "24,200"
-        expected_move = "Bullish Continuation / Target 24,150"
-        condition = "Breakout above 24,000. Buyers in full control."
-    elif spot >= 23900:
-        support = "23,900"
-        resistance = "24,000"
-        expected_move = "Consolidation / Target 24,000"
-        condition = "Strong bounce from 23,900 support. Approaching resistance."
-    elif spot > 0:
-        support = "23,800"
-        resistance = "23,950"
-        expected_move = "Downside move to 23,800"
-        condition = "Support broken. Bears targeting 23,800."
+    # Defaults
+    support, resistance = "Scanning...", "Scanning..."
+    expected_move = "Analyzing..."
+    condition = "Wait for price action setup."
+    
+    # Symbol Specific Levels
+    if "NIFTY" in symbol:
+        if spot > 24000:
+            support, resistance = "24,000", "24,200"
+            expected_move = "Bullish / Target 24,150"
+            condition = "Price above psychological 24k. Bulls dominant."
+        else:
+            support, resistance = "23,800", "24,000"
+            expected_move = "Sideways / Target 23,950"
+            condition = "Consolidating in range. Wait for breakout."
+    elif "BANKNIFTY" in symbol:
+        support, resistance = f"{int(spot//100)*100}", f"{int(spot//100)*100 + 500}"
+        expected_move = "High Volatility Expected"
+        condition = "Institutional scanning on Bank strikes active."
+    elif "MCX" in symbol or "CRUDE" in symbol:
+        # MCX Crude typically moves in 10-50 pts steps
+        support = f"{int(spot//50)*50}"
+        resistance = f"{int(spot//50)*50 + 50}"
+        expected_move = f"Move towards {resistance}"
+        condition = "Crude Oil momentum is high. Watch i-levels."
 
     return jsonify({
-        "nifty_spot": spot,
+        "spot": spot,
         "state": state,
         "trade_symbol": trade.get("symbol", "--"),
         "trade_entry": trade.get("entry_price", 0),
         "trade_target": trade.get("target", 0),
-        "trade_sl": trade.get("sl", 0),
         "theory": theory_msg,
         "last_pnl": last_pnl,
         "support": support,

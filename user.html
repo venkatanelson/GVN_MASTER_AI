@@ -618,7 +618,7 @@
 
         <script>
         function updateDashboardStatus() {
-            fetch('/api/user-status')
+            fetch(`/api/user-status?symbol=${currentActiveIndex}`)
             .then(r => r.json())
             .then(d => {
                 // 🛰️ MASTER SCANNER CARD LOGIC
@@ -636,7 +636,7 @@
                     mTitle.style.color = 'var(--secondary)';
                     mDesc.innerText = "🚀 POSITION ACTIVE: " + d.trade_symbol;
                     mPnlBox.style.display = 'none';
-                    mDot.className = "dot dot-blue"; // Use blue for active
+                    mDot.className = "dot dot-blue"; 
                 } else if (d.state === "CLOSED") {
                     mCard.style.borderColor = 'var(--primary)';
                     mCard.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(2, 6, 23, 0.9))';
@@ -657,9 +657,14 @@
                     mDot.className = "dot dot-blue";
                 }
 
-                // Update Spot Price in Ticker
-                const tickerNifty = document.getElementById('ticker-nifty');
-                if (tickerNifty) tickerNifty.innerText = d.nifty_spot;
+                // Update Spot Price
+                const spotPrice = d.spot || 0;
+                const tickerSpot = document.getElementById('visible-spot-price');
+                if (tickerSpot) tickerSpot.innerText = spotPrice;
+                
+                const uiSpot = document.getElementById('ui-nifty-price');
+                if (uiSpot) uiSpot.innerText = spotPrice;
+
                 // Update Active Trade Box
                 const tradeBox = document.getElementById('active-trade-box');
                 const tradeSym = document.getElementById('active-trade-symbol');
@@ -693,9 +698,9 @@
                 // Update Ticker Content
                 const ticker = document.getElementById('ticker-content');
                 if (d.state === "ACTIVE") {
-                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | NIFTY SPOT: ${d.nifty_spot}`;
+                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | ${currentActiveIndex} SPOT: ${spotPrice}`;
                 } else {
-                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | NIFTY SPOT: ${d.nifty_spot}`;
+                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | ${currentActiveIndex} SPOT: ${spotPrice}`;
                 }
                 
                 // Update Robot Badges
@@ -809,6 +814,7 @@
                     <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
                     <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
                     <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
+                    <button onclick="switchIndex('MCX')" id="tab-MCX" class="tab-btn">MCX (Crude)</button>
                     <div class="flex items-center gap-2">
                         <select id="playbackSymbol" class="bg-gray-800 text-white rounded px-2 py-1 text-xs">
                             <option value="NIFTY">NIFTY</option>
@@ -1286,8 +1292,10 @@
         function switchIndex(idx) {
             currentActiveIndex = idx;
             document.querySelectorAll('.tab-btn').forEach(b => {
-                b.classList.toggle('active', b.innerText === idx);
+                b.classList.remove('active');
             });
+            const activeTab = document.getElementById('tab-' + idx);
+            if (activeTab) activeTab.classList.add('active');
             updateScanner();
         }
 
