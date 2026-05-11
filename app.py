@@ -1028,16 +1028,36 @@ def init_gvn():
 
         shared_data.system_status["initialized"] = True
 
-# Start init in a separate thread to prevent blocking the Flask server startup
+# ---------------------------------------------------------
+# GVN SYSTEM INITIALIZATION & STARTUP
+# ---------------------------------------------------------
+
+# Global flag to prevent double initialization during Flask reload
+_initialized = False
+
+def start_system():
+    global _initialized
+    if not _initialized:
+        print("\n" + "="*50)
+        print("🚀 GVN MASTER ALGO: INITIALIZING HIGH-SPEED ENGINE...")
+        print("="*50 + "\n")
+        
+        # Start core logic in a separate thread
+        import threading
+        threading.Thread(target=init_gvn, daemon=True).start()
+        _initialized = True
+
+# Start system only in the main worker process
 if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-    import threading
-    threading.Thread(target=init_gvn, daemon=True).start()
+    start_system()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
-    print("\n" + "="*50)
-    print(f"🚀 GVN MASTER ALGO SERVER STARTING...")
-    print(f"🔗 LOCAL LINK: http://127.0.0.1:{port}")
-    print(f"🔗 NETWORK LINK: http://0.0.0.0:{port}")
-    print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    print("\n" + "="*60)
+    print(f"🔥 GVN MASTER DASHBOARD IS NOW LIVE!")
+    print(f"🔗 LOCAL ACCESS:   http://127.0.0.1:{port}")
+    print(f"🔗 NETWORK ACCESS: http://192.168.29.101:{port}")
+    print("="*60 + "\n")
+    
+    # use_reloader=False prevents the "User Already Connected" error on startup
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
