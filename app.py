@@ -330,7 +330,10 @@ def index():
             return redirect(url_for('user_dashboard', user_id=user.id))
         else:
             session.pop('user_id', None)
-    return render_template('login.html')
+    
+    # Fetch config for support numbers
+    config = UserBrokerConfig.query.filter_by(user_id=1).first()
+    return render_template('ui.html', config=config)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -340,12 +343,8 @@ def login():
         if user:
             session['user_id'] = user.id
             return redirect(url_for('user_dashboard', user_id=user.id))
+        flash("❌ User not found. Please register for a Demo or check your details.")
     
-    # Auto-login first user for testing if no one is logged in
-    user = User.query.first()
-    if user:
-        session['user_id'] = user.id
-        return redirect(url_for('user_dashboard', user_id=user.id))
     return redirect(url_for('index'))
 
 @app.route('/demo-register', methods=['POST'])
