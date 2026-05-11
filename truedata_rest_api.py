@@ -27,6 +27,7 @@ class TrueDataRestAPI:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
+        self.session = requests.Session()
         
         # If credentials provided, try to login and get a fresh token if not already present
         if self.username and self.password and not self.token:
@@ -42,7 +43,7 @@ class TrueDataRestAPI:
                 "grant_type": "password"
             }
             # Auth requires x-www-form-urlencoded
-            response = requests.post(self.auth_url, data=payload, timeout=10)
+            response = self.session.post(self.auth_url, data=payload, timeout=30)
             
             if response.status_code == 200:
                 data = response.json()
@@ -65,29 +66,33 @@ class TrueDataRestAPI:
             
             # Try 1: Standard Bearer Header
             headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
-            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response = self.session.get(url, params=params, headers=headers, timeout=30)
             
             # Try 2: Authorization Header WITHOUT 'Bearer ' prefix
             if response.status_code == 401:
                 headers = {"Authorization": self.token, "Content-Type": "application/json"}
-                response = requests.get(url, params=params, headers=headers, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=30)
                 
             # Try 3: Simple 'token' Header
             if response.status_code == 401:
                 headers = {"token": self.token, "Content-Type": "application/json"}
-                response = requests.get(url, params=params, headers=headers, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=30)
                 
             # Try 4: Query Param fallback
             if response.status_code == 401:
                 params["token"] = self.token
-                response = requests.get(url, params=params, timeout=10)
+                response = self.session.get(url, params=params, timeout=30)
                 
             if response.status_code == 200:
-                return response.json()
+                try:
+                    return response.json()
+                except Exception as e:
+                    logger.error(f"❌ Received non-JSON response from {endpoint}: {e} | Text: {response.text[:100]}")
+                    return None
             else:
                 # Silence 401/404 errors to avoid cluttering the terminal
                 if response.status_code not in [401, 404]:
-                    logger.error(f"API Error ({endpoint}): {response.status_code} - {response.text}")
+                    logger.error(f"API Error ({endpoint}): {response.status_code} - {response.text[:100]}")
                 return None
         except Exception as e:
             logger.error(f"Exception in API call ({endpoint}): {e}")
@@ -104,17 +109,17 @@ class TrueDataRestAPI:
             else:
                 # 🌟 SMART FALLBACK based on symbol
                 if "CRUDE" in symbol.upper() or "MCX" in symbol.upper():
-                    expiry = "19-05-2026" # Typical MCX Crude Oil Expiry
+                    expiry = "14-05-2026" # Validated from Sample Code
                     exchange = "MCX"
                 else:
-                    expiry = "14-05-2026" # Next Nifty Expiry
+                    expiry = "12-05-2026" # User Verified Nifty Expiry
                 
-        params = {"symbol": symbol, "expiry": expiry, "exchange": exchange}
+        params = {"symbol": symbol, "expiry": expiry, "exchange": exchange, "response": "json"}
         return self._make_request("getoptionchain", params)
 
-    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="14-05-2026"):
+    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="12-05-2026"):
         """Fetches live option chain with Greek values (Delta, Gamma, etc.)"""
-        params = {"symbol": symbol, "expiry": expiry}
+        params = {"symbol": symbol, "expiry": expiry, "response": "json"}
         return self._make_request("getOptionChainwithGreeks", params)
 
     def get_ltp_with_greeks(self, symbol, strike, series, expiry):
@@ -139,8 +144,9 @@ class TrueDataRestAPI:
         if res and isinstance(res, list):
             return res
         
-        # Final fallback to avoid crash if both fail
-        return ["14-05-2026"] 
+        # Final fallback to avoid crash
+        if "CRUDE" in symbol.upper(): return ["14-05-2026"]
+        return ["12-05-2026"] 
 
     def get_ltp(self, symbol, strike, series, expiry):
         """Fetches Last Traded Price for specific strike"""

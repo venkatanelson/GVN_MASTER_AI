@@ -63,42 +63,83 @@ class GVNLiveExecutionEngine:
         # Assuming True for now to allow architecture flow
         return True
 
+    def log_level_touch(self, symbol, ltp, level_name, level_value):
+        """Send a structured JSON alert and update AI Memory for any level touch"""
+        now = datetime.now()
+        # Mock expiry for the JSON alert (in real case, fetch from option chain data)
+        expiry = "2026-05-14" 
+        
+        alert_json = {
+            "type": "LEVEL_TOUCH",
+            "symbol": symbol,
+            "level": level_name,
+            "level_price": level_value,
+            "current_price": ltp,
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "seconds": now.second,
+            "expiry": expiry,
+            "action": "OBSERVING"
+        }
+        
+        # 1. Update AI Memory in shared_data
+        import shared_data
+        with shared_data._data_lock:
+            observation = f"[{now.strftime('%H:%M:%S')}] {symbol} touched {level_name} at {ltp}. Institutional scanning active."
+            if not hasattr(shared_data, 'ai_memory'):
+                shared_data.ai_memory = []
+            shared_data.ai_memory.insert(0, observation)
+            if len(shared_data.ai_memory) > 50:
+                shared_data.ai_memory.pop()
+        
+        # 2. Send Telegram Alert
+        # self.telegram.send_json_alert(alert_json)
+        logger.info(f"📡 ALERT: {symbol} touch {level_name} at {ltp}. JSON Fired.")
+
     def run_live_scan(self, live_ltp_data):
-        """Continuously check LTP against i5/i7/i1 levels"""
+        """Continuously check LTP against all i-levels (i1, i3, i5, i6, i7)"""
         for symbol, ltp in live_ltp_data.items():
-            if symbol in self.memory_levels and symbol not in self.running_trades:
+            if symbol in self.memory_levels:
                 levels = self.memory_levels[symbol]
                 
-                # Check 0.5 Level (Blue Line) - First Entry Priority
-                i5_level = levels['i5']
-                if abs(ltp - i5_level) <= 1.0:  # Within 1 point tolerance
-                    logger.info(f"⚡ {symbol} HIT i5 LEVEL (Blue Line) at {ltp}!")
-                    
-                    if self.check_long_buildup(symbol, ltp, 0):
-                        self.execute_trade(symbol, ltp, target=levels['i3'], sl=levels['sl'])
+                # Iterate through all key levels requested by user
+                for lvl in ['i1', 'i3', 'i5', 'i6', 'i7']:
+                    lvl_val = levels.get(lvl)
+                    if lvl_val and abs(ltp - lvl_val) <= 0.5: # 0.5 point precision
+                        self.log_level_touch(symbol, ltp, lvl, lvl_val)
+                        
+                        # Logic for Entry (Priority levels)
+                        if lvl in ['i5', 'i7'] and symbol not in self.running_trades:
+                            if self.check_long_buildup(symbol, ltp, 0):
+                                self.execute_trade(symbol, ltp, target=levels.get('i3' if lvl=='i7' else 'i1'), sl=levels['sl'])
 
     def execute_trade(self, symbol, entry_price, target, sl):
         """Execute JSON Order and Send Telegram Alert"""
+        now = datetime.now()
         logger.info(f"🚀 EXECUTING BUY ORDER FOR {symbol} at {entry_price}")
         
         trade_json = {
+            "type": "ORDER_EXECUTION",
             "symbol": symbol,
             "entry_price": entry_price,
             "target": target,
             "sl": sl,
             "transactionType": "BUY",
-            "orderType": "MARKET"
+            "orderType": "MARKET",
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "seconds": now.second,
+            "expiry": "2026-05-14"
         }
         
-        # 1. Send to Demo Account (Paper Trading UI)
+        # 1. Update AI Memory
+        import shared_data
+        with shared_data._data_lock:
+            if not hasattr(shared_data, 'ai_memory'): shared_data.ai_memory = []
+            shared_data.ai_memory.insert(0, f"🚀 [ORDER] Executing BUY for {symbol} at {entry_price}. Target: {target}")
+        
         self.running_trades[symbol] = trade_json
-        
-        # 2. Send to Angel One API
-        # self.broker.place_order_universal(trade_json)
-        
-        # 3. Send Telegram Alert
+        # 2. Send Telegram Alert
         self.telegram.alert_entry(trade_json)
-        logger.info("✅ JSON Order Sent to Angel One & Demo. Alert Fired!")
+        logger.info("✅ JSON Order & Alert Fired successfully.")
 
 # Example Initialization
 if __name__ == "__main__":

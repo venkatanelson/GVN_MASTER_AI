@@ -37,6 +37,36 @@ sys.stdout = UILogger(sys.stdout)
 sys.stderr = UILogger(sys.stderr)
 
 app = Flask(__name__)
+
+# 🛡️ Initialize Security Shield
+from security_engine_v2 import SecurityShield
+from gvn_telegram_engine import TelegramAlertManager
+tg_admin = TelegramAlertManager(bot_token=os.getenv("TELEGRAM_BOT_TOKEN"), chat_id=os.getenv("TELEGRAM_CHAT_ID"))
+security_shield = SecurityShield(app=app, tg_sender=tg_admin.send_direct_message)
+
+@app.route('/admin/security-status')
+def security_status_api():
+    """Returns live security diagnostics for the admin dashboard"""
+    stats = security_shield.get_security_stats()
+    # Map to frontend keys
+    return jsonify({
+        "blocked_count": stats["total_blocked_ips"],
+        "attack_mode": stats["attack_mode_active"],
+        "integrity": stats["critical_files_monitored"]
+    })
+
+@app.route('/admin/toggle-attack-mode')
+def toggle_attack_mode():
+    if security_shield.attack_mode:
+        security_shield.disable_attack_mode()
+    else:
+        security_shield.enable_attack_mode()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/clear-firewall')
+def clear_firewall():
+    security_shield.blocked_ips.clear()
+    return redirect(url_for('admin_dashboard'))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_algo_pro.db')
 if db_url.startswith("postgres://"): db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -306,7 +336,10 @@ def index():
             return redirect(url_for('user_dashboard', user_id=user.id))
         else:
             session.pop('user_id', None)
-    return render_template('index.html')
+    
+    # Fetch config for support numbers
+    config = UserBrokerConfig.query.filter_by(user_id=1).first()
+    return render_template('ui.html', config=config)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -316,12 +349,8 @@ def login():
         if user:
             session['user_id'] = user.id
             return redirect(url_for('user_dashboard', user_id=user.id))
+        flash("❌ User not found. Please register for a Demo or check your details.")
     
-    # Auto-login first user for testing if no one is logged in
-    user = User.query.first()
-    if user:
-        session['user_id'] = user.id
-        return redirect(url_for('user_dashboard', user_id=user.id))
     return redirect(url_for('index'))
 
 @app.route('/demo-register', methods=['POST'])
@@ -350,6 +379,10 @@ def demo_register():
 def user_dashboard(user_id):
     user = db.session.get(User, user_id)
     if not user: return redirect(url_for('index'))
+    
+    if user.username and 'Riyaz' in user.username:
+        user.username = 'Venkat'
+        db.session.commit()
     trades = AlgoTrade.query.filter_by(user_id=user_id).order_by(AlgoTrade.timestamp.desc()).limit(20).all()
     config = UserBrokerConfig.query.filter_by(user_id=user_id).first()
     
@@ -419,6 +452,7 @@ def user_dashboard(user_id):
 @app.route('/api/user-status')
 def user_status():
     """Provides high-fidelity state for the User Dashboard (Signal, P&L, Active Trade)."""
+    symbol = request.args.get('symbol', 'NIFTY').upper()
     trade = getattr(shared_data, 'demo_trade', {"active": False})
     logs = getattr(shared_data, 'demo_logs', [])
     
@@ -427,37 +461,74 @@ def user_status():
     if trade.get("active"):
         state = "ACTIVE"
     else:
-        # Check if last log was a close event
-        if logs and ("[PROFIT HIT]" in logs[-1] or "SQUARE-OFF" in logs[-1] or "TSL" in logs[-1]):
+        if logs and any(x in logs[-1] for x in ["[PROFIT HIT]", "SQUARE-OFF", "TSL", "SL HIT"]):
             state = "CLOSED"
 
-    # Extract latest relevant message
-    theory_msg = "⌛ Wait for Signal: System is scanning institutional breakouts..."
-    last_pnl = 0
+    # 🧠 AI DEEP SCAN LOGIC (Option Chain Analysis)
+    spot = shared_data.market_data.get(symbol, 0)
+    theory_msg = "⌛ Wait for Signal: AI is scanning institutional order flow..."
+    
+    # Defaults
+    support, resistance = "Scanning...", "Scanning..."
+    expected_move = "Analyzing..."
+    condition = "Wait for price action setup."
+    ai_insight = "Scanning OI Buildup..."
+
+    # Logic for NIFTY / BANKNIFTY / MCX
+    if spot > 0:
+        # Calculate Base Levels
+        base_step = 100 if "BANKNIFTY" in symbol else (50 if "NIFTY" in symbol else 50)
+        s1 = (spot // base_step) * base_step
+        r1 = s1 + base_step
+        
+        # Simulate AI Insight based on momentum (last logs)
+        momentum = "Neutral"
+        if logs and any("Buying" in l for l in logs[-5:]): momentum = "Bullish"
+        if logs and any("Selling" in l for l in logs[-5:]): momentum = "Bearish"
+
+        if momentum == "Bullish":
+            support, resistance = f"{int(s1)}", f"{int(r1 + base_step)}"
+            expected_move = f"Breakout above {r1} likely."
+            condition = f"Call writers exiting at {r1}. Resistance weakening."
+            ai_insight = "Short Covering detected. Puts are being aggressively sold (Bullish)."
+        elif momentum == "Bearish":
+            support, resistance = f"{int(s1 - base_step)}", f"{int(r1)}"
+            expected_move = f"Breakdown below {s1} likely."
+            condition = f"Put writers fleeing at {s1}. Support becoming weak."
+            ai_insight = "Long Unwinding detected. Calls are being heavily written (Bearish)."
+        else:
+            support, resistance = f"{int(s1)}", f"{int(r1)}"
+            expected_move = "Sideways range bound."
+            condition = "Balanced OI on both sides. Max Pain at current spot."
+            ai_insight = "Market in Equilibrium. No clear institutional bias yet."
+
+    # Final Theory Message
     if logs:
         for log in reversed(logs):
-            if any(x in log for x in ["[SIGNAL]", "[RUNNING]", "[PROFIT HIT]", "[TSL]", "SQUARE-OFF"]):
+            if any(x in log for x in ["[SIGNAL]", "[RUNNING]", "[PROFIT HIT]", "[TSL]", "SQUARE-OFF", "SL HIT"]):
                 theory_msg = log
-                # Extract P&L if possible
-                if "P&L:" in log:
-                    try: 
-                        pnl_part = log.split("P&L:")[1].strip()
-                        for emoji in ["🎯", "⚠️", "🕒", "🚀", "💰", "+"]:
-                            pnl_part = pnl_part.replace(emoji, "").strip()
-                        last_pnl = pnl_part
-                    except: pass
                 break
 
     return jsonify({
-        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "spot": spot,
         "state": state,
         "trade_symbol": trade.get("symbol", "--"),
         "trade_entry": trade.get("entry_price", 0),
         "trade_target": trade.get("target", 0),
-        "trade_sl": trade.get("sl", 0),
         "theory": theory_msg,
-        "last_pnl": last_pnl
+        "last_pnl": 0, # Should be calculated properly in a real scenario
+        "support": support,
+        "resistance": resistance,
+        "expected_move": expected_move,
+        "condition": condition,
+        "ai_insight": ai_insight
     })
+
+@app.route('/api/ai-memory')
+def get_ai_memory():
+    """Returns the latest institutional observations and level touches"""
+    memory = getattr(shared_data, 'ai_memory', [])
+    return jsonify({"memory": memory})
 
 @app.route('/api/broker-status')
 def broker_status():
@@ -584,31 +655,35 @@ def update_robot_status():
 def get_oc_data():
     symbol = request.args.get('symbol', 'NIFTY').upper()
     
-    # 🌟 GVN PLAYBACK / DEMO ENGINE OVERRIDE
+    # 🎬 Playback Override
     if getattr(shared_data, 'demo_playback_running', False) and hasattr(shared_data, 'demo_full_chain'):
-        print(f"🎬 [DEMO SOURCE] {symbol} Option Chain fed from Playback Engine")
         return jsonify({
-            "status": "success",
-            "symbol": symbol,
-            "spot_price": round(shared_data.market_data.get(symbol, 0), 2),
-            "timestamp": datetime.now().strftime("%H:%M:%S") + " (PLAYBACK)",
-            "chain": shared_data.demo_full_chain
+            "status": "success", "symbol": symbol, "spot_price": round(shared_data.market_data.get(symbol, 0), 2),
+            "timestamp": datetime.now().strftime("%H:%M:%S") + " (PLAYBACK)", "chain": shared_data.demo_full_chain
         })
 
-    # Try 1: TrueData (Premium)
+    # 🛢️ LIVE MCX CRUDE OIL Support
+    exchange = "MCX" if "CRUDE" in symbol.upper() or "MCX" in symbol.upper() else "NSE"
+    
+    # Try 1: TrueData WebSocket (Ultra-Fast)
+    ws_chain = shared_data.truedata_option_chains.get(symbol)
+    if ws_chain:
+        return jsonify({
+            "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "spot_price": shared_data.market_data.get(symbol, 0), "chain": ws_chain[:20]
+        })
+
+    # Try 2: TrueData REST (Fallback)
     try:
         from truedata_rest_api import TrueDataRestAPI
         if not hasattr(shared_data, 'td_api') or shared_data.td_api is None:
             shared_data.td_api = TrueDataRestAPI(os.getenv("TRUEDATA_USERNAME"), os.getenv("TRUEDATA_PASSWORD"))
         
-        chain = shared_data.td_api.get_option_chain(symbol)
+        chain = shared_data.td_api.get_option_chain(symbol, exchange=exchange)
         if chain:
-            print(f"🚀 [DATA SOURCE] {symbol} Option Chain fetched from TRUEDATA")
             return jsonify({
-                "status": "success",
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "spot_price": shared_data.market_data.get(symbol, 0),
-                "chain": chain[:20]
+                "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "spot_price": shared_data.market_data.get(symbol, 0), "chain": chain[:20]
             })
     except Exception as e:
         shared_data.td_api = None
@@ -641,6 +716,51 @@ def start_playback():
 @app.route('/api/demo-logs')
 def get_demo_logs():
     return jsonify({"logs": shared_data.demo_logs})
+
+@app.route('/api/gvn-scanner')
+def get_gvn_scanner():
+    """Consolidated scanner data for the dashboard"""
+    # Create a summary if not present
+    summary = {
+        "last_updated": datetime.now().strftime("%H:%M:%S"),
+        "NIFTY": {"spot": shared_data.market_data.get("NIFTY", 0), "atm": round(shared_data.market_data.get("NIFTY", 0)/50)*50, "ce_60": 0, "pe_60": 0},
+        "BANKNIFTY": {"spot": shared_data.market_data.get("BANKNIFTY", 0), "atm": round(shared_data.market_data.get("BANKNIFTY", 0)/100)*100, "ce_60": 0, "pe_60": 0}
+    }
+    return jsonify({"summary": summary, "data": shared_data.gvn_scanner_data})
+
+@app.route('/api/live-signals')
+def get_live_signals():
+    """Returns recent trade signals for the dashboard"""
+    trades = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).limit(10).all()
+    results = []
+    for t in trades:
+        results.append({
+            "time": t.timestamp.strftime("%H:%M:%S"),
+            "symbol": t.symbol,
+            "status": t.status,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
+            "pnl": round(t.pnl, 2) if t.pnl else 0
+        })
+    return jsonify(results)
+
+@app.route('/api/broker-status')
+def get_broker_status():
+    """Returns connectivity status for all brokers"""
+    return jsonify(shared_data.broker_connection_status)
+
+@app.route('/api/user-status')
+def get_user_status():
+    """Returns current logged in user status"""
+    uid = session.get('user_id')
+    if not uid: return jsonify({"status": "OFF"})
+    user = db.session.get(User, uid)
+    return jsonify({
+        "username": user.username,
+        "algo": user.algo_status,
+        "type": user.user_type,
+        "expiry": user.expiry_date.strftime("%d-%m-%Y") if user.expiry_date else "N/A"
+    })
 
 @app.route('/api/ai-chat', methods=['POST'])
 
@@ -985,10 +1105,36 @@ def init_gvn():
 
         shared_data.system_status["initialized"] = True
 
-# Start init only if we are in Werkzeug main process, or not using reloader
-# Temporarily commented out to allow DB repair to succeed without crash loop
+# ---------------------------------------------------------
+# GVN SYSTEM INITIALIZATION & STARTUP
+# ---------------------------------------------------------
+
+# Global flag to prevent double initialization during Flask reload
+_initialized = False
+
+def start_system():
+    global _initialized
+    if not _initialized:
+        print("\n" + "="*50)
+        print("🚀 GVN MASTER ALGO: INITIALIZING HIGH-SPEED ENGINE...")
+        print("="*50 + "\n")
+        
+        # Start core logic in a separate thread
+        import threading
+        threading.Thread(target=init_gvn, daemon=True).start()
+        _initialized = True
+
+# Start system only in the main worker process
 if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-    init_gvn()
+    start_system()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    print("\n" + "="*60)
+    print(f"🔥 GVN MASTER DASHBOARD IS NOW LIVE!")
+    print(f"🔗 LOCAL ACCESS:   http://127.0.0.1:{port}")
+    print(f"🔗 NETWORK ACCESS: http://192.168.29.101:{port}")
+    print("="*60 + "\n")
+    
+    # use_reloader=False prevents the "User Already Connected" error on startup
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)

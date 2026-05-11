@@ -559,6 +559,38 @@
                                 <span style="color: var(--warning); font-weight: 800;">⌛ Wait for Signal:</span> System is scanning institutional breakouts on the Alpha Grid.
                             </p>
                         </div>
+                        
+                        <!-- 🛡️ SUPPORT & RESISTANCE AI DATA -->
+                        <div>
+                            <h4 style="margin: 0 0 10px 0; color: #f59e0b; font-size: 11px; text-transform: uppercase; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+                                <span class="dot dot-blue" style="width:6px; height:6px;"></span> MARKET CONDITION & KEY LEVELS
+                            </h4>
+                            <div style="background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                                <table style="width: 100%; font-size: 12px; color: #cbd5e1; border-collapse: collapse;">
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #10b981;">Strong Support</td>
+                                        <td id="ai-support" style="padding: 6px 0; text-align: right; font-weight: 900;">Scanning...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #ef4444;">Strong Resistance</td>
+                                        <td id="ai-resistance" style="padding: 6px 0; text-align: right; font-weight: 900;">Scanning...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #3b82f6;">Expected Move</td>
+                                        <td id="ai-move" style="padding: 6px 0; text-align: right; font-weight: 900;">Analyzing...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #a78bfa;">AI Insight</td>
+                                        <td id="ai-insight" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fff; font-style: italic;">Scanning...</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="2" id="ai-condition" style="padding-top: 8px; font-size: 11px; color: #94a3b8; font-style: italic; text-align: center;">
+                                            Waiting for data...
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
                         <!-- 📟 LIVE SYSTEM TERMINAL (WOW FACTOR) -->
                         <div>
                             <h4 style="margin: 0 0 10px 0; color: var(--primary); font-size: 11px; text-transform: uppercase; font-weight: 800; display: flex; align-items: center; gap: 6px;">
@@ -590,7 +622,7 @@
 
         <script>
         function updateDashboardStatus() {
-            fetch('/api/user-status')
+            fetch(`/api/user-status?symbol=${currentActiveIndex}`)
             .then(r => r.json())
             .then(d => {
                 // 🛰️ MASTER SCANNER CARD LOGIC
@@ -608,7 +640,7 @@
                     mTitle.style.color = 'var(--secondary)';
                     mDesc.innerText = "🚀 POSITION ACTIVE: " + d.trade_symbol;
                     mPnlBox.style.display = 'none';
-                    mDot.className = "dot dot-blue"; // Use blue for active
+                    mDot.className = "dot dot-blue"; 
                 } else if (d.state === "CLOSED") {
                     mCard.style.borderColor = 'var(--primary)';
                     mCard.style.background = 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(2, 6, 23, 0.9))';
@@ -629,9 +661,14 @@
                     mDot.className = "dot dot-blue";
                 }
 
-                // Update Spot Price in Ticker
-                document.getElementById('ticker-nifty').innerText = d.nifty_spot;
+                // Update Spot Price
+                const spotPrice = d.spot || 0;
+                const tickerSpot = document.getElementById('visible-spot-price');
+                if (tickerSpot) tickerSpot.innerText = spotPrice;
                 
+                const uiSpot = document.getElementById('ui-nifty-price');
+                if (uiSpot) uiSpot.innerText = spotPrice;
+
                 // Update Active Trade Box
                 const tradeBox = document.getElementById('active-trade-box');
                 const tradeSym = document.getElementById('active-trade-symbol');
@@ -656,12 +693,19 @@
                 const theory = document.getElementById('theory-text');
                 theory.innerHTML = d.theory;
                 
+                // Update AI Key Levels
+                if(d.support) document.getElementById('ai-support').innerText = d.support;
+                if(d.resistance) document.getElementById('ai-resistance').innerText = d.resistance;
+                if(d.expected_move) document.getElementById('ai-move').innerText = d.expected_move;
+                if(d.ai_insight) document.getElementById('ai-insight').innerText = d.ai_insight;
+                if(d.condition) document.getElementById('ai-condition').innerText = d.condition;
+                
                 // Update Ticker Content
                 const ticker = document.getElementById('ticker-content');
                 if (d.state === "ACTIVE") {
-                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | NIFTY SPOT: ${d.nifty_spot}`;
+                    ticker.innerHTML = `<span style="color: var(--secondary);">🚀 ${d.trade_symbol} Active</span> | Entry: ${d.trade_entry} | Target: ${d.trade_target} | ${currentActiveIndex} SPOT: ${spotPrice}`;
                 } else {
-                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | NIFTY SPOT: ${d.nifty_spot}`;
+                    ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | ${currentActiveIndex} SPOT: ${spotPrice}`;
                 }
                 
                 // Update Robot Badges
@@ -775,6 +819,7 @@
                     <button onclick="switchIndex('BANKNIFTY')" id="tab-BANKNIFTY" class="tab-btn">BANKNIFTY</button>
                     <button onclick="switchIndex('FINNIFTY')" id="tab-FINNIFTY" class="tab-btn">FINNIFTY</button>
                     <button onclick="switchIndex('SENSEX')" id="tab-SENSEX" class="tab-btn">SENSEX</button>
+                    <button onclick="switchIndex('MCX')" id="tab-MCX" class="tab-btn">MCX (Crude)</button>
                     <div class="flex items-center gap-2">
                         <select id="playbackSymbol" class="bg-gray-800 text-white rounded px-2 py-1 text-xs">
                             <option value="NIFTY">NIFTY</option>
@@ -1252,8 +1297,10 @@
         function switchIndex(idx) {
             currentActiveIndex = idx;
             document.querySelectorAll('.tab-btn').forEach(b => {
-                b.classList.toggle('active', b.innerText === idx);
+                b.classList.remove('active');
             });
+            const activeTab = document.getElementById('tab-' + idx);
+            if (activeTab) activeTab.classList.add('active');
             updateScanner();
         }
 

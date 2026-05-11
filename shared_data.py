@@ -13,6 +13,9 @@ market_data = {
     "CRUDEOIL": 6842.00
 }
 
+# Live TrueData Option Chain Storage
+truedata_option_chains = {}
+
 # Live Playback Terminal Logs
 demo_logs = []
 
@@ -125,6 +128,15 @@ system_status = {
     "errors": [],
     "warnings": []
 }
+
+# --- Global API Instances ---
+td_api = None
+try:
+    from truedata_rest_api import TrueDataRestAPI
+    import os
+    td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
+except Exception:
+    pass
 
 # Thread-safe setter/getter utilities
 def get_market_data():

@@ -48,8 +48,11 @@ class SecurityShield:
         """Initialize security middleware with Flask app"""
         logger.info("🛡️ [SECURITY] Initializing Security Shield...")
         
-        # Compute initial file hashes
-        self._compute_initial_hashes()
+        # Compute initial file hashes (Skip on Render to avoid environment mismatches)
+        if not os.environ.get('RENDER'):
+            self._compute_initial_hashes()
+        else:
+            logger.info("ℹ️ [SECURITY] Integrity monitoring skipped on Render environment")
         
         # Start background monitoring threads
         self.monitoring_active = True
@@ -63,35 +66,47 @@ class SecurityShield:
         def shield_middleware():
             ip = request.headers.get('X-Forwarded-For', request.remote_addr)
             
-            # 1. Whitelist check
-            if ip in self.whitelist_ips:
+            # 1. Whitelist check (Local & Private Network)
+            if ip in ['127.0.0.1', 'localhost'] or ip.startswith('192.168.') or ip.startswith('10.'):
                 return None  # Allow immediately
+            
+            if ip in self.whitelist_ips:
+                return None
             
             # 2. Block known malicious IPs
             if ip in self.blocked_ips:
                 self._log_security_event("BLOCKED_IP_ACCESS", ip, request.path, "IP permanently blocked")
                 return abort(403, description="🛑 GVN SECURITY: Your IP is blocked due to suspicious activity.")
 
-            # 3. Rate Limiting / Bot Detection
+            # 3. Bot Detection (User-Agent Filtering)
+            ua = request.headers.get('User-Agent', '').lower()
+            malicious_bots = ['python-requests', 'curl', 'wget', 'postman', 'headless', 'scraper', 'zgrab', 'masscan']
+            if any(bot in ua for bot in malicious_bots):
+                # Check if it's a legitimate internal request first
+                if ip not in ['127.0.0.1', 'localhost']:
+                    self._log_security_event("BOT_DETECTED", ip, request.path, f"Blocked malicious UA: {ua}")
+                    return abort(403, description="🤖 Security Alert: Bot activity detected and blocked.")
+
+            # 4. Rate Limiting / Bot Detection
             if self._is_suspicious(ip):
                 self.block_ip(ip, "High Frequency Request (DDoS/Bot)")
                 self._log_security_event("DDoS_ATTEMPT", ip, request.path, "Rate limit exceeded")
                 return abort(429, description="🚨 Security Alert: Too many requests. Try again later.")
 
-            # 4. Path Traversal / Common Attack Patterns
+            # 5. Path Traversal / Common Attack Patterns
             path = request.path.lower()
-            suspicious_patterns = ['.php', '.env', 'wp-admin', 'config', 'setup', 'eval(', 'base64_decode', '../', 'shell']
+            suspicious_patterns = ['.php', '.env', 'wp-admin', 'config', 'setup', 'eval(', 'base64_decode', '../', 'shell', '.git', 'etc/passwd']
             if any(p in path for p in suspicious_patterns):
                 self.block_ip(ip, f"Accessing restricted path: {path}")
                 self._log_security_event("MALICIOUS_PATH", ip, path, "Suspicious pattern detected")
                 return abort(403, description="🛑 Access Denied")
 
-            # 5. SQL Injection patterns
-            suspicious_sql_patterns = ["' OR '1'='1", "UNION SELECT", "DROP TABLE", "INSERT INTO", "DELETE FROM"]
-            full_data = str(request.args) + str(request.form) + str(request.get_json() or {})
+            # 6. SQL Injection / Script Injection patterns
+            suspicious_sql_patterns = ["' OR '1'='1", "UNION SELECT", "DROP TABLE", "INSERT INTO", "DELETE FROM", "<SCRIPT>", "JAVASCRIPT:"]
+            full_data = str(request.args) + str(request.form) + str(request.get_json(silent=True) or {})
             if any(pattern in full_data.upper() for pattern in suspicious_sql_patterns):
-                self.block_ip(ip, "SQL Injection Attempt")
-                self._log_security_event("SQL_INJECTION", ip, request.path, "SQL injection pattern detected")
+                self.block_ip(ip, "Injection Attempt")
+                self._log_security_event("INJECTION_ATTEMPT", ip, request.path, "Pattern detected")
                 return abort(403)
 
     def _compute_initial_hashes(self):

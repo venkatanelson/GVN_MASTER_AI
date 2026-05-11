@@ -263,6 +263,10 @@ class TelegramAlertManager:
         self.bot.send_message(msg)
         self.alert_history.append({"type": "SUMMARY", "data": summary, "time": datetime.now()})
     
+    def send_direct_message(self, text):
+        """Convenience method to send a raw text message directly"""
+        return self.bot.send_message(text)
+
     def get_alert_history(self, limit=10):
         """Get last N alerts"""
         return self.alert_history[-limit:]
