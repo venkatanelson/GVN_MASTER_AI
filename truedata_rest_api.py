@@ -27,6 +27,7 @@ class TrueDataRestAPI:
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
+        self.session = requests.Session()
         
         # If credentials provided, try to login and get a fresh token if not already present
         if self.username and self.password and not self.token:
@@ -42,7 +43,7 @@ class TrueDataRestAPI:
                 "grant_type": "password"
             }
             # Auth requires x-www-form-urlencoded
-            response = requests.post(self.auth_url, data=payload, timeout=10)
+            response = self.session.post(self.auth_url, data=payload, timeout=30)
             
             if response.status_code == 200:
                 data = response.json()
@@ -65,22 +66,22 @@ class TrueDataRestAPI:
             
             # Try 1: Standard Bearer Header
             headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
-            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response = self.session.get(url, params=params, headers=headers, timeout=30)
             
             # Try 2: Authorization Header WITHOUT 'Bearer ' prefix
             if response.status_code == 401:
                 headers = {"Authorization": self.token, "Content-Type": "application/json"}
-                response = requests.get(url, params=params, headers=headers, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=30)
                 
             # Try 3: Simple 'token' Header
             if response.status_code == 401:
                 headers = {"token": self.token, "Content-Type": "application/json"}
-                response = requests.get(url, params=params, headers=headers, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=30)
                 
             # Try 4: Query Param fallback
             if response.status_code == 401:
                 params["token"] = self.token
-                response = requests.get(url, params=params, timeout=10)
+                response = self.session.get(url, params=params, timeout=30)
                 
             if response.status_code == 200:
                 return response.json()
