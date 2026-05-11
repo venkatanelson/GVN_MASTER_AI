@@ -37,6 +37,30 @@ sys.stdout = UILogger(sys.stdout)
 sys.stderr = UILogger(sys.stderr)
 
 app = Flask(__name__)
+
+# 🛡️ Initialize Security Shield
+from security_engine_v2 import SecurityShield
+from gvn_telegram_engine import TelegramAlertManager
+tg_admin = TelegramAlertManager()
+security_shield = SecurityShield(app=app, tg_sender=tg_admin.send_direct_message)
+
+@app.route('/admin/security-status')
+def security_status_api():
+    """Returns live security diagnostics for the admin dashboard"""
+    return jsonify(security_shield.get_security_stats())
+
+@app.route('/admin/toggle-attack-mode')
+def toggle_attack_mode():
+    if security_shield.attack_mode:
+        security_shield.disable_attack_mode()
+    else:
+        security_shield.enable_attack_mode()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/clear-firewall')
+def clear_firewall():
+    security_shield.blocked_ips.clear()
+    return redirect(url_for('admin_dashboard'))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_algo_pro.db')
 if db_url.startswith("postgres://"): db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -306,7 +330,7 @@ def index():
             return redirect(url_for('user_dashboard', user_id=user.id))
         else:
             session.pop('user_id', None)
-    return render_template('index.html')
+    return render_template('login.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
