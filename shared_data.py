@@ -13,6 +13,9 @@ market_data = {
     "CRUDEOIL": 6842.00
 }
 
+# Live TrueData Option Chain Storage
+truedata_option_chains = {}
+
 # Live Playback Terminal Logs
 demo_logs = []
 

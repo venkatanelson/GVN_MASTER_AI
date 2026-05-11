@@ -627,7 +627,18 @@ def get_oc_data():
             "chain": shared_data.demo_full_chain
         })
 
-    # Try 1: TrueData (Premium)
+    # Try 1: TrueData WebSocket (Ultra-Fast)
+    ws_chain = shared_data.truedata_option_chains.get(symbol)
+    if ws_chain:
+        # print(f"⚡ [DATA SOURCE] {symbol} Option Chain fetched from WEBSOCKET MEMORY")
+        return jsonify({
+            "status": "success",
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "spot_price": shared_data.market_data.get(symbol, 0),
+            "chain": ws_chain[:20]
+        })
+
+    # Try 2: TrueData REST (Fallback)
     try:
         from truedata_rest_api import TrueDataRestAPI
         if not hasattr(shared_data, 'td_api') or shared_data.td_api is None:
@@ -635,7 +646,7 @@ def get_oc_data():
         
         chain = shared_data.td_api.get_option_chain(symbol)
         if chain:
-            print(f"🚀 [DATA SOURCE] {symbol} Option Chain fetched from TRUEDATA")
+            # print(f"🚀 [DATA SOURCE] {symbol} Option Chain fetched from TRUEDATA REST")
             return jsonify({
                 "status": "success",
                 "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -1017,10 +1028,16 @@ def init_gvn():
 
         shared_data.system_status["initialized"] = True
 
-# Start init only if we are in Werkzeug main process, or not using reloader
-# Temporarily commented out to allow DB repair to succeed without crash loop
+# Start init in a separate thread to prevent blocking the Flask server startup
 if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-    init_gvn()
+    import threading
+    threading.Thread(target=init_gvn, daemon=True).start()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)), debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    print("\n" + "="*50)
+    print(f"🚀 GVN MASTER ALGO SERVER STARTING...")
+    print(f"🔗 LOCAL LINK: http://127.0.0.1:{port}")
+    print(f"🔗 NETWORK LINK: http://0.0.0.0:{port}")
+    print("="*50 + "\n")
+    app.run(host='0.0.0.0', port=port, debug=True)
