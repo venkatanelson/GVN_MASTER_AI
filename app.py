@@ -744,11 +744,6 @@ def get_live_signals():
         })
     return jsonify(results)
 
-@app.route('/api/ai-memory')
-def get_ai_memory():
-    """Returns AI logic logs and memory state"""
-    return jsonify({"memory": shared_data.demo_logs[-20:] if shared_data.demo_logs else []})
-
 @app.route('/api/broker-status')
 def get_broker_status():
     """Returns connectivity status for all brokers"""

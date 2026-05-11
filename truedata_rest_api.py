@@ -84,11 +84,15 @@ class TrueDataRestAPI:
                 response = self.session.get(url, params=params, timeout=30)
                 
             if response.status_code == 200:
-                return response.json()
+                try:
+                    return response.json()
+                except Exception as e:
+                    logger.error(f"❌ Received non-JSON response from {endpoint}: {e} | Text: {response.text[:100]}")
+                    return None
             else:
                 # Silence 401/404 errors to avoid cluttering the terminal
                 if response.status_code not in [401, 404]:
-                    logger.error(f"API Error ({endpoint}): {response.status_code} - {response.text}")
+                    logger.error(f"API Error ({endpoint}): {response.status_code} - {response.text[:100]}")
                 return None
         except Exception as e:
             logger.error(f"Exception in API call ({endpoint}): {e}")
@@ -105,17 +109,17 @@ class TrueDataRestAPI:
             else:
                 # 🌟 SMART FALLBACK based on symbol
                 if "CRUDE" in symbol.upper() or "MCX" in symbol.upper():
-                    expiry = "19-05-2026" # Typical MCX Crude Oil Expiry
+                    expiry = "19-05-2026" # Crude Oil Monthly Expiry
                     exchange = "MCX"
                 else:
-                    expiry = "14-05-2026" # Next Nifty Expiry
+                    expiry = "12-05-2026" # User Requested Nifty Expiry
                 
-        params = {"symbol": symbol, "expiry": expiry, "exchange": exchange}
+        params = {"symbol": symbol, "expiry": expiry, "exchange": exchange, "response": "json"}
         return self._make_request("getoptionchain", params)
 
-    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="14-05-2026"):
+    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="12-05-2026"):
         """Fetches live option chain with Greek values (Delta, Gamma, etc.)"""
-        params = {"symbol": symbol, "expiry": expiry}
+        params = {"symbol": symbol, "expiry": expiry, "response": "json"}
         return self._make_request("getOptionChainwithGreeks", params)
 
     def get_ltp_with_greeks(self, symbol, strike, series, expiry):
@@ -140,8 +144,9 @@ class TrueDataRestAPI:
         if res and isinstance(res, list):
             return res
         
-        # Final fallback to avoid crash if both fail
-        return ["14-05-2026"] 
+        # Final fallback to avoid crash
+        if "CRUDE" in symbol.upper(): return ["19-05-2026"]
+        return ["12-05-2026"] 
 
     def get_ltp(self, symbol, strike, series, expiry):
         """Fetches Last Traded Price for specific strike"""
