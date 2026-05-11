@@ -41,7 +41,7 @@ app = Flask(__name__)
 # 🛡️ Initialize Security Shield
 from security_engine_v2 import SecurityShield
 from gvn_telegram_engine import TelegramAlertManager
-tg_admin = TelegramAlertManager()
+tg_admin = TelegramAlertManager(bot_token=os.getenv("TELEGRAM_BOT_TOKEN"), chat_id=os.getenv("TELEGRAM_CHAT_ID"))
 security_shield = SecurityShield(app=app, tg_sender=tg_admin.send_direct_message)
 
 @app.route('/admin/security-status')
