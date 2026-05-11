@@ -495,6 +495,12 @@ def user_status():
         "ai_insight": ai_insight
     })
 
+@app.route('/api/ai-memory')
+def get_ai_memory():
+    """Returns the latest institutional observations and level touches"""
+    memory = getattr(shared_data, 'ai_memory', [])
+    return jsonify({"memory": memory})
+
 @app.route('/api/broker-status')
 def broker_status():
     config = UserBrokerConfig.query.filter_by(user_id=session.get('user_id', 1)).first()
