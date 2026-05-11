@@ -47,7 +47,13 @@ security_shield = SecurityShield(app=app, tg_sender=tg_admin.send_direct_message
 @app.route('/admin/security-status')
 def security_status_api():
     """Returns live security diagnostics for the admin dashboard"""
-    return jsonify(security_shield.get_security_stats())
+    stats = security_shield.get_security_stats()
+    # Map to frontend keys
+    return jsonify({
+        "blocked_count": stats["total_blocked_ips"],
+        "attack_mode": stats["attack_mode_active"],
+        "integrity": stats["critical_files_monitored"]
+    })
 
 @app.route('/admin/toggle-attack-mode')
 def toggle_attack_mode():
@@ -710,6 +716,56 @@ def start_playback():
 @app.route('/api/demo-logs')
 def get_demo_logs():
     return jsonify({"logs": shared_data.demo_logs})
+
+@app.route('/api/gvn-scanner')
+def get_gvn_scanner():
+    """Consolidated scanner data for the dashboard"""
+    # Create a summary if not present
+    summary = {
+        "last_updated": datetime.now().strftime("%H:%M:%S"),
+        "NIFTY": {"spot": shared_data.market_data.get("NIFTY", 0), "atm": round(shared_data.market_data.get("NIFTY", 0)/50)*50, "ce_60": 0, "pe_60": 0},
+        "BANKNIFTY": {"spot": shared_data.market_data.get("BANKNIFTY", 0), "atm": round(shared_data.market_data.get("BANKNIFTY", 0)/100)*100, "ce_60": 0, "pe_60": 0}
+    }
+    return jsonify({"summary": summary, "data": shared_data.gvn_scanner_data})
+
+@app.route('/api/live-signals')
+def get_live_signals():
+    """Returns recent trade signals for the dashboard"""
+    trades = AlgoTrade.query.order_by(AlgoTrade.timestamp.desc()).limit(10).all()
+    results = []
+    for t in trades:
+        results.append({
+            "time": t.timestamp.strftime("%H:%M:%S"),
+            "symbol": t.symbol,
+            "status": t.status,
+            "entry_price": t.entry_price,
+            "exit_price": t.exit_price,
+            "pnl": round(t.pnl, 2) if t.pnl else 0
+        })
+    return jsonify(results)
+
+@app.route('/api/ai-memory')
+def get_ai_memory():
+    """Returns AI logic logs and memory state"""
+    return jsonify({"memory": shared_data.demo_logs[-20:] if shared_data.demo_logs else []})
+
+@app.route('/api/broker-status')
+def get_broker_status():
+    """Returns connectivity status for all brokers"""
+    return jsonify(shared_data.broker_connection_status)
+
+@app.route('/api/user-status')
+def get_user_status():
+    """Returns current logged in user status"""
+    uid = session.get('user_id')
+    if not uid: return jsonify({"status": "OFF"})
+    user = db.session.get(User, uid)
+    return jsonify({
+        "username": user.username,
+        "algo": user.algo_status,
+        "type": user.user_type,
+        "expiry": user.expiry_date.strftime("%d-%m-%Y") if user.expiry_date else "N/A"
+    })
 
 @app.route('/api/ai-chat', methods=['POST'])
 
