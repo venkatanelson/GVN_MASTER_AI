@@ -64,10 +64,11 @@ class TrueDataWSConnector:
             logger.info(f"📈 Initializing CRUDEOIL Chain for {c_expiry.date()}")
             self.start_option_chain('CRUDEOIL', c_expiry)
             
-            # 3. Start NIFTY Chain (Try both variations)
+            # 3. Start NIFTY Chain (Try all variations)
             logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
             self.start_option_chain('NIFTY', n_expiry)
             self.start_option_chain('NIFTY 50', n_expiry)
+            self.start_option_chain('NIFTY-I', n_expiry)
             
         except Exception as e:
             logger.error(f"Error in dynamic chain initialization: {e}")

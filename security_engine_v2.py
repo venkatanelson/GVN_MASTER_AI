@@ -97,7 +97,7 @@ class SecurityShield:
 
             # 6. SQL Injection / Script Injection patterns
             suspicious_sql_patterns = ["' OR '1'='1", "UNION SELECT", "DROP TABLE", "INSERT INTO", "DELETE FROM", "<SCRIPT>", "JAVASCRIPT:"]
-            full_data = str(request.args) + str(request.form) + str(request.get_json() or {})
+            full_data = str(request.args) + str(request.form) + str(request.get_json(silent=True) or {})
             if any(pattern in full_data.upper() for pattern in suspicious_sql_patterns):
                 self.block_ip(ip, "Injection Attempt")
                 self._log_security_event("INJECTION_ATTEMPT", ip, request.path, "Pattern detected")
