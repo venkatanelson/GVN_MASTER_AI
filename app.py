@@ -616,26 +616,22 @@ def update_robot_status():
 def get_oc_data():
     symbol = request.args.get('symbol', 'NIFTY').upper()
     
-    # 🌟 GVN PLAYBACK / DEMO ENGINE OVERRIDE
+    # 🎬 Playback Override
     if getattr(shared_data, 'demo_playback_running', False) and hasattr(shared_data, 'demo_full_chain'):
-        print(f"🎬 [DEMO SOURCE] {symbol} Option Chain fed from Playback Engine")
         return jsonify({
-            "status": "success",
-            "symbol": symbol,
-            "spot_price": round(shared_data.market_data.get(symbol, 0), 2),
-            "timestamp": datetime.now().strftime("%H:%M:%S") + " (PLAYBACK)",
-            "chain": shared_data.demo_full_chain
+            "status": "success", "symbol": symbol, "spot_price": round(shared_data.market_data.get(symbol, 0), 2),
+            "timestamp": datetime.now().strftime("%H:%M:%S") + " (PLAYBACK)", "chain": shared_data.demo_full_chain
         })
 
+    # 🛢️ LIVE MCX CRUDE OIL Support
+    exchange = "MCX" if "CRUDE" in symbol.upper() or "MCX" in symbol.upper() else "NSE"
+    
     # Try 1: TrueData WebSocket (Ultra-Fast)
     ws_chain = shared_data.truedata_option_chains.get(symbol)
     if ws_chain:
-        # print(f"⚡ [DATA SOURCE] {symbol} Option Chain fetched from WEBSOCKET MEMORY")
         return jsonify({
-            "status": "success",
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "spot_price": shared_data.market_data.get(symbol, 0),
-            "chain": ws_chain[:20]
+            "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "spot_price": shared_data.market_data.get(symbol, 0), "chain": ws_chain[:20]
         })
 
     # Try 2: TrueData REST (Fallback)
@@ -644,14 +640,11 @@ def get_oc_data():
         if not hasattr(shared_data, 'td_api') or shared_data.td_api is None:
             shared_data.td_api = TrueDataRestAPI(os.getenv("TRUEDATA_USERNAME"), os.getenv("TRUEDATA_PASSWORD"))
         
-        chain = shared_data.td_api.get_option_chain(symbol)
+        chain = shared_data.td_api.get_option_chain(symbol, exchange=exchange)
         if chain:
-            # print(f"🚀 [DATA SOURCE] {symbol} Option Chain fetched from TRUEDATA REST")
             return jsonify({
-                "status": "success",
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "spot_price": shared_data.market_data.get(symbol, 0),
-                "chain": chain[:20]
+                "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "spot_price": shared_data.market_data.get(symbol, 0), "chain": chain[:20]
             })
     except Exception as e:
         shared_data.td_api = None
