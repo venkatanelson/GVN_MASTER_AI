@@ -507,6 +507,16 @@ def user_status():
             condition = "Balanced OI on both sides. Max Pain at current spot."
             ai_insight = "Market in Equilibrium. No clear institutional bias yet."
 
+    # 🧠 GVN PRESSURE ENGINE SYNC
+    pulse = getattr(shared_data, 'market_pulse', {})
+    pcr = pulse.get("pcr", 1.0)
+    pressure = pulse.get("pressure", "BALANCED")
+    
+    if pulse.get("support"): support = str(pulse["support"])
+    if pulse.get("resistance"): resistance = str(pulse["resistance"])
+    if pulse.get("ai_insight"): ai_insight = pulse["ai_insight"]
+    if pulse.get("trend"): expected_move = pulse["trend"]
+
     # Final Theory Message
     if logs:
         for log in reversed(logs):
@@ -521,12 +531,14 @@ def user_status():
         "trade_entry": trade.get("entry_price", 0),
         "trade_target": trade.get("target", 0),
         "theory": theory_msg,
-        "last_pnl": 0, # Should be calculated properly in a real scenario
+        "last_pnl": 0,
         "support": support,
         "resistance": resistance,
         "expected_move": expected_move,
-        "condition": condition,
-        "ai_insight": ai_insight
+        "condition": f"PCR: {pcr} | {pressure}",
+        "ai_insight": ai_insight,
+        "pcr": pcr,
+        "pressure": pressure
     })
 
 @app.route('/api/ai-memory')

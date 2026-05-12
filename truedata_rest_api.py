@@ -16,7 +16,7 @@ class TrueDataRestAPI:
         # Initial credentials
         self.username = username
         self.password = password
-        self.token = token or "ii5OnyFFpk7nLmNJcjibxS_6Vt8Cq_YlTmZkcXEyinDsD80_Cj23oXBqgQCrNSRXyl0Otthu3vKQpQQfPenXz68e9RZbbL_TwtfKgMEOdQMfJzLne1FyAtc-g4h_9gw_-X-c9ixDF3gYe0Crq6j6bVToqetFQklYKvH2kNzkwxfOgaX7tS1eTUZq8XsXZdmOmRUnKzHEBvC7UbNcBrnK8TFWuRKLLN1_NjuCpweJOOfKJ_HSjTKLhvB9swUgExHqXdPvFo6Mu1EYREJy_mkurA"
+        self.token = token # No hardcoded expired tokens
         self.auth_url = "https://auth.truedata.in/token"
         self.base_urls = {
             "analytics": "https://analytics.truedata.in/api",
@@ -24,13 +24,13 @@ class TrueDataRestAPI:
             "history": "https://history.truedata.in/api"
         }
         self.headers = {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {self.token}" if self.token else "",
             "Content-Type": "application/json"
         }
         self.session = requests.Session()
         
-        # If credentials provided, try to login and get a fresh token if not already present
-        if self.username and self.password and not self.token:
+        # 🔑 GVN FIX: Always login if credentials provided to get a fresh token
+        if self.username and self.password:
             self.login()
 
     def login(self):

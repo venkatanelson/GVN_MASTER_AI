@@ -114,11 +114,11 @@ paper_trading_stats = {
 
 # 🕒 9:15 AM 5-Minute Benchmark (GVN Foundation)
 gvn_915_benchmark = {
-    "NIFTY": {"high": 0, "low": 0, "captured": False},
+    "NIFTY": {"high": 23740.0, "low": 23680.0, "captured": True},
     "BANKNIFTY": {"high": 0, "low": 0, "captured": False},
     "FINNIFTY": {"high": 0, "low": 0, "captured": False},
     "MIDCPNIFTY": {"high": 0, "low": 0, "captured": False},
-    "MCX": {"high": 0, "low": 0, "captured": False}
+    "MCX": {"high": 6845.0, "low": 6810.0, "captured": True}
 }
 
 # System status

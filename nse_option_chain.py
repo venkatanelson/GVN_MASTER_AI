@@ -6,8 +6,9 @@ import threading
 from truedata_rest_api import TrueDataRestAPI
 import shared_data
 
-# Initialize TrueData API
-td_api = TrueDataRestAPI()
+# Initialize TrueData API with credentials
+import os
+td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
 
 
 # Global memory to store the latest Delta 60 strikes per index
@@ -557,7 +558,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 if now.hour == 9 and 15 <= now.minute <= 20:
                     symbol_data = shared_data.gvn_915_benchmark.get(symbol)
                     if symbol_data and not symbol_data["captured"]:
-                        spot = data["records"].get("underlyingValue", 0)
+                        # 🚀 GVN FIX: Get spot from WebSocket (market_data) instead of REST chain
+                        spot = shared_data.market_data.get(symbol, 0)
+                        if spot == 0 and "records" in data:
+                            spot = data["records"].get("underlyingValue", 0)
+                        
                         if spot > 0:
                             if symbol_data["high"] == 0 or spot > symbol_data["high"]: symbol_data["high"] = spot
                             if symbol_data["low"] == 0 or spot < symbol_data["low"]: symbol_data["low"] = spot
@@ -640,6 +645,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     with open("nse_status.log", "a") as f:
         f.write(f"{datetime.now()}: [NSE Worker] {symbol} data count: {options_count}\n")
 
+    # 🚀 GVN PRESSURE ENGINE: Initialize Global Metrics
+    total_ce_oi, total_pe_oi = 0, 0
+    max_ce_oi, max_pe_oi = 0, 0
+    max_ce_strike, max_pe_strike = 0, 0
+
     for item in records.get("data", []):
         # Handle both formats: Dhan (item is the option) and NSE (item contains CE/PE keys)
         strike = item.get("strikePrice") or item.get("strike")
@@ -664,6 +674,19 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             
             key = f"{int(strike)}_{opt_type}"
             live_option_ltps[key] = ltp
+            
+            # 🚀 GVN PRESSURE ENGINE: Accumulate OI
+            oi_val = opt.get("openInterest", 0)
+            if opt_type == "CE":
+                total_ce_oi += oi_val
+                if oi_val > max_ce_oi:
+                    max_ce_oi = oi_val
+                    max_ce_strike = strike
+            else:
+                total_pe_oi += oi_val
+                if oi_val > max_pe_oi:
+                    max_pe_oi = oi_val
+                    max_pe_strike = strike
             
             # Update History
             if key not in option_ltp_history: option_ltp_history[key] = []
@@ -983,7 +1006,51 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             "expiry": formatted_expiry
         })
         
-    # 🌟 ALWAYS SYNC TO SHARED DATA
+    # 🚀 GVN PRESSURE ENGINE: Final Analysis & Prediction
+    try:
+        pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0
+        
+        sentiment = "NEUTRAL"
+        trend = "SIDEWAYS"
+        pressure_msg = "BALANCED"
+        ai_insight = "Equilibrium. No clear institutional bias yet."
+        
+        if pcr < 0.7:
+            sentiment = "BEARISH"
+            trend = "AGGRESSIVE SELLING"
+            pressure_msg = "🛑 HEAVY SELLING PRESSURE"
+            ai_insight = f"Iron Wall detected at {max_ce_strike}. PCR {pcr} suggests a Sharp Fall."
+        elif pcr > 1.3:
+            sentiment = "BULLISH"
+            trend = "AGGRESSIVE BUYING"
+            pressure_msg = "🚀 HEAVY BUYING PRESSURE"
+            ai_insight = f"Strong Base at {max_pe_strike}. PCR {pcr} suggests a Breakout Rally."
+        
+        # Check for Iron Wall specifically
+        oi_ratio = max_ce_oi / max_pe_oi if max_pe_oi > 0 else 1.0
+        if oi_ratio > 2.0:
+            pressure_msg = f"🧱 IRON WALL at {max_ce_strike}"
+            ai_insight = "Resistence is extremely strong. Market unlikely to cross."
+
+        market_pulse[symbol] = {
+            "sentiment": sentiment,
+            "score": int(pcr * 100) if pcr < 1 else 100,
+            "trend": trend,
+            "pcr": pcr,
+            "pressure": pressure_msg,
+            "support": max_pe_strike,
+            "resistance": max_ce_strike,
+            "ai_insight": ai_insight,
+            "inst_activity": "HIGH" if oi_ratio > 1.5 else "LOW"
+        }
+        
+        # Update Global Pulse for Dashboard
+        shared_data.market_pulse.update(market_pulse[symbol])
+        shared_data.market_pulse["zone"] = f"SUP: {max_pe_strike} | RES: {max_ce_strike}"
+        shared_data.market_pulse["priority"] = f"PCR: {pcr}"
+        
+    except Exception as e:
+        logger.error(f"Pressure Engine Error: {e}")
     try:
         shared_data.gvn_scanner_data = {
             "summary": live_option_chain_summary,

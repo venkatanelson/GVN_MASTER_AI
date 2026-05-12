@@ -580,6 +580,13 @@
                                         <td id="ai-move" style="padding: 6px 0; text-align: right; font-weight: 900;">Analyzing...</td>
                                     </tr>
                                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #f59e0b;">Selling Pressure</td>
+                                        <td id="ai-pcr-box" style="padding: 6px 0; text-align: right; font-weight: 900;">
+                                            <span id="ai-pcr" style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; margin-right: 5px;">--</span>
+                                            <span id="ai-pressure" style="color: #fff;">Scanning...</span>
+                                        </td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
                                         <td style="padding: 6px 0; font-weight: 800; color: #a78bfa;">AI Insight</td>
                                         <td id="ai-insight" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fff; font-style: italic;">Scanning...</td>
                                     </tr>
@@ -699,6 +706,19 @@
                 if(d.expected_move) document.getElementById('ai-move').innerText = d.expected_move;
                 if(d.ai_insight) document.getElementById('ai-insight').innerText = d.ai_insight;
                 if(d.condition) document.getElementById('ai-condition').innerText = d.condition;
+                
+                // 🚀 GVN PRESSURE ENGINE UI SYNC
+                if(d.pcr) {
+                    const pcrEl = document.getElementById('ai-pcr');
+                    pcrEl.innerText = "PCR: " + d.pcr;
+                    pcrEl.style.color = d.pcr < 0.7 ? '#ef4444' : (d.pcr > 1.3 ? '#10b981' : '#fff');
+                    pcrEl.style.background = d.pcr < 0.7 ? 'rgba(239, 68, 68, 0.1)' : (d.pcr > 1.3 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.1)');
+                }
+                if(d.pressure) {
+                    const pressEl = document.getElementById('ai-pressure');
+                    pressEl.innerText = d.pressure;
+                    pressEl.style.color = d.pressure.includes('🛑') || d.pressure.includes('IRON') ? '#ef4444' : (d.pressure.includes('🚀') ? '#10b981' : '#fff');
+                }
                 
                 // Update Ticker Content
                 const ticker = document.getElementById('ticker-content');
