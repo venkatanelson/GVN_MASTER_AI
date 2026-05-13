@@ -942,15 +942,15 @@
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
             const GVN_TV_SYMBOLS = {
-                'NIFTY':     'NSE:NIFTY',
-                'BANKNIFTY': 'NSE:BANKNIFTY',
-                'FINNIFTY':  'NSE:FINNIFTY',
-                'SENSEX':    'BSE:SENSEX',
-                'MCX':       'MCX:CRUDEOIL1!'
+                'NIFTY':     'NIFTY',
+                'BANKNIFTY': 'BANKNIFTY',
+                'FINNIFTY':  'FINNIFTY',
+                'SENSEX':    'SENSEX',
+                'MCX':       'CRUDEOIL'
             };
 
             var tvWidgetInstance = null;
-            function initTV(symbol = 'NSE:NIFTY') {
+            function initTV(symbol = 'NIFTY') {
                 if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
                 tvWidgetInstance = new TradingView.widget({
                     "autosize": true,
@@ -1432,6 +1432,8 @@
                         const angle = (pulse.score - 50) * 1.8;
                         document.getElementById('gauge-needle').style.transform = `rotate(${angle}deg)`;
                     }
+                    // Update time regardless of pulse to show connection is alive
+                    document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
 
                     let html = '';
                     data.forEach(item => {
