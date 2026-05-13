@@ -984,60 +984,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         "levels": levels
                     })
 
-    # 🌟 GVN SPECIAL: Force 24100 PE Levels if it's NIFTY
-    if symbol == "NIFTY":
-        # Check if already in scanner
-        if not any("24100 PE" in x["strike"] for x in gvn_scanner_data[symbol]):
-            # Add it with User's specific levels from audio
-            target_ltp = live_option_ltps.get("24100_PE", 127.5)
-            user_levels = {
-                "Level_1": 30.0,
-                "Level_7": 99.84,
-                "Level_6": 150.55,
-                "Level_5": 187.49,
-                "Level_3": 224.42,
-                "Level_0": 269.81
-            }
-            gvn_scanner_data[symbol].append({
-                "strike": "24100 PE",
-                "ltp": target_ltp,
-                "delta": 0.65, # Estimated
-                "oi_change": 0,
-                "volume": 0,
-                "score": 85,
-                "zone": "🔥 GVN TARGET ZONE",
-                "pressure": "HIGH BUY PRESSURE" if target_ltp <= 110 else "WAIT",
-                "ai_signal": "🚀 ZERO-TO-HERO" if target_ltp <= 105 else "HOLD",
-                "i_level": "i7 (99.8)" if abs(target_ltp - 99.8) < 5 else "IN-ZONE",
-                "potential": "VERY HIGH",
-                "levels": user_levels
-            })
-            
-        # 🌟 GVN SPECIAL: Force 23900 PE Levels if it's NIFTY
-        if not any("23900 PE" in x["strike"] for x in gvn_scanner_data[symbol]):
-            target_ltp_23900 = 32.35 # From table
-            user_levels_23900 = {
-                "i0": 7.64,
-                "i7": 27.53,
-                "i6": 42.18,
-                "i5": 52.86,
-                "i3": 63.53,
-                "i1": 98.08
-            }
-            gvn_scanner_data[symbol].append({
-                "strike": "23900 PE",
-                "ltp": target_ltp_23900,
-                "delta": 0.35, # OTM
-                "oi_change": 290007,
-                "volume": 7689670,
-                "score": 75,
-                "zone": "📉 SUPPORT TRACKING",
-                "pressure": "🟢 STABLE",
-                "ai_signal": "🎯 TARGET i6 (42.2)",
-                "i_level": "i7 (27.5) Crossed",
-                "potential": "MODERATE",
-                "levels": user_levels_23900
-            })
+    # 🌟 GVN DYNAMIC SCANNER: Data is now handled strictly via real-time feeds
+    # to avoid discrepancies between dashboard and market truth.
 
     # 🌟 ALWAYS Update Summary with Spot Price if available
     if underlying_value > 0:

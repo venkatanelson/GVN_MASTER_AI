@@ -942,15 +942,15 @@
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
         <script type="text/javascript">
             const GVN_TV_SYMBOLS = {
-                'NIFTY':     'NSE:NIFTY1!',
-                'BANKNIFTY': 'NSE:BANKNIFTY1!',
-                'FINNIFTY':  'NSE:FINNIFTY1!',
+                'NIFTY':     'NSE:NIFTY',
+                'BANKNIFTY': 'NSE:BANKNIFTY',
+                'FINNIFTY':  'NSE:FINNIFTY',
                 'SENSEX':    'BSE:SENSEX',
                 'MCX':       'MCX:CRUDEOIL1!'
             };
 
             var tvWidgetInstance = null;
-            function initTV(symbol = 'NSE:NIFTY1!') {
+            function initTV(symbol = 'NSE:NIFTY') {
                 if (tvWidgetInstance) { try { tvWidgetInstance.remove(); } catch(e){} }
                 tvWidgetInstance = new TradingView.widget({
                     "autosize": true,
@@ -960,10 +960,14 @@
                     "theme": "dark",
                     "style": "1",
                     "locale": "en",
-                    "container_id": "tradingview_gvn",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
                     "hide_side_toolbar": false,
                     "allow_symbol_change": true,
+                    "container_id": "tradingview_gvn",
                     "details": true,
+                    "hotlist": true,
+                    "calendar": true,
                     "show_popup_button": true,
                     "popup_width": "1000",
                     "popup_height": "650"
@@ -972,8 +976,9 @@
             initTV();
 
             function changeTVSymbol(indexName) {
-                const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY1!';
+                const sym = GVN_TV_SYMBOLS[indexName] || 'NSE:NIFTY';
                 if (window.lastTVSym !== sym) {
+                    console.log("🚀 GVN TV: Switching to", sym);
                     window.lastTVSym = sym;
                     initTV(sym);
                 }
@@ -1471,18 +1476,12 @@
             });
         }
 
-        function changeTVSymbol(symbol) {
-            console.log("Switching Chart to:", symbol);
-            // Re-initialize to ensure all tools and indicators are fresh for the new symbol
-            initTV(symbol.includes(':') ? symbol : `NSE:${symbol}`);
-        }
-
-        setInterval(updateScanner, 10000);
+        setInterval(updateScanner, 5000);
         setInterval(updateLivePnL, 3000);
         updateScanner();
         
         // Initial Chart Load
-        setTimeout(() => changeTVSymbol(`NSE:${currentActiveIndex}`), 2000);
+        setTimeout(() => changeTVSymbol(currentActiveIndex), 2000);
     </script>
     <!-- 🌟 OPTION CHAIN MODAL -->
     <div id="optionChainModal" class="modal-overlay">
