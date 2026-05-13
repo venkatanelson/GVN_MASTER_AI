@@ -57,16 +57,25 @@ class TrueDataWSConnector:
                 crude_expiries = td_api.get_expiry_list("CRUDEOIL")
             
             # Default fallbacks if API fails or td_api is None
-            n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y") if (nifty_expiries and isinstance(nifty_expiries, list)) else dt(2026, 5, 19)
-            c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list)) else dt(2026, 5, 14)
+            # 🚀 GVN SPECIAL: Forced Priority for May 19th (Known Working Expiry)
+            target_n_expiry = "19-05-2026"
+            n_expiry = dt.strptime(target_n_expiry, "%d-%m-%Y")
+            
+            # Check for NIFTY 50 or NIFTY
+            target_symbol = "NIFTY"
+            if td_api:
+                test_exp = td_api.get_expiry_list("NIFTY 50")
+                if test_exp: target_symbol = "NIFTY 50"
+
+            c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list) and len(crude_expiries) > 0) else dt(2026, 5, 14)
             
             # 2. Start CRUDEOIL Chain
             logger.info(f"📈 Initializing CRUDEOIL Chain for {c_expiry.date()}")
             self.start_option_chain('CRUDEOIL', c_expiry)
             
-            # 3. Start NIFTY Chain (Try all variations)
-            logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
-            self.start_option_chain('NIFTY', n_expiry)
+            # 3. Start NIFTY Chain (Priority: 19-05-2026)
+            logger.info(f"📈 Initializing {target_symbol} Chain for {n_expiry.date()}")
+            self.start_option_chain(target_symbol, n_expiry)
             
         except Exception as e:
             logger.error(f"Error in dynamic chain initialization: {e}")
