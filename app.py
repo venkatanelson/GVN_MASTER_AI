@@ -563,16 +563,6 @@ def broker_status():
         "reason": "Stable Connection" if is_connected else "Authentication Failed / Session Expired"
     })
 
-@app.route('/api/gvn-scanner')
-def gvn_scanner():
-    return jsonify({
-        "status": "success",
-        "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', {}),
-        "market_pulse": getattr(shared_data, 'market_pulse', {}),
-        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
-        "data": getattr(shared_data, 'scanner_data', {}),
-        "demo_signals": getattr(shared_data, 'demo_signals', [])
-    })
 
 @app.route('/tv-webhook', methods=['POST'])
 def tv_webhook():
@@ -736,14 +726,16 @@ def get_demo_logs():
 
 @app.route('/api/gvn-scanner')
 def get_gvn_scanner():
-    """Consolidated scanner data for the dashboard"""
-    # Create a summary if not present
-    summary = {
+    """Consolidated high-speed scanner data for the GVN Master Dashboard"""
+    return jsonify({
+        "status": "success",
         "last_updated": datetime.now().strftime("%H:%M:%S"),
-        "NIFTY": {"spot": shared_data.market_data.get("NIFTY", 0), "atm": round(shared_data.market_data.get("NIFTY", 0)/50)*50, "ce_60": 0, "pe_60": 0},
-        "BANKNIFTY": {"spot": shared_data.market_data.get("BANKNIFTY", 0), "atm": round(shared_data.market_data.get("BANKNIFTY", 0)/100)*100, "ce_60": 0, "pe_60": 0}
-    }
-    return jsonify({"summary": summary, "data": shared_data.gvn_scanner_data})
+        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', []),
+        "market_pulse": getattr(shared_data, 'market_pulse', {}),
+        "scanner_data": getattr(shared_data, 'gvn_scanner_data', {}),
+        "demo_signals": getattr(shared_data, 'demo_signals', [])
+    })
 
 @app.route('/api/live-signals')
 def get_live_signals():

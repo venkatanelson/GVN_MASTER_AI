@@ -667,7 +667,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     underlying_value = records.get("underlyingValue", 0)
     
     # 🌟 GVN SPECIAL: Extract Nearest Expiry
-    nearest_expiry = data.get("records", {}).get("expiryDates", [None])[0]
+    expiry_list = data.get("records", {}).get("expiryDates", [])
+    nearest_expiry = expiry_list[0] if expiry_list else None
+    
     if not nearest_expiry:
         nearest_expiry = (datetime.now() + timedelta(days=7)).strftime("%d-%b-%Y")
 
@@ -1105,6 +1107,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     except Exception as e:
         logger.error(f"Pressure Engine Error: {e}")
     try:
+        # 🧠 SYNC ALPHA GRID (Top 14 Strikes for Dashboard)
+        shared_data.gvn_alpha_grid = gvn_scanner_data.get(symbol, [])[:14]
+        
         shared_data.gvn_scanner_data = {
             "summary": live_option_chain_summary,
             "scanner": gvn_scanner_data,
