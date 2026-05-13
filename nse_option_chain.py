@@ -1,7 +1,7 @@
 import requests
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 from truedata_rest_api import TrueDataRestAPI
 import shared_data
