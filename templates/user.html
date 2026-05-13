@@ -897,7 +897,7 @@
             {% endif %}
             
             <div class="{% if user.is_locked %}locked-blur{% endif %}">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px; margin-bottom: 25px;">
                     <div>
                         <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">🛰️ GVN DUAL-PULSE CONFIRMATION</h3>
                         <p id="movement-text" style="font-size: 24px; font-weight: 900; color: #fff; margin: 0;">📡 SCANNING ALPHA GRID...</p>
@@ -916,6 +916,24 @@
                             <span id="pe-strike-name" style="font-size: 15px; font-weight: 900; color: #fff;">N/A</span>
                         </div>
                     </div>
+                </div>
+
+                <!-- 🧠 14-STRIKE ALPHA GRID TABLE -->
+                <div style="overflow-x: auto; background: rgba(0,0,0,0.3); border-radius: 16px; border: 1px solid var(--glass-border);">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center;">
+                        <thead style="background: rgba(255,255,255,0.05);">
+                            <tr>
+                                <th style="padding: 12px; color: var(--primary); text-transform: uppercase;">STRIKE / LEVEL</th>
+                                <th style="padding: 12px; color: var(--primary); text-transform: uppercase;">LTP / DELTA</th>
+                                <th style="padding: 12px; color: var(--primary); text-transform: uppercase;">ZONE</th>
+                                <th style="padding: 12px; color: var(--primary); text-transform: uppercase;">AI SIGNAL</th>
+                                <th style="padding: 12px; color: var(--primary); text-transform: uppercase;">MOMENTUM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scanner-body">
+                            <tr><td colspan="5" style="padding: 30px; color: var(--text-dim);">Initializing 14-Strike Alpha Grid...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1348,7 +1366,7 @@
                         document.getElementById('visible-spot-price').innerText = activePrice;
                     }
                     const body = document.getElementById('scanner-body');
-                    const data = res.data[currentActiveIndex] || [];
+                    const data = res.alpha_grid || [];
                     const pulse = res.market_pulse ? res.market_pulse[currentActiveIndex] : null;
 
                     if (pulse) {
