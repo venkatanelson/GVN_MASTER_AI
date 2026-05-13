@@ -1,6 +1,11 @@
 # GVN Algorithmic AI Engine - Shared Memory & Global State
 # ---------------------------------------------------------
 import threading
+import os
+from dotenv import load_dotenv
+
+# Load environment variables at the very beginning
+load_dotenv()
 
 # Locks for thread-safe access
 _data_lock = threading.Lock()
@@ -113,12 +118,13 @@ paper_trading_stats = {
 }
 
 # 🕒 9:15 AM 5-Minute Benchmark (GVN Foundation)
+# Reset to 0 for a Fresh Market Start every day
 gvn_915_benchmark = {
-    "NIFTY": {"high": 23740.0, "low": 23680.0, "captured": True},
-    "BANKNIFTY": {"high": 0, "low": 0, "captured": False},
-    "FINNIFTY": {"high": 0, "low": 0, "captured": False},
-    "MIDCPNIFTY": {"high": 0, "low": 0, "captured": False},
-    "MCX": {"high": 6845.0, "low": 6810.0, "captured": True}
+    "NIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
+    "BANKNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
+    "FINNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
+    "MIDCPNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
+    "MCX": {"high": 0, "low": 0, "captured": False, "date": None}
 }
 
 # System status

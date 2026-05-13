@@ -57,7 +57,13 @@ class TrueDataWSConnector:
                 crude_expiries = td_api.get_expiry_list("CRUDEOIL")
             
             # Default fallbacks if API fails or td_api is None
-            n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y") if (nifty_expiries and isinstance(nifty_expiries, list)) else dt(2026, 5, 12)
+            from datetime import timedelta
+            today = dt.now()
+            days_ahead = 3 - today.weekday()
+            if days_ahead < 0: days_ahead += 7
+            next_thu = today + timedelta(days=days_ahead)
+            
+            n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y") if (nifty_expiries and isinstance(nifty_expiries, list)) else next_thu
             c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list)) else dt(2026, 5, 14)
             
             # 2. Start CRUDEOIL Chain

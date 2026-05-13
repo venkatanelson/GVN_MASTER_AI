@@ -555,8 +555,15 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         if data and "records" in data:
             try:
                 now = datetime.now()
+                today_str = now.strftime("%Y-%m-%d")
+                
+                # 🕒 GVN AUTO-RESET: Reset if it's a new day
+                symbol_data = shared_data.gvn_915_benchmark.get(symbol)
+                if symbol_data and symbol_data.get("date") != today_str:
+                    symbol_data.update({"high": 0, "low": 0, "captured": False, "date": today_str, "breakout_alert": False, "breakdown_alert": False})
+                    logger.info(f"🔄 [AUTO-RESET] {symbol} benchmarks reset for {today_str}")
+
                 if now.hour == 9 and 15 <= now.minute <= 20:
-                    symbol_data = shared_data.gvn_915_benchmark.get(symbol)
                     if symbol_data and not symbol_data["captured"]:
                         # 🚀 GVN FIX: Get spot from WebSocket (market_data) instead of REST chain
                         spot = shared_data.market_data.get(symbol, 0)
@@ -748,14 +755,18 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     spot = data.get("spot", 0)
                     if spot > benchmark["high"] and opt_type == "CE":
                         msg = f"📈 [BREAKOUT] {symbol} crossed 9:15 High ({benchmark['high']})! Bullish Bias."
-                        print(msg)
-                        try: shared_data.demo_logs.append(msg)
-                        except: pass
+                        if not benchmark.get("breakout_alert"):
+                            print(msg)
+                            try: shared_data.demo_logs.append(msg)
+                            except: pass
+                            benchmark["breakout_alert"] = True
                     elif spot < benchmark["low"] and opt_type == "PE":
                         msg = f"📉 [BREAKDOWN] {symbol} crossed 9:15 Low ({benchmark['low']})! Bearish Bias."
-                        print(msg)
-                        try: shared_data.demo_logs.append(msg)
-                        except: pass
+                        if not benchmark.get("breakdown_alert"):
+                            print(msg)
+                            try: shared_data.demo_logs.append(msg)
+                            except: pass
+                            benchmark["breakdown_alert"] = True
 
                 # ---- DEMO P&L TRACKER (WITH TRAILING SL) ----
                 full_sym = f"{symbol}_{strike}_{opt_type}"

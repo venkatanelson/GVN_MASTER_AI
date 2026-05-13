@@ -2,6 +2,7 @@
 import requests
 import json
 import logging
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,15 @@ class TrueDataRestAPI:
         # 🔑 GVN FIX: Always login if credentials provided to get a fresh token
         if self.username and self.password:
             self.login()
+
+    def get_next_thursday(self):
+        """Calculates the date of the upcoming Thursday"""
+        today = datetime.now()
+        days_ahead = 3 - today.weekday() # Thursday is index 3
+        if days_ahead < 0: # Already past Thursday
+            days_ahead += 7
+        next_thu = today + timedelta(days=days_ahead)
+        return next_thu.strftime("%d-%m-%Y")
 
     def login(self):
         """Authenticates with TrueData and obtains a fresh Bearer Token"""
@@ -145,8 +155,14 @@ class TrueDataRestAPI:
             return res
         
         # Final fallback to avoid crash
-        if "CRUDE" in symbol.upper(): return ["14-05-2026"]
-        return ["12-05-2026"] 
+        # Dynamic fallback: Calculate next Thursday
+        next_thu = self.get_next_thursday()
+        
+        if "CRUDE" in symbol.upper():
+            # Crude typically has different expiries, but let's use a safe fallback or a known one
+            return ["14-05-2026"] 
+            
+        return [next_thu] 
 
     def get_ltp(self, symbol, strike, series, expiry):
         """Fetches Last Traded Price for specific strike"""
