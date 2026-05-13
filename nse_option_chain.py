@@ -163,9 +163,51 @@ def fetch_nse_option_chain(symbol="NIFTY", exchange="NSE"):
     # data = fetch_from_angel(symbol)
     
     with open("nse_status.log", "a") as f:
-        f.write(f"{datetime.now()}: [INFO] Bypassing Angel for Option Chain. Proceeding to fallback...\n")
+        f.write(f"{datetime.now()}: [INFO] Checking for live WebSocket data for {symbol}...\n")
 
-    # --- Step 0: Try TrueData Professional REST Feed (PRIMARY) ---
+    # --- Step 0: Try Live WebSocket Data (FASTEST) ---
+    is_ws_active = shared_data.broker_connection_status.get("TrueDataWS", False)
+    ws_chain = shared_data.truedata_option_chains.get(symbol)
+    
+    if ws_chain:
+        with open("nse_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [SUCCESS] Using Live WebSocket Chain for {symbol}\n")
+        
+        # Transform TrueData WS format to system format
+        formatted_data = []
+        for row in ws_chain:
+            # Map column names if they differ (TrueData WS df usually has 'call_ltp', 'put_ltp', etc.)
+            formatted_data.append({
+                "strike": float(row.get("strike_price", row.get("strike", 0))),
+                "CE": {
+                    "lastPrice": float(row.get("call_ltp", 0)),
+                    "oi": int(row.get("call_oi", 0)),
+                    "volume": int(row.get("call_v", row.get("call_volume", 0))),
+                    "impliedVolatility": float(row.get("call_iv", 0)),
+                    "lastTradedPrice": float(row.get("call_ltp", 0))
+                },
+                "PE": {
+                    "lastPrice": float(row.get("put_ltp", 0)),
+                    "oi": int(row.get("put_oi", 0)),
+                    "volume": int(row.get("put_v", row.get("put_volume", 0))),
+                    "impliedVolatility": float(row.get("put_iv", 0)),
+                    "lastTradedPrice": float(row.get("put_ltp", 0))
+                }
+            })
+        
+        lp = shared_data.market_data.get(symbol, 0)
+        return {
+            "records": {"underlyingValue": lp, "expiryDates": [], "data": formatted_data},
+            "source": "TRUEDATA_WEBSOCKET"
+        }
+    
+    # If WebSocket is active but data is not here yet, wait a bit or skip slow fallbacks
+    if is_ws_active:
+        with open("nse_status.log", "a") as f:
+            f.write(f"{datetime.now()}: [INFO] WS Active but no data for {symbol} yet. Skipping slow fallbacks.\n")
+        return None
+
+    # --- Step 1: Try TrueData Professional REST Feed ---
     try:
         # 🌟 GVN SPECIAL: Map MCX key to actual TrueData symbol
         td_symbol = "CRUDEOIL" if symbol == "MCX" else symbol
