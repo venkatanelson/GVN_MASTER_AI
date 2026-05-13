@@ -56,16 +56,22 @@ class TrueDataWSConnector:
                 nifty_expiries = td_api.get_expiry_list("NIFTY")
                 crude_expiries = td_api.get_expiry_list("CRUDEOIL")
             
-            # Default fallbacks if API fails or td_api is None
-            # 🚀 GVN SPECIAL: Forced Priority for May 19th (Known Working Expiry)
-            target_n_expiry = "19-05-2026"
-            n_expiry = dt.strptime(target_n_expiry, "%d-%m-%Y")
+            # 🔍 [GVN DEBUG] Log all available expiries
+            logger.info(f"🔍 [EXPIRY SCAN] NIFTY Expiries: {nifty_expiries}")
+            logger.info(f"🔍 [EXPIRY SCAN] CRUDEOIL Expiries: {crude_expiries}")
+
+            # 🚀 GVN SPECIAL: Search for the best working expiry
+            n_expiry = None
+            for exp_str in ["21-05-2026", "14-05-2026", "19-05-2026"]:
+                if nifty_expiries and exp_str in nifty_expiries:
+                    n_expiry = dt.strptime(exp_str, "%d-%m-%Y")
+                    break
             
-            # Check for NIFTY 50 or NIFTY
-            target_symbol = "NIFTY"
-            if td_api:
-                test_exp = td_api.get_expiry_list("NIFTY 50")
-                if test_exp: target_symbol = "NIFTY 50"
+            if not n_expiry:
+                if nifty_expiries and len(nifty_expiries) > 0:
+                    n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y")
+                else:
+                    n_expiry = dt(2026, 5, 21) # Safe default fallback
 
             c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list) and len(crude_expiries) > 0) else dt(2026, 5, 14)
             
@@ -73,9 +79,9 @@ class TrueDataWSConnector:
             logger.info(f"📈 Initializing CRUDEOIL Chain for {c_expiry.date()}")
             self.start_option_chain('CRUDEOIL', c_expiry)
             
-            # 3. Start NIFTY Chain (Priority: 19-05-2026)
-            logger.info(f"📈 Initializing {target_symbol} Chain for {n_expiry.date()}")
-            self.start_option_chain(target_symbol, n_expiry)
+            # 3. Start NIFTY Chain
+            logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
+            self.start_option_chain('NIFTY', n_expiry)
             
         except Exception as e:
             logger.error(f"Error in dynamic chain initialization: {e}")
