@@ -6,8 +6,13 @@ import threading
 from truedata_rest_api import TrueDataRestAPI
 import shared_data
 
-# Initialize TrueData API with credentials
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("NSE_OptionChain")
+
 td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
 
 
