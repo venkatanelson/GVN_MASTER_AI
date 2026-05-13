@@ -1013,27 +1013,42 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     try:
         pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0
         
-        sentiment = "NEUTRAL"
-        trend = "SIDEWAYS"
-        pressure_msg = "BALANCED"
+        # 🧠 GVN AI MASTER LOGIC v3.0 (Trap & Momentum)
         ai_insight = "Equilibrium. No clear institutional bias yet."
         
+        # Get 200 MA from user's observation (Default: 23,518 for Nifty)
+        ma_200 = 23518 if symbol == "NIFTY" else (74650 if symbol == "SENSEX" else 0)
+        spot = underlying_value
+        usd_inr = 95.74 # User's observed rate
+
         if pcr < 0.7:
             sentiment = "BEARISH"
             trend = "AGGRESSIVE SELLING"
             pressure_msg = "🛑 HEAVY SELLING PRESSURE"
-            ai_insight = f"Iron Wall detected at {max_ce_strike}. PCR {pcr} suggests a Sharp Fall."
+            ai_insight = f"Iron Wall at {max_ce_strike}. PCR {pcr} suggests a Sharp Fall."
         elif pcr > 1.3:
             sentiment = "BULLISH"
             trend = "AGGRESSIVE BUYING"
             pressure_msg = "🚀 HEAVY BUYING PRESSURE"
             ai_insight = f"Strong Base at {max_pe_strike}. PCR {pcr} suggests a Breakout Rally."
         
-        # Check for Iron Wall specifically
-        oi_ratio = max_ce_oi / max_pe_oi if max_pe_oi > 0 else 1.0
-        if oi_ratio > 2.0:
-            pressure_msg = f"🧱 IRON WALL at {max_ce_strike}"
-            ai_insight = "Resistence is extremely strong. Market unlikely to cross."
+        # 🚨 TRAP DETECTION LOGIC
+        if ma_200 > 0 and abs(spot - ma_200) < 20:
+            if 0.9 <= pcr <= 1.1:
+                pressure_msg = "🚨 INSTITUTIONAL TRAP"
+                ai_insight = f"Market held at 200 MA ({ma_200}). Premium Eating Zone active. Avoid OTM."
+            else:
+                ai_insight += f" | Battle Zone near 200 MA ({ma_200})."
+
+        # ⚠️ CURRENCY PRESSURE
+        if usd_inr > 95.0:
+            ai_insight += f" | ⚠️ INR {usd_inr} pressure detected."
+
+        # 📉 PREMIUM EATING DETECTION
+        if abs(spot - (benchmark.get("open") if benchmark else spot)) < 30:
+            if pcr > 0.8 and pcr < 1.2:
+                trend = "PREMIUM EATING 📉"
+                ai_insight = "Slow Move + Expiry = Theta Trap. Premium not expanding."
 
         market_pulse[symbol] = {
             "sentiment": sentiment,

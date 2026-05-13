@@ -590,6 +590,14 @@
                                         <td style="padding: 6px 0; font-weight: 800; color: #a78bfa;">AI Insight</td>
                                         <td id="ai-insight" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fff; font-style: italic;">Scanning...</td>
                                     </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #f43f5e;">Trap Status</td>
+                                        <td id="ai-trap" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fb7185;">Scanning...</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <td style="padding: 6px 0; font-weight: 800; color: #fbbf24;">INR Pressure</td>
+                                        <td id="ai-currency" style="padding: 6px 0; text-align: right; font-weight: 900; color: #fcd34d;">₹ 95.74</td>
+                                    </tr>
                                     <tr>
                                         <td colspan="2" id="ai-condition" style="padding-top: 8px; font-size: 11px; color: #94a3b8; font-style: italic; text-align: center;">
                                             Waiting for data...
@@ -1378,6 +1386,16 @@
                         document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
                         document.getElementById('pulse-score').innerText = `AI SCORE: ${pulse.score}`;
                         document.getElementById('pulse-trend').innerText = pulse.trend;
+                        
+                        // 🌟 New GVN v1.0 Logic Fields
+                        if (document.getElementById('ai-trap')) document.getElementById('ai-trap').innerText = pulse.trap || 'Safe';
+                        if (document.getElementById('ai-currency')) document.getElementById('ai-currency').innerText = pulse.currency || '₹ 95.74';
+                        if (document.getElementById('ai-insight')) document.getElementById('ai-insight').innerText = pulse.ai_insight || 'Scanning...';
+                        if (document.getElementById('ai-support')) document.getElementById('ai-support').innerText = pulse.support || 'Scanning...';
+                        if (document.getElementById('ai-resistance')) document.getElementById('ai-resistance').innerText = pulse.resistance || 'Scanning...';
+                        if (document.getElementById('ai-pcr')) document.getElementById('ai-pcr').innerText = pulse.pcr || '--';
+                        if (document.getElementById('ai-pressure')) document.getElementById('ai-pressure').innerText = pulse.pressure || 'Neutral';
+
                         document.getElementById('pulse-inst').innerText = pulse.inst_activity;
                         document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
                         document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
