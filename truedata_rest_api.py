@@ -155,14 +155,10 @@ class TrueDataRestAPI:
             return res
         
         # Final fallback to avoid crash
-        # Dynamic fallback: Calculate next Thursday
-        next_thu = self.get_next_thursday()
-        
         if "CRUDE" in symbol.upper():
-            # Crude typically has different expiries, but let's use a safe fallback or a known one
             return ["14-05-2026"] 
             
-        return [next_thu] 
+        return ["19-05-2026"] # User Verified Next Nifty Expiry
 
     def get_ltp(self, symbol, strike, series, expiry):
         """Fetches Last Traded Price for specific strike"""
