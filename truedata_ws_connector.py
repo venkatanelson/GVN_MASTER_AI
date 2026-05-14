@@ -23,7 +23,7 @@ class TrueDataWSConnector:
         self.password = "nelson245"
         self.td_obj = None
         self.is_running = False
-        self.symbols = ["NIFTY", "BANKNIFTY", "SBIN", "CRUDEOIL"]
+        self.symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "SBIN", "CRUDEOIL"]
         self.chain_objects = {} 
 
     def start(self):
@@ -49,39 +49,29 @@ class TrueDataWSConnector:
         try:
             from shared_data import td_api
             
-            # 1. Fetch Dynamic Expiries
-            nifty_expiries = []
-            crude_expiries = []
-            if td_api:
-                nifty_expiries = td_api.get_expiry_list("NIFTY")
-                crude_expiries = td_api.get_expiry_list("CRUDEOIL")
+            indices_to_track = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "CRUDEOIL"]
             
-            # 🔍 [GVN DEBUG] Log all available expiries
-            logger.info(f"🔍 [EXPIRY SCAN] NIFTY Expiries: {nifty_expiries}")
-            logger.info(f"🔍 [EXPIRY SCAN] CRUDEOIL Expiries: {crude_expiries}")
+            for symbol in indices_to_track:
+                try:
+                    expiries = []
+                    if td_api:
+                        expiries = td_api.get_expiry_list(symbol)
+                    
+                    logger.info(f"🔍 [EXPIRY SCAN] {symbol} Expiries: {expiries}")
 
-            # 🚀 GVN SPECIAL: Search for the best working expiry
-            n_expiry = None
-            for exp_str in ["21-05-2026", "14-05-2026", "19-05-2026"]:
-                if nifty_expiries and exp_str in nifty_expiries:
-                    n_expiry = dt.strptime(exp_str, "%d-%m-%Y")
-                    break
-            
-            if not n_expiry:
-                if nifty_expiries and len(nifty_expiries) > 0:
-                    n_expiry = dt.strptime(nifty_expiries[0], "%d-%m-%Y")
-                else:
-                    n_expiry = dt(2026, 5, 21) # Safe default fallback
+                    expiry = None
+                    if expiries and len(expiries) > 0:
+                        # Find the first valid Thursday (or current expiry)
+                        expiry = dt.strptime(expiries[0], "%d-%m-%Y")
+                    else:
+                        # Fallback defaults
+                        if "CRUDE" in symbol: expiry = dt(2026, 5, 14)
+                        else: expiry = dt(2026, 5, 21)
 
-            c_expiry = dt.strptime(crude_expiries[0], "%d-%m-%Y") if (crude_expiries and isinstance(crude_expiries, list) and len(crude_expiries) > 0) else dt(2026, 5, 14)
-            
-            # 2. Start CRUDEOIL Chain
-            logger.info(f"📈 Initializing CRUDEOIL Chain for {c_expiry.date()}")
-            self.start_option_chain('CRUDEOIL', c_expiry)
-            
-            # 3. Start NIFTY Chain
-            logger.info(f"📈 Initializing NIFTY Chain for {n_expiry.date()}")
-            self.start_option_chain('NIFTY', n_expiry)
+                    logger.info(f"📈 Initializing {symbol} Chain for {expiry.date()}")
+                    self.start_option_chain(symbol, expiry)
+                except Exception as e:
+                    logger.error(f"Failed to initialize chain for {symbol}: {e}")
             
         except Exception as e:
             logger.error(f"Error in dynamic chain initialization: {e}")

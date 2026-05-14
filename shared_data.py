@@ -15,6 +15,7 @@ market_data = {
     "NIFTY": 24119.30,
     "BANKNIFTY": 54878.50,
     "FINNIFTY": 21400.10,
+    "SENSEX": 75453.04,
     "CRUDEOIL": 6842.00
 }
 
@@ -123,6 +124,7 @@ gvn_915_benchmark = {
     "NIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
     "BANKNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
     "FINNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
+    "SENSEX": {"high": 0, "low": 0, "captured": False, "date": None},
     "MIDCPNIFTY": {"high": 0, "low": 0, "captured": False, "date": None},
     "MCX": {"high": 0, "low": 0, "captured": False, "date": None}
 }

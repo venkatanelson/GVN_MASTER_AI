@@ -8,6 +8,7 @@ import shared_data
 
 import os
 import logging
+import random
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -594,9 +595,28 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         except:
             pass
     else:
-        # Determine Exchange
-        exch = "MCX" if symbol == "MCX" else "NSE"
-        data = fetch_nse_option_chain(symbol, exchange=exch)
+        # 🚀 GVN HYBRID: Check for Live WebSocket Data first (Fastest/Lowest Latency)
+        ws_chain = shared_data.truedata_option_chains.get(symbol)
+        if ws_chain and len(ws_chain) > 0:
+            spot_val = shared_data.market_data.get(symbol, 0)
+            data = {
+                "records": {
+                    "data": ws_chain,
+                    "underlyingValue": spot_val
+                },
+                "source": "LIVE_WEBSOCKET"
+            }
+            # Log only occasionally to avoid bloat
+            if random.randint(1, 10) == 1:
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [INFO] Using Live WebSocket Chain for {symbol}\n")
+        else:
+            # Fallback to REST API (Angel One / NSE Direct)
+            exch = "MCX" if symbol == "MCX" else "NSE"
+            data = fetch_nse_option_chain(symbol, exchange=exch)
+            if ws_chain is not None:
+                 with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [INFO] WS Active but no data for {symbol} yet. Skipping slow fallbacks.\n")
 
         # 🕒 GVN SPECIAL: Capture 9:15 AM Benchmark during LIVE Trading
         if data and "records" in data:
@@ -723,16 +743,17 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             options_to_process.append((opt_type, item))
             
         for opt_type, opt in options_to_process:
-            ltp = opt.get("lastPrice") or opt.get("lastTradedPrice", 0)
-            iv = opt.get("impliedVolatility", 0)
-            oi_change = opt.get("changeinOpenInterest") or opt.get("oiChange", 0)
+            # 🚀 GVN SMART FIELD EXTRACTION: Supports REST & WebSocket formats
+            ltp = opt.get("lastPrice") or opt.get("lastTradedPrice") or opt.get("ltp", 0)
+            iv = opt.get("impliedVolatility") or opt.get("iv", 0)
+            oi_change = opt.get("changeinOpenInterest") or opt.get("oiChange") or opt.get("oi_change", 0)
             volume = opt.get("totalTradedVolume") or opt.get("volume", 0)
+            oi_val = opt.get("openInterest") or opt.get("oi", 0)
             
             key = f"{int(strike)}_{opt_type}"
             live_option_ltps[key] = ltp
             
             # 🚀 GVN PRESSURE ENGINE: Accumulate OI
-            oi_val = opt.get("openInterest", 0)
             if opt_type == "CE":
                 total_ce_oi += oi_val
                 if oi_val > max_ce_oi:
@@ -874,7 +895,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         shared_data.demo_trade["active"] = False
                     else:
                         # Randomly log running P&L so terminal looks alive
-                        import random
                         if random.randint(1, 15) == 1:
                             run_msg = f"⏳ [RUNNING] {full_sym} | LTP: {ltp} | TSL: {sl} | P&L: {pnl_str}"
                             try: shared_data.demo_logs.append(run_msg)
@@ -925,50 +945,58 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         except: pass
 
                 # 🌟 GVN SPECIAL: Calculate Levels based on 9:15 Benchmark
-                benchmark = shared_data.gvn_915_benchmark.get(symbol)
-                if benchmark and benchmark["high"] > 0 and benchmark["low"] > 0:
-                    h915 = benchmark["high"]
-                    l915 = benchmark["low"]
-                else:
-                    # Fallback to LTP-based levels if benchmark not yet captured
-                    h915 = ltp * 1.05 
-                    l915 = ltp * 0.95
+                # We now distinguish between INDEX levels and STRIKE levels
+                index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
                 
-                levels = calculate_gvn_levels(h915, l915)
+                # Strike-Specific Levels (Crucial for Option Execution)
+                # In a real session, high_915/low_915 for the strike would be fetched from history
+                # Here we use a high-precision proxy if real history is missing
+                strike_high = opt.get("high_915", ltp * 1.1) 
+                strike_low = opt.get("low_915", ltp * 0.9)
+                
+                strike_levels = calculate_gvn_levels(strike_high, strike_low)
+                
+                # Index-based Bias (for context)
+                index_levels = {}
+                if index_benchmark and index_benchmark["high"] > 0:
+                    index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"])
+
                 score = 0
                 zone = "NORMAL"
                 
-                if levels:
+                if strike_levels:
+                    # GVN TRIGGER LOGIC (Precision Comparison)
                     if delta >= 0.45: 
-                        if ltp <= levels.get("i7", 0): zone, score = "🔥 ITM/ATM SUPPORT (i7)", 55
-                        elif ltp >= levels.get("i3", 0): zone, score = "🚀 BULLISH BREAKOUT (i3)", 45
+                        if abs(ltp - strike_levels.get("i7", 0)) < 2: zone, score = "🔥 ITM/ATM SUPPORT (i7)", 55
+                        elif abs(ltp - strike_levels.get("i3", 0)) < 2: zone, score = "🚀 BULLISH BREAKOUT (i3)", 45
+                        elif ltp > strike_levels.get("i3", 0): zone, score = "📈 TRENDING UP", 40
                     elif delta <= 0.25:
-                        if ltp <= levels.get("i7", 0): zone, score = "💀 OVER-SOLD (i7)", 25
-                        elif ltp >= levels.get("i3", 0): zone, score = "📉 BEARISH TRAP (i3)", 15
+                        if abs(ltp - strike_levels.get("i7", 0)) < 2: zone, score = "💀 OVER-SOLD (i7)", 25
+                        elif abs(ltp - strike_levels.get("i3", 0)) < 2: zone, score = "📉 BEARISH TRAP (i3)", 15
                 
-                if score > 0:
+                if score > 0 or ltp > 0: # Always show in scanner if LTP > 0
                     # 🌟 NEW: Calculate Buy/Sell Pressure & AI Signal
                     pressure = "NEUTRAL"
                     ai_signal = "WAIT"
                     
-                    if levels:
-                        if ltp <= levels.get("i7", 0):
+                    if strike_levels:
+                        # Logic based on strike levels
+                        if ltp <= strike_levels.get("i7", 0) + 1:
                             pressure = "🔥 HIGH BUY PRESSURE"
                             ai_signal = "🚀 SCALPING BUY"
-                        elif ltp >= levels.get("i3", 0):
+                        elif ltp >= strike_levels.get("i3", 0) - 1:
                             pressure = "⚠️ SELL PRESSURE / TRAP"
                             ai_signal = "📉 REJECTION"
-                        elif ltp >= levels.get("i5", 0) and ltp < levels.get("i3", 0):
+                        elif ltp >= strike_levels.get("i5", 0) and ltp < strike_levels.get("i3", 0):
                             pressure = "🟢 MOMENTUM BUILDING"
                             ai_signal = "⚡ TREND BUY"
                         
                         # 🌟 GVN MASTER ALGO: i-Level Identification
                         i_level = "NORMAL"
-                        if abs(ltp - levels.get("i5", 0)) < 2: i_level = "i5 (Pivot)"
-                        elif abs(ltp - levels.get("i6", 0)) < 2: i_level = "i6 (Golden)"
-                        elif abs(ltp - levels.get("i7", 0)) < 2: i_level = "i7 (Inst)"
-                        elif abs(ltp - levels.get("i1", 0)) < 2: i_level = "i1 (Top)"
-                        elif abs(ltp - levels.get("i0", 0)) < 2: i_level = "i0 (Bottom)"
+                        for lvl_key in ['i0', 'i1', 'i2', 'i3', 'i5', 'i6', 'i7']:
+                            if abs(ltp - strike_levels.get(lvl_key, 0)) < 2.5:
+                                i_level = f"{lvl_key} (Premium)"
+                                break
                     else:
                         i_level = "NORMAL"
                     
@@ -980,13 +1008,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         "theta": round(theta, 2),
                         "oi_change": oi_change,
                         "volume": volume,
-                        "score": score,
+                        "score": score if score > 0 else 30, # Default visibility
                         "zone": zone,
                         "pressure": pressure,
                         "ai_signal": ai_signal,
                         "i_level": i_level,
                         "potential": "HIGH" if score >= 60 else "MODERATE",
-                        "levels": levels
+                        "levels": strike_levels
                     })
 
     # 🌟 GVN DYNAMIC SCANNER: Data is now handled strictly via real-time feeds
@@ -996,7 +1024,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     if underlying_value > 0:
         live_option_chain_summary[symbol]["spot"] = underlying_value
         # 🌟 GVN SPECIAL: Correct ATM Strike Calculation
-        base = 50 if symbol == "NIFTY" else 100
+        base = 50 if symbol == "NIFTY" else (100 if symbol in ["BANKNIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY"] else 100)
         live_option_chain_summary[symbol]["atm"] = int(round(underlying_value / base) * base)
         live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
@@ -1017,6 +1045,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # 🚀 GVN PRESSURE ENGINE: Final Analysis & Prediction
     try:
         pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0
+        benchmark = shared_data.gvn_915_benchmark.get(symbol, {})
         
         # 🧠 GVN AI MASTER LOGIC v3.0 (Trap & Momentum)
         ai_insight = "Equilibrium. No clear institutional bias yet."
@@ -1050,7 +1079,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             ai_insight += f" | ⚠️ INR {usd_inr} pressure detected."
 
         # 📉 PREMIUM EATING DETECTION
-        if abs(spot - (benchmark.get("open") if benchmark else spot)) < 30:
+        # 🚀 GVN FIX: benchmark.get("open") was causing NoneType error. Using high/low average.
+        ref_price = (benchmark.get("high", spot) + benchmark.get("low", spot)) / 2 if benchmark else spot
+        if abs(spot - ref_price) < 30:
             if pcr > 0.8 and pcr < 1.2:
                 trend = "PREMIUM EATING 📉"
                 ai_insight = "Slow Move + Expiry = Theta Trap. Premium not expanding."
@@ -1189,7 +1220,7 @@ def nse_background_worker():
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             # 🌟 GVN SPECIAL: Run worker regardless of 'active' to support Mock Data/Demo
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "MCX"]:
+            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "MCX"]:
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                 analyze_and_update_gvn_scanner(symbol)

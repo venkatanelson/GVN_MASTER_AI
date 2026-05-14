@@ -278,6 +278,27 @@ class SecurityShield:
             "recent_events": self.audit_log[-10:]  # Last 10 events
         }
 
+    def reset_integrity_hashes(self):
+        """Re-compute hashes for all critical files (Authorized Reset)"""
+        logger.info("🛡️ [SECURITY] Resetting file integrity hashes (Authorized Update)...")
+        self._compute_initial_hashes()
+        self._log_security_event("INTEGRITY_RESET", "ADMIN", "SYSTEM", "Authorized hash update performed")
+        return True
+
+    def log_authorized_modification(self, filename, reason):
+        """Logs an authorized file modification to prevent panic alerts"""
+        logger.info(f"✅ [SECURITY] Authorized modification logged for {filename}: {reason}")
+        self._log_security_event("AUTHORIZED_MOD", "ADMIN", filename, reason)
+        # Update the hash for this specific file immediately
+        try:
+            if os.path.exists(filename):
+                with open(filename, 'rb') as f:
+                    new_hash = hashlib.sha256(f.read()).hexdigest()
+                    self.file_hashes[filename] = new_hash
+                    logger.info(f"✓ Updated hash for {filename}")
+        except Exception as e:
+            logger.error(f"Error updating hash for {filename}: {e}")
+
     def get_audit_log(self, limit=100):
         """Retrieve audit log entries"""
         return self.audit_log[-limit:]

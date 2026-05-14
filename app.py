@@ -67,6 +67,16 @@ def toggle_attack_mode():
 def clear_firewall():
     security_shield.blocked_ips.clear()
     return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/authorize-update')
+def authorize_security_update():
+    """Manually re-sync file hashes after an authorized system update"""
+    success = security_shield.reset_integrity_hashes()
+    if success:
+        flash("🛡️ Security Integrity Resynced! New file versions are now locked.")
+    else:
+        flash("❌ Security Reset Failed.")
+    return redirect(url_for('admin_dashboard'))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'gvn_secure_flask_key_2026')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///gvn_algo_pro.db')
 if db_url.startswith("postgres://"): db_url = db_url.replace("postgres://", "postgresql://", 1)
