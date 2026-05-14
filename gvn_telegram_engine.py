@@ -179,21 +179,23 @@ class AlertTemplates:
 class TelegramAlertManager:
     """Centralized alert dispatch system"""
     
+    # 🚀 GVN FIX: Class-level throttle to persist across instances
+    alert_throttle = {}
+    
     def __init__(self, bot_token, chat_id):
         self.bot = TelegramBot(bot_token, chat_id)
         self.alert_history = []
-        self.alert_throttle = {}  # Prevent duplicate alerts
     
     def should_send_alert(self, alert_type, key):
         """Check if alert should be sent (throttle duplicates)"""
         import time
         throttle_key = f"{alert_type}:{key}"
-        last_sent = self.alert_throttle.get(throttle_key, 0)
+        last_sent = TelegramAlertManager.alert_throttle.get(throttle_key, 0)
         current_time = time.time()
         
-        # Allow if > 30 seconds since last identical alert
-        if current_time - last_sent > 30:
-            self.alert_throttle[throttle_key] = current_time
+        # Allow if > 60 seconds since last identical alert (GVN Standard)
+        if current_time - last_sent > 60:
+            TelegramAlertManager.alert_throttle[throttle_key] = current_time
             return True
         
         return False

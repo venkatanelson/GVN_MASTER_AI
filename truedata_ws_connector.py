@@ -23,7 +23,7 @@ class TrueDataWSConnector:
         self.password = "nelson245"
         self.td_obj = None
         self.is_running = False
-        self.symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "SBIN", "CRUDEOIL"]
+        self.symbols = ["NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY", "SBIN", "CRUDEOIL"]
         self.chain_objects = {} 
 
     def start(self):
@@ -49,7 +49,7 @@ class TrueDataWSConnector:
         try:
             from shared_data import td_api
             
-            indices_to_track = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "CRUDEOIL"]
+            indices_to_track = ["NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY", "CRUDEOIL"]
             
             for symbol in indices_to_track:
                 try:

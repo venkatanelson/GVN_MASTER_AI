@@ -1180,6 +1180,16 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
 
 def nse_background_worker():
     print("🚀 [NSE Worker] Thread Started Successfully.")
+    # 🚀 GVN RECOVERY ENGINE: Fetch 9:15 data if missing
+    try:
+        from recover_915_v2 import GVN_915_Recover
+        recoverer = GVN_915_Recover(td_api)
+        if not shared_data.gvn_915_benchmark.get("NIFTY", {}).get("captured"):
+            recoverer.recover_benchmarks()
+            logger.info("✅ 9:15 Benchmarks recovered successfully on startup.")
+    except Exception as e:
+        logger.error(f"9:15 Recovery Error: {e}")
+
     while True:
         try:
             # 🌟 NEW: Auto-Sync keys from DB if not already active
