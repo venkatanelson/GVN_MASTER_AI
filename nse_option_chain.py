@@ -798,6 +798,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 })
     closest_ce_diff = 1.0
     closest_pe_diff = 1.0
+    best_ce_60 = None
+    best_pe_60 = None
 
     options_count = len(records.get("data", []))
     with open("nse_status.log", "a") as f:
