@@ -519,15 +519,16 @@ def user_status():
             condition = "Balanced OI on both sides. Max Pain at current spot."
             ai_insight = "Market in Equilibrium. No clear institutional bias yet."
 
-    # 🧠 GVN PRESSURE ENGINE SYNC
+    # 🧠 GVN PRESSURE ENGINE SYNC: Use real OI data from market_pulse
     pulse = getattr(shared_data, 'market_pulse', {})
-    pcr = pulse.get("pcr", 1.0)
-    pressure = pulse.get("pressure", "BALANCED")
-    
     if pulse.get("support"): support = str(pulse["support"])
     if pulse.get("resistance"): resistance = str(pulse["resistance"])
     if pulse.get("ai_insight"): ai_insight = pulse["ai_insight"]
     if pulse.get("trend"): expected_move = pulse["trend"]
+    if pulse.get("pressure"): condition = pulse["pressure"]
+    
+    pcr = pulse.get("pcr", 1.0)
+    pressure = pulse.get("pressure", "BALANCED")
 
     # Final Theory Message
     if logs:

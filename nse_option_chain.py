@@ -1152,9 +1152,24 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         }
         
         # Update Global Pulse for Dashboard
-        shared_data.market_pulse.update(market_pulse[symbol])
+        # 🚀 GVN IRON WALL ENGINE: Update global market pulse with real OI data
+        shared_data.market_pulse.update({
+            "sentiment": symbol_pulse["sentiment"],
+            "score": symbol_pulse["score"],
+            "trend": symbol_pulse["trend"],
+            "volume": symbol_pulse["volume"],
+            "inst_activity": symbol_pulse["inst_activity"],
+            "support": max_pe_strike,
+            "resistance": max_ce_strike,
+            "pcr": round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0,
+            "pressure": "IRON WALL DETECTED" if (max_ce_oi > 2000000) else "NORMAL FLOW",
+            "ai_insight": f"Institutional Wall at {max_ce_strike} (CE OI: {max_ce_oi})",
+            "last_updated": datetime.now().strftime("%H:%M:%S")
+        })
+        
+        # 🎯 GVN SYNC: Force dashboard fields for app.py compatibility
         shared_data.market_pulse["zone"] = f"SUP: {max_pe_strike} | RES: {max_ce_strike}"
-        shared_data.market_pulse["priority"] = f"PCR: {pcr}"
+        shared_data.market_pulse["priority"] = f"PCR: {shared_data.market_pulse['pcr']}"
         
     except Exception as e:
         logger.error(f"Pressure Engine Error: {e}")
