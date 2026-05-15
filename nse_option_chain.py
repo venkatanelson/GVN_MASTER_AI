@@ -661,14 +661,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         return
     
     records = data["records"]
-    # 🚀 GVN FIX: Always prioritize WebSocket Spot (market_data) for perfect sync
-    underlying_value = shared_data.market_data.get(symbol, 0)
-    if underlying_value == 0: 
-        underlying_value = records.get("underlyingValue", 0)
-        # Update shared memory so dashboard sees it
-        if underlying_value > 0:
-            shared_data.update_market_data(symbol.upper(), underlying_value)
-            shared_data.market_data[symbol.upper()] = underlying_value
+    # 🚀 GVN FIX: Ensure Spot Price is ALWAYS captured from underlyingValue
+    underlying_value = records.get("underlyingValue", 0)
+    if underlying_value > 0:
+        shared_data.update_market_data(symbol.upper(), underlying_value)
+        shared_data.market_data[symbol.upper()] = underlying_value
+        # Force "NIFTY" key too for generic lookups
+        if symbol == "NIFTY": shared_data.market_data["NIFTY"] = underlying_value
     
     # 🌟 GVN SPECIAL: Extract Nearest Expiry
     expiry_list = data.get("records", {}).get("expiryDates", [])
@@ -723,8 +722,23 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             if "type" in item: all_options.append(item)
             
         for strike_name in forced_strikes:
-            # Find data for this strike in the chain
-            strike_data = next((x for x in all_options if (x.get('strikePrice') == int(strike_name.split()[0]) or x.get('strike') == int(strike_name.split()[0])) and strike_name.split()[1] in str(x)), None)
+            # Improved matching logic
+            s_price = int(strike_name.split()[0])
+            s_type = strike_name.split()[1]
+            
+            strike_data = None
+            for item in records.get("data", []):
+                # Try CE/PE nested structure
+                if s_type in item and item[s_type].get("strikePrice") == s_price:
+                    strike_data = item[s_type]
+                    break
+                # Try flat structure
+                if item.get("strikePrice") == s_price and s_type in str(item.get("type", "")):
+                    strike_data = item
+                    break
+                if item.get("strike") == s_price and s_type in str(item.get("type", "")):
+                    strike_data = item
+                    break
             
             # Fallback if specific search fails
             if not strike_data:
