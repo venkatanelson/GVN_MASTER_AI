@@ -1048,6 +1048,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         benchmark = shared_data.gvn_915_benchmark.get(symbol, {})
         
         # 🧠 GVN AI MASTER LOGIC v3.0 (Trap & Momentum)
+        sentiment = "NEUTRAL"
+        trend = "SIDEWAYS"
+        pressure_msg = "NORMAL"
         ai_insight = "Equilibrium. No clear institutional bias yet."
         
         # Get 200 MA from user's observation (Default: 23,518 for Nifty)
@@ -1095,7 +1098,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             "support": max_pe_strike,
             "resistance": max_ce_strike,
             "ai_insight": ai_insight,
-            "inst_activity": "HIGH" if oi_ratio > 1.5 else "LOW"
+            "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW"
         }
         
         # Update Global Pulse for Dashboard
@@ -1164,13 +1167,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         elif score < 35: sentiment = "STRONG SELL"
         elif score < 45: sentiment = "SELL"
         
-        market_pulse[symbol] = {
+        market_pulse[symbol].update({
             "sentiment": sentiment,
             "score": round(score, 1),
             "trend": "BULLISH" if score > 55 else ("BEARISH" if score < 45 else "SIDEWAYS"),
             "volume": "HIGH" if total_oi_chg > 500000 else "NORMAL",
             "inst_activity": "ACTIVE" if abs(pe_oi_total - ce_oi_total) > 200000 else "QUIET"
-        }
+        })
         market_pulse["last_updated"] = datetime.now().strftime("%H:%M:%S")
     except: pass
 
