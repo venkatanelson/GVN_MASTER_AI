@@ -722,27 +722,27 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             if "type" in item: all_options.append(item)
             
         for strike_name in forced_strikes:
-            # Improved matching logic
             s_price = int(strike_name.split()[0])
-            s_type = strike_name.split()[1]
+            s_type = strike_name.split()[1].upper()
             
             strike_data = None
-            for item in records.get("data", []):
-                # Try CE/PE nested structure
-                if s_type in item and item[s_type].get("strikePrice") == s_price:
-                    strike_data = item[s_type]
-                    break
-                # Try flat structure
-                if item.get("strikePrice") == s_price and s_type in str(item.get("type", "")):
-                    strike_data = item
-                    break
-                if item.get("strike") == s_price and s_type in str(item.get("type", "")):
-                    strike_data = item
+            # Search in already flattened all_options for best match
+            for opt in all_options:
+                opt_strike = opt.get("strikePrice") or opt.get("strike")
+                opt_type = str(opt.get("type", "")).upper() or str(opt.get("optionType", "")).upper()
+                
+                if opt_strike == s_price and s_type in opt_type:
+                    strike_data = opt
                     break
             
-            # Fallback if specific search fails
             if not strike_data:
+                # Last resort fallback empty data
                 strike_data = {"lastPrice": 0, "changeinOpenInterest": 0, "totalTradedVolume": 0}
+            
+            lp = float(strike_data.get("lastPrice") or strike_data.get("ltp") or 0)
+            if lp > 0:
+                shared_data.update_market_data(strike_name, lp)
+                shared_data.forced_strike_data[strike_name] = lp
 
             # Custom Levels for these strikes
             custom_levels = {}
