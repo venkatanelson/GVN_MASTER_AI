@@ -481,6 +481,8 @@ def user_status():
 
     # 🧠 AI DEEP SCAN LOGIC (Option Chain Analysis)
     spot = shared_data.market_data.get(symbol, 0)
+    if spot == 0 and symbol == "NIFTY":
+        spot = shared_data.market_data.get("NIFTY 50", 0)
     theory_msg = "⌛ Wait for Signal: AI is scanning institutional order flow..."
     
     # Defaults
@@ -538,18 +540,14 @@ def user_status():
     running_pnl = 0
     if trade.get("active"):
         entry = trade.get("entry_price", 0)
-        qty = trade.get("qty", 65)
-        # Find current LTP for the trade symbol
-        current_ltp = 0
-        for sym_key, price in shared_data.market_data.items():
-            if sym_key in trade.get("symbol", ""):
-                current_ltp = price
-                break
+        qty = trade.get("qty", 50) # Standard GVN Lot Size
+        tsym = trade.get("symbol", "")
+        # 🎯 GVN FIX: Get exact LTP for the specific strike
+        current_ltp = shared_data.market_data.get(tsym, 0)
         
         if current_ltp > 0:
             pts = current_ltp - entry
-            # Reverse pts for PE if needed (currently CE focus, but let's be safe)
-            if "_PE" in trade.get("symbol", ""):
+            if "_PE" in tsym:
                 pts = entry - current_ltp
             running_pnl = round(pts * qty, 2)
 
