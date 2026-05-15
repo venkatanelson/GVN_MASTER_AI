@@ -884,6 +884,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         msg = f"📉 [BREAKDOWN] {symbol} crossed 9:15 Low ({benchmark['low']})! Bearish Bias."
                         if not benchmark.get("breakdown_alert"):
                             print(msg)
+                            try: shared_data.demo_logs.append(msg)
                             except: pass
                             benchmark["breakdown_alert"] = True
 
