@@ -49,7 +49,8 @@ class TrueDataWSConnector:
         try:
             from shared_data import td_api
             
-            indices_to_track = ["NIFTY", "SENSEX", "FINNIFTY", "MIDCPNIFTY", "CRUDEOIL"]
+            # 🚀 GVN FIX: Tracking NIFTY & SENSEX (20 symbols each = 40 total, safely under 50 limit)
+            indices_to_track = ["NIFTY", "SENSEX"]
             
             for symbol in indices_to_track:
                 try:
@@ -101,7 +102,9 @@ class TrueDataWSConnector:
         """Initializes a live option chain"""
         if self.td_obj:
             logger.info(f"📈 Initializing WebSocket Option Chain for {symbol} ({expiry_date.date()})")
-            chain = self.td_obj.start_option_chain(symbol, expiry_date, chain_length=20, bid_ask=True, greek=True)
+            # 🚀 GVN FIX: Changed chain_length to 10 (5 ITM + 5 OTM) to fit 20 symbols per index.
+            # Total 40 symbols (Nifty + Sensex) is well under the 50 symbol limit!
+            chain = self.td_obj.start_option_chain(symbol, expiry_date, chain_length=10, bid_ask=True, greek=True)
             self.chain_objects[symbol] = chain
             return chain
         return None
