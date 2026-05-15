@@ -766,7 +766,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     "sl": 199.0 - 12.0 # Fixed 12-point SL from Entry i6
                 }
                 ai_msg = "🚀 GVN i-LADDER: 199.0 -> 246.1 -> 293.3"
-            elif strike_name == "23700 CE":
             
             # Check if already added
             if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
