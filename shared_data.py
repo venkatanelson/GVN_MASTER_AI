@@ -12,11 +12,11 @@ _data_lock = threading.Lock()
 
 # Market Data LTP Storage
 market_data = {
-    "NIFTY": 24119.30,
-    "BANKNIFTY": 54878.50,
-    "FINNIFTY": 21400.10,
-    "SENSEX": 75453.04,
-    "CRUDEOIL": 6842.00
+    "NIFTY": 0.0,
+    "BANKNIFTY": 0.0,
+    "FINNIFTY": 0.0,
+    "SENSEX": 0.0,
+    "CRUDEOIL": 0.0
 }
 
 # Live TrueData Option Chain Storage
@@ -26,7 +26,7 @@ truedata_option_chains = {}
 demo_logs = []
 
 # Demo Trade State for P&L Simulation
-demo_trade = {"active": False, "symbol": None, "entry_price": 0, "target": 0, "sl": 0, "qty": 65}
+demo_trade = {"active": False, "symbol": None, "entry_price": 0, "target": 0, "sl": 0, "qty": 50}
 
 # Saving Memory to AI Engine (14 Strikes)
 gvn_alpha_grid = []

@@ -699,7 +699,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # 🌟 GVN MANUAL STRIKE INJECTION (Authorized for Today)
     if symbol == "NIFTY":
         # Force specific strikes based on user request
-        forced_strikes = ["23550 CE", "23800 PE", "23600 CE", "23650 CE"]
+        # Force specific strikes based on user request (Authorized Tracks)
+        forced_strikes = ["23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE"]
         
         # Also include the locked morning strikes if any
         if symbol in shared_data.daily_authorized_strikes:
@@ -729,24 +730,26 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             ai_msg = "🎯 SCANNING"
             
             if strike_name == "23550 CE":
-                custom_levels = {
-                    "i0": 547.0, "i1": 433.0, "i2": 364.0, "i3": 307.0, 
-                    "i5": 251.0, "i6": 173.0, "i7": 67.0, "sl": 67.0
-                }
+                custom_levels = {"i0": 547.0, "i1": 433.0, "i2": 364.0, "i3": 307.0, "i5": 251.0, "i6": 173.0, "i7": 67.0, "sl": 67.0}
                 ai_msg = "🎯 LADDER: 251 -> 307 -> 364"
+            elif strike_name == "23700 CE":
+                # 🚀 GVN OFFICIAL: 23700 CE Levels (Extracted from Pine Script PRO v2 Formula)
+                # BaseH: 222.10, BaseL: 167.15 -> N1: 249.575, N2: 194.625
+                # gvn0: 45.93, gvn100: 392.33
+                custom_levels = {
+                    "i1": 392.35, "i2": 310.25, "i3": 260.00, 
+                    "i5": 219.15, "i6": 178.25, "i7": 122.15, "i0": 45.95,
+                    "sl": 207.15 # entry - 12
+                }
+                ai_msg = "🚀 GVN PRO v2 LADDER: 219 -> 260 -> 310"
             elif strike_name == "23600 CE":
                 custom_levels = {"entry": 231.0, "target": 297.0, "sl": 208.0}
                 ai_msg = "🎯 TARGET 297"
             elif strike_name == "23650 CE":
                 # 🎯 DOT-TO-DOT ACCURACY (User Specific)
                 custom_levels = {
-                    "level_0": 425.03,
-                    "level_236": 336.56,
-                    "level_382": 282.44,
-                    "level_05": 238.40,
-                    "purple": 194.35,
-                    "gvn_7": 133.88,
-                    "gvn_1": 51.76
+                    "level_0": 425.03, "level_236": 336.56, "level_382": 282.44, 
+                    "level_05": 238.40, "purple": 194.35, "gvn_7": 133.88, "gvn_1": 51.76
                 }
                 ai_msg = "🚀 INCH-TO-INCH LADDER: 238 -> 282 -> 336"
             elif strike_name == "23800 PE":
