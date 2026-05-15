@@ -21,6 +21,7 @@ try:
     from gvn_ai_delta60_engine import GVNAiDelta60Engine
     from nse_option_chain import start_nse_worker
     from truedata_ws_connector import start_truedata_ws_engine
+    from truedata_connector import start_truedata_engine
 except ImportError as e:
     print(f"⚠️ Warning: Some engines could not be imported: {e}")
 
@@ -148,10 +149,12 @@ class GVNMasterOrchestrator:
         start_nse_worker()
         logger.info("🔥 NSE Option Chain Worker started.")
 
-        # 🚀 START TRUEDATA HIGH-SPEED WS ENGINE
+        # 🚀 START TRUEDATA HIGH-SPEED WS & REST ENGINES
         try:
             start_truedata_ws_engine()
             logger.info("✅ TrueData High-Speed WS Engine Started")
+            start_truedata_engine()
+            logger.info("✅ TrueData REST Spot Engine Started")
         except Exception as e:
             logger.warning(f"⚠️ TrueData Start Failed: {e}")
 
