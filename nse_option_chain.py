@@ -733,8 +733,17 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 custom_levels = {"entry": 231.0, "target": 297.0, "sl": 208.0}
                 ai_msg = "🎯 TARGET 297"
             elif strike_name == "23650 CE":
-                custom_levels = {"entry": 208.0, "target": 249.0, "sl": 187.0}
-                ai_msg = "🎯 TARGET 249"
+                # 🎯 DOT-TO-DOT ACCURACY (User Specific)
+                custom_levels = {
+                    "level_0": 425.03,
+                    "level_236": 336.56,
+                    "level_382": 282.44,
+                    "level_05": 238.40,
+                    "purple": 194.35,
+                    "gvn_7": 133.88,
+                    "gvn_1": 51.76
+                }
+                ai_msg = "🚀 INCH-TO-INCH LADDER: 238 -> 282 -> 336"
             elif strike_name == "23800 PE":
                 custom_levels = {"i7": 134.25, "i6": 198.99, "i5": 246.0, "i3": 293.0}
                 ai_msg = "🎯 LADDER: 199 -> 246 -> 293"
