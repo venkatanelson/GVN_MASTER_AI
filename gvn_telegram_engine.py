@@ -78,7 +78,7 @@ class AlertTemplates:
     """Pre-formatted alert messages"""
     
     @staticmethod
-    def entry_alert(symbol, entry_price, target, sl):
+    def entry_alert(symbol, entry_price, target, sl, level="NORMAL"):
         """Entry signal alert matching user screenshot format"""
         try: entry_price = round(float(entry_price), 2)
         except: pass
@@ -91,6 +91,7 @@ class AlertTemplates:
 🚀 GVN MASTER ALGO - NEW ENTRY 🚀
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 <b>Symbol:</b> {symbol}
+⚡ <b>Level Triggered:</b> {level}
 💸 <b>Entry Price:</b> ₹{entry_price}
 ✅ <b>Target:</b> ₹{target}
 ⛔ <b>Stop Loss:</b> ₹{sl}
@@ -209,7 +210,8 @@ class TelegramAlertManager:
             symbol=trade_info.get("symbol"),
             entry_price=trade_info.get("entry_price"),
             target=trade_info.get("target"),
-            sl=trade_info.get("sl")
+            sl=trade_info.get("sl"),
+            level=trade_info.get("level", "NORMAL")
         )
         
         self.bot.send_message(msg)

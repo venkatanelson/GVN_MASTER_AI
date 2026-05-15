@@ -884,115 +884,86 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         msg = f"📉 [BREAKDOWN] {symbol} crossed 9:15 Low ({benchmark['low']})! Bearish Bias."
                         if not benchmark.get("breakdown_alert"):
                             print(msg)
-                            try: shared_data.demo_logs.append(msg)
                             except: pass
                             benchmark["breakdown_alert"] = True
 
-                # ---- DEMO P&L TRACKER (WITH TRAILING SL) ----
+                # 🛡️ GVN AUTHORIZED LADDER ENGINE (High Priority)
+                strike_name_full = f"{int(strike)} {opt_type}"
+                authorized_data = next((x for x in gvn_scanner_data.get(symbol, []) if x['strike'] == strike_name_full and x['zone'] == "🚀 AUTHORIZED TRACK"), None)
                 full_sym = f"{symbol}_{strike}_{opt_type}"
-                if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
-                    entry = shared_data.demo_trade["entry_price"]
-                    tgt = shared_data.demo_trade["target"]
-                    sl = shared_data.demo_trade["sl"]
-                    qty = shared_data.demo_trade["qty"]
+                
+                if authorized_data:
+                    levels = authorized_data.get("levels", {})
+                    sorted_lvls = sorted([v for k, v in levels.items() if isinstance(v, (int, float))])
                     
-                    # Track Highest LTP for Trailing Stoploss
-                    highest_ltp = shared_data.demo_trade.get("highest_ltp", entry)
-                    if ltp > highest_ltp:
-                        shared_data.demo_trade["highest_ltp"] = ltp
-                        # Trail the SL by maintaining the initial 10% gap from the new high
-                        new_sl = round(ltp * 0.90, 2)
-                        if new_sl > sl:
-                            shared_data.demo_trade["sl"] = new_sl
-                            sl = new_sl  # Update local var for this loop
-                            msg = f"🔄 [TSL UPDATED] {full_sym} Trailing Stoploss moved to ₹{sl}"
-                            print(msg)
-                            try: shared_data.demo_logs.append(msg)
-                            except: pass
+                    # 1. P&L Tracker for Active Trade
+                    if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
+                        tgt = shared_data.demo_trade["target"]
+                        sl = shared_data.demo_trade["sl"]
+                        if ltp >= tgt:
+                            shared_data.demo_trade["active"] = False
+                        elif ltp <= sl:
+                            shared_data.demo_trade["active"] = False
 
-                    pts = round(ltp - entry, 2)
-                    pnl = round(pts * qty, 2)
-                    pnl_str = f"{pts} pts * {qty} = ₹{pnl}"
-                    
-                    # 🕒 GVN SPECIAL: 3:15 PM AUTO-SQUARE-OFF LOGIC
-                    curr_time = data.get("timestamp", datetime.now())
-                    if curr_time.hour == 15 and curr_time.minute >= 15:
-                        msg = f"🏁 [3:15 PM SQUARE-OFF] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: {pnl_str} 🕒"
-                        print(msg)
-                        try: 
-                            shared_data.demo_logs.append(msg)
-                            from gvn_telegram_engine import TelegramAlertManager
-                            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-                            chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-                            if bot_token and chat_id:
-                                tg = TelegramAlertManager(bot_token, chat_id)
-                                tg.send_message(f"🔴 <b>3:15 PM AUTO-SQUARE-OFF</b>\n━━━━━━━━━━━━━━━\n🎯 Symbol: {full_sym}\n💸 Exit Price: ₹{ltp}\n💰 Final P&L: {pnl_str}\n━━━━━━━━━━━━━━━\n⚡ System closing all trades.")
-                        except: pass
-                        shared_data.demo_trade["active"] = False
-                        return # Stop processing this strike
-                    
-                    if ltp >= tgt:
-                        msg = f"✅ [PROFIT HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: +{pnl_str} 🎯"
-                        print(msg)
-                        try: shared_data.demo_logs.append(msg)
-                        except: pass
-                        shared_data.demo_trade["active"] = False
-                    elif ltp <= sl:
-                        msg = f"❌ [TSL / LOSS HIT] {full_sym} | Entry: {entry} | Exit: {ltp} | P&L: {pnl_str} ⚠️"
-                        print(msg)
-                        try: shared_data.demo_logs.append(msg)
-                        except: pass
-                        shared_data.demo_trade["active"] = False
-                    else:
-                        # Randomly log running P&L so terminal looks alive
-                        if random.randint(1, 15) == 1:
-                            run_msg = f"⏳ [RUNNING] {full_sym} | LTP: {ltp} | TSL: {sl} | P&L: {pnl_str}"
-                            try: shared_data.demo_logs.append(run_msg)
+                    # 2. Level-to-Level Signal Trigger
+                    if not shared_data.demo_trade.get("active"):
+                        lower_lvl = None
+                        upper_lvl = None
+                        for i in range(len(sorted_lvls)):
+                            if ltp >= sorted_lvls[i]:
+                                lower_lvl = sorted_lvls[i]
+                                if i + 1 < len(sorted_lvls):
+                                    upper_lvl = sorted_lvls[i+1]
+                        
+                        # Trigger if price is within 1.5 points of a level (Dot-to-Dot)
+                        if lower_lvl and (abs(ltp - lower_lvl) < 1.5):
+                            manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
+                            manual_sl = sorted_lvls[sorted_lvls.index(lower_lvl) - 1] if sorted_lvls.index(lower_lvl) > 0 else (ltp * 0.95)
+                            
+                            shared_data.demo_trade = {
+                                "active": True,
+                                "symbol": full_sym,
+                                "entry_price": ltp,
+                                "target": manual_tgt,
+                                "sl": manual_sl,
+                                "qty": 50 if symbol == "NIFTY" else 15
+                            }
+                            
+                            try:
+                                from gvn_telegram_engine import TelegramAlertManager
+                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                
+                                # Find which level name was triggered
+                                lvl_name = "Manual"
+                                for k, v in levels.items():
+                                    if abs(ltp - v) < 2.0:
+                                        lvl_name = k
+                                        break
+                                
+                                tg.alert_entry({
+                                    "symbol": full_sym, 
+                                    "entry_price": ltp, 
+                                    "target": manual_tgt, 
+                                    "sl": manual_sl,
+                                    "level": lvl_name.upper()
+                                })
                             except: pass
-
-                # Simulated Signal Logic for Playback/Demo
-                if score >= 85 and not shared_data.demo_trade.get("active"):
-                    msg = f"🔥 [SIGNAL] BUY {full_sym} - Score: {score} | LTP: ₹{ltp}"
-                    print(msg)
-                    try:
-                        if len(shared_data.demo_logs) > 50: shared_data.demo_logs.pop(0)
-                        shared_data.demo_logs.append(msg)
-                    except: pass
-                    
-                    # Activate Demo Trade
-                    qty_val = 50 if symbol == "NIFTY" else (15 if symbol == "BANKNIFTY" else (10 if symbol == "SENSEX" else 25))
+                
+                # ---- DEFAULT MOMENTUM LOGIC (For Non-Authorized Strikes) ----
+                elif score >= 90 and not shared_data.demo_trade.get("active"):
                     shared_data.demo_trade = {
                         "active": True,
                         "symbol": full_sym,
                         "entry_price": ltp,
-                        "target": round(ltp * 1.2, 2), # 20% Target
-                        "sl": round(ltp * 0.9, 2),    # 10% SL
-                        "qty": qty_val
+                        "target": round(ltp * 1.2, 2),
+                        "sl": round(ltp * 0.9, 2),
+                        "qty": 50 if symbol == "NIFTY" else 15
                     }
-                    
-                    # 🚀 SEND TELEGRAM ALERT
                     try:
-                        import os
                         from gvn_telegram_engine import TelegramAlertManager
-                        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-                        chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-                        if bot_token and chat_id:
-                            tg = TelegramAlertManager(bot_token, chat_id)
-                            tg.alert_entry({
-                                "symbol": full_sym,
-                                "entry_price": ltp,
-                                "target": shared_data.demo_trade["target"],
-                                "sl": shared_data.demo_trade["sl"]
-                            })
-                            tg_msg = f"📱 [TELEGRAM] Alert sent for {full_sym}!"
-                            print(tg_msg)
-                            try: shared_data.demo_logs.append(tg_msg)
-                            except: pass
-                    except Exception as e:
-                        err_msg = f"⚠️ Telegram Alert Failed: {e}"
-                        print(err_msg)
-                        try: shared_data.demo_logs.append(err_msg)
-                        except: pass
+                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                        tg.alert_entry({"symbol": full_sym, "entry_price": ltp, "target": shared_data.demo_trade["target"], "sl": shared_data.demo_trade["sl"]})
+                    except: pass
 
                 # 🌟 GVN SPECIAL: Calculate Levels based on 9:15 Benchmark
                 # We now distinguish between INDEX levels and STRIKE levels
