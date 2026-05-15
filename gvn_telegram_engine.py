@@ -206,6 +206,15 @@ class TelegramAlertManager:
         if not self.should_send_alert("ENTRY", trade_info.get("symbol")):
             return
         
+        # 🚀 GVN TRANSPARENCY: Print full details to console
+        print(f"\n📢 [GVN SIGNAL DETECTED]")
+        print(f"🎯 Symbol: {trade_info.get('symbol')}")
+        print(f"⚡ Level:  {trade_info.get('level', 'NORMAL')}")
+        print(f"💸 Entry:  ₹{trade_info.get('entry_price')}")
+        print(f"✅ Target: ₹{trade_info.get('target')}")
+        print(f"⛔ SL:     ₹{trade_info.get('sl')}")
+        print(f"━━━━━━━━━━━━━━━━━━━━━\n")
+
         msg = AlertTemplates.entry_alert(
             symbol=trade_info.get("symbol"),
             entry_price=trade_info.get("entry_price"),
@@ -214,7 +223,10 @@ class TelegramAlertManager:
             level=trade_info.get("level", "NORMAL")
         )
         
-        self.bot.send_message(msg)
+        success = self.bot.send_message(msg)
+        if not success:
+            print(f"⚠️ [TELEGRAM ERROR] Failed to send entry alert for {trade_info.get('symbol')}")
+        
         self.alert_history.append({"type": "ENTRY", "data": trade_info, "time": datetime.now()})
     
     def alert_exit(self, trade_info):
