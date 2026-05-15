@@ -34,8 +34,9 @@ class TrueDataRestConnector:
                     if res and isinstance(res, dict):
                         ltp = res.get('lastTradedPrice') or res.get('ltp')
                         if ltp:
-                            shared_data.update_market_data(sym, float(ltp))
-                            # logger.debug(f"TrueData {sym} LTP: {ltp}")
+                            shared_data.update_market_data(sym.upper(), float(ltp))
+                            # 🚀 GVN SYNC: Force uppercase and update global pulse
+                            shared_data.market_data[sym.upper()] = float(ltp)
                 
                 # High frequency polling (100ms)
                 time.sleep(0.1)

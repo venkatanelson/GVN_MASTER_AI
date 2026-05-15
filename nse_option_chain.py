@@ -936,7 +936,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 "entry_price": ltp,
                                 "target": manual_tgt,
                                 "sl": manual_sl,
-                                "qty": 65 if symbol == "NIFTY" else 15 # 65 Multiplier as requested
+                                "qty": 50 if symbol == "NIFTY" else 15 # Back to 50 standard
                             }
                             
                             try:
