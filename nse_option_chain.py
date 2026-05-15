@@ -717,9 +717,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         # Determine current chain for searching
         all_options = []
         for item in records.get("data", []):
-            if "CE" in item: all_options.append(item["CE"])
-            if "PE" in item: all_options.append(item["PE"])
-            if "type" in item: all_options.append(item)
+            if "CE" in item:
+                item["CE"]["type"] = "CE"
+                all_options.append(item["CE"])
+            if "PE" in item:
+                item["PE"]["type"] = "PE"
+                all_options.append(item["PE"])
+            if "type" in item:
+                all_options.append(item)
             
         for strike_name in forced_strikes:
             s_price = int(strike_name.split()[0])
