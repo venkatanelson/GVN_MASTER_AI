@@ -534,14 +534,34 @@ def user_status():
                 theory_msg = log
                 break
 
+    # Calculate Running P&L
+    running_pnl = 0
+    if trade.get("active"):
+        entry = trade.get("entry_price", 0)
+        qty = trade.get("qty", 65)
+        # Find current LTP for the trade symbol
+        current_ltp = 0
+        for sym_key, price in shared_data.market_data.items():
+            if sym_key in trade.get("symbol", ""):
+                current_ltp = price
+                break
+        
+        if current_ltp > 0:
+            pts = current_ltp - entry
+            # Reverse pts for PE if needed (currently CE focus, but let's be safe)
+            if "_PE" in trade.get("symbol", ""):
+                pts = entry - current_ltp
+            running_pnl = round(pts * qty, 2)
+
     return jsonify({
         "spot": spot,
         "state": state,
         "trade_symbol": trade.get("symbol", "--"),
         "trade_entry": trade.get("entry_price", 0),
         "trade_target": trade.get("target", 0),
+        "trade_sl": trade.get("sl", 0),
         "theory": theory_msg,
-        "last_pnl": 0,
+        "last_pnl": running_pnl,
         "support": support,
         "resistance": resistance,
         "expected_move": expected_move,

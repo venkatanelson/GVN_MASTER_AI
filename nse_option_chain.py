@@ -661,7 +661,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         return
     
     records = data["records"]
-    underlying_value = records.get("underlyingValue", 0)
+    # 🚀 GVN FIX: Always prioritize WebSocket Spot (market_data) for perfect sync
+    underlying_value = shared_data.market_data.get(symbol, records.get("underlyingValue", 0))
+    if underlying_value == 0: underlying_value = records.get("underlyingValue", 0)
     
     # 🌟 GVN SPECIAL: Extract Nearest Expiry
     expiry_list = data.get("records", {}).get("expiryDates", [])
@@ -922,7 +924,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         # Trigger if price is within 1.5 points of a level (Dot-to-Dot)
                         if lower_lvl and (abs(ltp - lower_lvl) < 1.5):
                             manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
-                            manual_sl = sorted_lvls[sorted_lvls.index(lower_lvl) - 1] if sorted_lvls.index(lower_lvl) > 0 else (ltp * 0.95)
+                            # 🚀 GVN FIX: 12-Point Stop Loss
+                            manual_sl = ltp - 12.0 
                             
                             shared_data.demo_trade = {
                                 "active": True,
@@ -930,7 +933,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 "entry_price": ltp,
                                 "target": manual_tgt,
                                 "sl": manual_sl,
-                                "qty": 50 if symbol == "NIFTY" else 15
+                                "qty": 65 if symbol == "NIFTY" else 15 # 65 Multiplier as requested
                             }
                             
                             try:

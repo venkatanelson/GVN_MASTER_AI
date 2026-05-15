@@ -541,7 +541,6 @@
                             <h4 style="margin: 0 0 10px 0; color: var(--secondary); font-size: 14px; font-weight: 800;">ACTIVE POSITION</h4>
                             <div id="active-trade-box" style="background: rgba(0,0,0,0.4); padding: 18px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
                                 <span id="active-trade-symbol" style="font-size: 18px; font-weight: 900; color: #fff; display: block; margin-bottom: 12px;">-- NO ACTIVE TRADE --</span>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                     <div>
                                         <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">ENTRY PRICE</small>
                                         <div id="active-trade-entry" style="font-size: 18px; font-weight: 800; color: var(--warning);">₹ 0.00</div>
@@ -549,6 +548,16 @@
                                     <div>
                                         <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">TARGET</small>
                                         <div id="active-trade-target" style="font-size: 18px; font-weight: 800; color: #10b981;">₹ 0.00</div>
+                                    </div>
+                                    <div style="grid-column: span 2; margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">STOP LOSS</small>
+                                            <div id="active-trade-sl" style="font-size: 16px; font-weight: 800; color: var(--danger);">₹ 0.00</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <small style="color: var(--text-dim); font-size: 10px; font-weight: 700;">RUNNING P&L</small>
+                                            <div id="active-trade-pnl" style="font-size: 20px; font-weight: 900; color: #fff;">₹ 0.00</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -696,12 +705,19 @@
                     tradeSym.style.color = 'var(--secondary)';
                     tradeEntry.innerText = '₹ ' + d.trade_entry;
                     tradeTarget.innerText = '₹ ' + d.trade_target;
+                    document.getElementById('active-trade-sl').innerText = '₹ ' + (d.trade_sl || '0.00');
+                    const pnlEl = document.getElementById('active-trade-pnl');
+                    pnlEl.innerText = (d.last_pnl >= 0 ? '+₹ ' : '-₹ ') + Math.abs(d.last_pnl);
+                    pnlEl.className = d.last_pnl >= 0 ? 'profit' : 'loss';
                 } else {
                     tradeBox.style.borderColor = 'rgba(255,255,255,0.1)';
                     tradeSym.innerText = '-- NO ACTIVE TRADE --';
                     tradeSym.style.color = 'var(--text-dim)';
                     tradeEntry.innerText = '₹ 0.00';
                     tradeTarget.innerText = '₹ 0.00';
+                    document.getElementById('active-trade-sl').innerText = '₹ 0.00';
+                    document.getElementById('active-trade-pnl').innerText = '₹ 0.00';
+                    document.getElementById('active-trade-pnl').className = '';
                 }
                 
                 // Update Theory Text
