@@ -727,8 +727,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             ai_msg = "🎯 SCANNING"
             
             if strike_name == "23550 CE":
-                custom_levels = {"i5": 307.0, "i3": 364.0, "i2": 433.0, "i1": 547.0}
-                ai_msg = "🎯 LADDER: 307 -> 364 -> 433"
+                custom_levels = {
+                    "i0": 547.0, "i1": 433.0, "i2": 364.0, "i3": 307.0, 
+                    "i5": 251.0, "i6": 173.0, "i7": 67.0, "sl": 67.0
+                }
+                ai_msg = "🎯 LADDER: 251 -> 307 -> 364"
             elif strike_name == "23600 CE":
                 custom_levels = {"entry": 231.0, "target": 297.0, "sl": 208.0}
                 ai_msg = "🎯 TARGET 297"
