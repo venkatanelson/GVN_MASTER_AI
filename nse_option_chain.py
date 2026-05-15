@@ -748,24 +748,32 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             custom_levels = {}
             ai_msg = "🎯 SCANNING"
             
+            # 🚀 GVN ADMIN OVERRIDE: Dynamically calculate Pine Script levels from given High/Low
             if strike_name == "23550 CE":
-                # 🚀 GVN OFFICIAL: 23550 CE (High: 316.4, Low: 253.15)
-                # i1: 547.1, i0: 67.2, i5: 307.15, i6: 250.5, i3: 363.8
+                # Admin provided High/Low
+                admin_high = 316.4
+                admin_low = 253.15
+                calc_levels = calculate_gvn_levels(admin_high, admin_low)
+                
                 custom_levels = {
-                    "i1": 547.1, "i2": 433.4, "i3": 363.8, 
-                    "i5": 307.15, "i6": 250.5, "i7": 172.8, "i0": 67.2,
-                    "sl": 250.5 - 12.0 # Fixed 12-point SL from Entry i6
+                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
+                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
+                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
                 }
-                ai_msg = "🚀 GVN i-LADDER: 250.5 -> 307.1 -> 363.8"
+                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
+                
             elif strike_name == "23800 PE":
-                # 🚀 GVN OFFICIAL: 23800 PE (High: 240.0, Low: 152.6)
-                # i1: 446.0, i0: 46.3, i5: 246.15, i6: 199.0, i3: 293.3
+                # Admin provided High/Low
+                admin_high = 240.0
+                admin_low = 152.6
+                calc_levels = calculate_gvn_levels(admin_high, admin_low)
+                
                 custom_levels = {
-                    "i1": 446.0, "i2": 351.3, "i3": 293.3, 
-                    "i5": 246.15, "i6": 199.0, "i7": 134.3, "i0": 46.3,
-                    "sl": 199.0 - 12.0 # Fixed 12-point SL from Entry i6
+                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
+                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
+                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
                 }
-                ai_msg = "🚀 GVN i-LADDER: 199.0 -> 246.1 -> 293.3"
+                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
             
             # Check if already added
             if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
