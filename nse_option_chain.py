@@ -684,29 +684,77 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # Reset scanner data for this symbol
     gvn_scanner_data[symbol] = []
     
-    # 🌟 GVN MANUAL STRIKE INJECTION (User Levels)
+    # 🛡️ GVN AUTHORIZED DAILY TRACKS (STRIKE LOCK)
+    current_time = datetime.now().time()
+    from datetime import time as dt_time
+    market_open = dt_time(9, 15)
+    market_lock_end = dt_time(9, 20)
+    
+    # Initialize daily authorized strikes if not present in shared_data
+    if not hasattr(shared_data, 'daily_authorized_strikes'):
+        shared_data.daily_authorized_strikes = {}
+
+    # 🌟 GVN MANUAL STRIKE INJECTION (Authorized for Today)
     if symbol == "NIFTY":
-        target_strikes = [
-            {"strike": "23550 CE", "ltp": 354.8, "levels": {"i5": 307.0, "i3": 364.0, "i2": 433.0}, "ai": "🎯 TARGET i3 (364)"},
-            {"strike": "23800 PE", "ltp": 160.0, "levels": {"i7": 134.25, "i6": 198.99, "i5": 232.53, "i3": 276.79}, "ai": "🎯 TARGET i6 (199)"},
-            {"strike": "24100 PE", "ltp": 171.8, "levels": {"Level_7": 99.84, "Level_5": 187.49, "Level_1": 30.0}, "ai": "🎯 TARGET i5 (187.4)"}
-        ]
+        # Force specific strikes based on user request
+        forced_strikes = ["23550 CE", "23800 PE", "23600 CE", "23650 CE"]
         
-        for ts in target_strikes:
-            gvn_scanner_data[symbol].append({
-                "strike": ts["strike"],
-                "ltp": ts["ltp"],
-                "delta": 0.65,
-                "oi_change": 0,
-                "volume": 0,
-                "score": 85,
-                "zone": "🚀 MANUAL TRACKING",
-                "pressure": "🟢 LEVEL READY",
-                "ai_signal": ts["ai"],
-                "i_level": "MANUAL",
-                "potential": "HIGH",
-                "levels": ts["levels"]
-            })
+        # Also include the locked morning strikes if any
+        if symbol in shared_data.daily_authorized_strikes:
+            ls = shared_data.daily_authorized_strikes[symbol]
+            if ls.get("ce"): forced_strikes.append(ls["ce"])
+            if ls.get("pe"): forced_strikes.append(ls["pe"])
+            
+        forced_strikes = list(set(forced_strikes)) # Remove duplicates
+        
+        # Determine current chain for searching
+        all_options = []
+        for item in records.get("data", []):
+            if "CE" in item: all_options.append(item["CE"])
+            if "PE" in item: all_options.append(item["PE"])
+            if "type" in item: all_options.append(item)
+            
+        for strike_name in forced_strikes:
+            # Find data for this strike in the chain
+            strike_data = next((x for x in all_options if (x.get('strikePrice') == int(strike_name.split()[0]) or x.get('strike') == int(strike_name.split()[0])) and strike_name.split()[1] in str(x)), None)
+            
+            # Fallback if specific search fails
+            if not strike_data:
+                strike_data = {"lastPrice": 0, "changeinOpenInterest": 0, "totalTradedVolume": 0}
+
+            # Custom Levels for these strikes
+            custom_levels = {}
+            ai_msg = "🎯 SCANNING"
+            
+            if strike_name == "23550 CE":
+                custom_levels = {"i5": 307.0, "i3": 364.0, "i2": 433.0, "i1": 547.0}
+                ai_msg = "🎯 LADDER: 307 -> 364 -> 433"
+            elif strike_name == "23600 CE":
+                custom_levels = {"entry": 231.0, "target": 297.0, "sl": 208.0}
+                ai_msg = "🎯 TARGET 297"
+            elif strike_name == "23650 CE":
+                custom_levels = {"entry": 208.0, "target": 249.0, "sl": 187.0}
+                ai_msg = "🎯 TARGET 249"
+            elif strike_name == "23800 PE":
+                custom_levels = {"i7": 134.25, "i6": 198.99, "i5": 246.0, "i3": 293.0}
+                ai_msg = "🎯 LADDER: 199 -> 246 -> 293"
+            
+            # Check if already added
+            if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
+                gvn_scanner_data[symbol].append({
+                    "strike": strike_name,
+                    "ltp": strike_data.get('lastPrice') or strike_data.get('ltp') or 0,
+                    "delta": 0.65,
+                    "oi_change": strike_data.get('changeinOpenInterest') or 0,
+                    "volume": strike_data.get('totalTradedVolume') or 0,
+                    "score": 95, 
+                    "zone": "🚀 AUTHORIZED TRACK",
+                    "pressure": "🟢 LEVEL READY",
+                    "ai_signal": ai_msg,
+                    "i_level": "MANUAL",
+                    "potential": "HIGH",
+                    "levels": custom_levels
+                })
     closest_ce_diff = 1.0
     closest_pe_diff = 1.0
 
