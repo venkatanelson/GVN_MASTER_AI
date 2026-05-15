@@ -15,7 +15,7 @@ class TrueDataRestConnector:
     """
     def __init__(self, token=None):
         self.api = TrueDataRestAPI(token)
-        self.symbols = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]
+        self.symbols = ["NIFTY", "NIFTY 50", "BANKNIFTY", "FINNIFTY", "SENSEX"]
         self.is_running = False
 
     def start(self):

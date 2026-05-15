@@ -662,8 +662,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     
     records = data["records"]
     # 🚀 GVN FIX: Always prioritize WebSocket Spot (market_data) for perfect sync
-    underlying_value = shared_data.market_data.get(symbol, records.get("underlyingValue", 0))
-    if underlying_value == 0: underlying_value = records.get("underlyingValue", 0)
+    underlying_value = shared_data.market_data.get(symbol, 0)
+    if underlying_value == 0: 
+        underlying_value = records.get("underlyingValue", 0)
+        # Update shared memory so dashboard sees it
+        if underlying_value > 0:
+            shared_data.update_market_data(symbol.upper(), underlying_value)
+            shared_data.market_data[symbol.upper()] = underlying_value
     
     # 🌟 GVN SPECIAL: Extract Nearest Expiry
     expiry_list = data.get("records", {}).get("expiryDates", [])
