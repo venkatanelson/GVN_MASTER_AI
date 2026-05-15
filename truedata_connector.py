@@ -33,10 +33,13 @@ class TrueDataRestConnector:
                     res = self.api.get_ltp_spot(sym)
                     if res and isinstance(res, dict):
                         ltp = res.get('lastTradedPrice') or res.get('ltp')
-                        if ltp:
-                            shared_data.update_market_data(sym.upper(), float(ltp))
-                            # 🚀 GVN SYNC: Force uppercase and update global pulse
-                            shared_data.market_data[sym.upper()] = float(ltp)
+                        if ltp and float(ltp) > 0:
+                            s_key = sym.upper()
+                            # 🚀 GVN SYNC: Map NIFTY 50 to NIFTY for UI compatibility
+                            if s_key == "NIFTY 50": s_key = "NIFTY"
+                            
+                            shared_data.update_market_data(s_key, float(ltp))
+                            shared_data.market_data[s_key] = float(ltp)
                 
                 # High frequency polling (100ms)
                 time.sleep(0.1)

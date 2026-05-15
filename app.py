@@ -757,10 +757,15 @@ def get_demo_logs():
 @app.route('/api/gvn-scanner')
 def get_gvn_scanner():
     """Consolidated high-speed scanner data for the GVN Master Dashboard"""
+    # 🚀 GVN SYNC: Fallback to NIFTY 50 if NIFTY is 0
+    n_spot = shared_data.market_data.get("NIFTY", 0)
+    if n_spot == 0:
+        n_spot = shared_data.market_data.get("NIFTY 50", 0)
+        
     return jsonify({
         "status": "success",
         "last_updated": datetime.now().strftime("%H:%M:%S"),
-        "nifty_spot": shared_data.market_data.get("NIFTY", 0),
+        "nifty_spot": n_spot,
         "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', []),
         "market_pulse": getattr(shared_data, 'market_pulse', {}),
         "scanner_data": getattr(shared_data, 'gvn_scanner_data', {}),
