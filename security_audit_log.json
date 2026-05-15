@@ -1,13 +1,6 @@
 [
   {
-    "timestamp": "2026-05-15T14:36:24.223940",
-    "event_type": "INTEGRITY_RESET",
-    "ip": "ADMIN",
-    "path": "SYSTEM",
-    "description": "Authorized hash update performed"
-  },
-  {
-    "timestamp": "2026-05-15T14:36:26.818022",
+    "timestamp": "2026-05-15T14:58:46.346795",
     "event_type": "INTEGRITY_RESET",
     "ip": "ADMIN",
     "path": "SYSTEM",
