@@ -87,6 +87,7 @@
         </div>
         
         <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: center;">
+            <a href="/admin/authorize-update" class="btn" style="background: #1a73e8; padding: 10px 20px; font-weight: bold;" onclick="return confirm('🛡️ Authorize recent code changes and stop security alerts?');">🛡️ AUTHORIZE CODE UPDATE</a>
             <a href="/admin/toggle-attack-mode" class="btn {{ 'btn-approve' if config.attack_mode else 'btn-stop' }}" style="padding: 10px 20px; font-weight: bold;">
                 {{ '🛑 DEACTIVATE FEVER MODE' if config.attack_mode else '🔥 ACTIVATE ATTACK MODE (FEVER)' }}
             </a>

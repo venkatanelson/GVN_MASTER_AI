@@ -645,34 +645,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 symbol_data["captured"] = True
                                 logger.info(f"✅ [BENCHMARK CAPTURED] {symbol}: High={symbol_data['high']}, Low={symbol_data['low']}")
             except: pass
-    if symbol == "NIFTY":
-        # Check if already in scanner
-        if not any("24100 PE" in x["strike"] for x in gvn_scanner_data[symbol]):
-            # Add it with User's specific levels from audio
-            target_ltp = 171.80 # Updated from User's latest table
-            user_levels = {
-                "Level_1": 30.0,
-                "Level_7": 99.84,
-                "Level_6": 150.55,
-                "Level_5": 187.49,
-                "Level_3": 224.42,
-                "Level_0": 269.81
-            }
-            gvn_scanner_data[symbol].append({
-                "strike": "24100 PE",
-                "ltp": target_ltp,
-                "delta": 0.70,
-                "oi_change": -26423,
-                "volume": 2822594,
-                "score": 92, # Slightly down due to consolidation
-                "zone": "🚀 MOMENTUM RALLY (i6 Cross)",
-                "pressure": "🟢 CONSOLIDATION / HOLD",
-                "ai_signal": "🎯 TARGET i5 (187.4)",
-                "i_level": "i6 (150.5) Support",
-                "potential": "MAXIMUM",
-                "levels": user_levels
-            })
-
     if not data or "records" not in data: 
         # Still update shared data if we have the forced strike
         if gvn_scanner_data[symbol]:
@@ -712,8 +684,29 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # Reset scanner data for this symbol
     gvn_scanner_data[symbol] = []
     
-    best_ce_60 = None
-    best_pe_60 = None
+    # 🌟 GVN MANUAL STRIKE INJECTION (User Levels)
+    if symbol == "NIFTY":
+        target_strikes = [
+            {"strike": "23550 CE", "ltp": 354.8, "levels": {"i5": 307.0, "i3": 364.0, "i2": 433.0}, "ai": "🎯 TARGET i3 (364)"},
+            {"strike": "23800 PE", "ltp": 160.0, "levels": {"i7": 134.25, "i6": 198.99, "i5": 232.53, "i3": 276.79}, "ai": "🎯 TARGET i6 (199)"},
+            {"strike": "24100 PE", "ltp": 171.8, "levels": {"Level_7": 99.84, "Level_5": 187.49, "Level_1": 30.0}, "ai": "🎯 TARGET i5 (187.4)"}
+        ]
+        
+        for ts in target_strikes:
+            gvn_scanner_data[symbol].append({
+                "strike": ts["strike"],
+                "ltp": ts["ltp"],
+                "delta": 0.65,
+                "oi_change": 0,
+                "volume": 0,
+                "score": 85,
+                "zone": "🚀 MANUAL TRACKING",
+                "pressure": "🟢 LEVEL READY",
+                "ai_signal": ts["ai"],
+                "i_level": "MANUAL",
+                "potential": "HIGH",
+                "levels": ts["levels"]
+            })
     closest_ce_diff = 1.0
     closest_pe_diff = 1.0
 
