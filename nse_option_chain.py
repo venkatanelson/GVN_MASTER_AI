@@ -749,31 +749,24 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             ai_msg = "🎯 SCANNING"
             
             if strike_name == "23550 CE":
-                custom_levels = {"i0": 547.0, "i1": 433.0, "i2": 364.0, "i3": 307.0, "i5": 251.0, "i6": 173.0, "i7": 67.0, "sl": 67.0}
-                ai_msg = "🎯 LADDER: 251 -> 307 -> 364"
-            elif strike_name == "23700 CE":
-                # 🚀 GVN OFFICIAL: 23700 CE Levels (Extracted from Pine Script PRO v2 Formula)
-                # BaseH: 222.10, BaseL: 167.15 -> N1: 249.575, N2: 194.625
-                # gvn0: 45.93, gvn100: 392.33
+                # 🚀 GVN OFFICIAL: 23550 CE (High: 316.4, Low: 253.15)
+                # i1: 547.1, i0: 67.2, i5: 307.15, i6: 250.5, i3: 363.8
                 custom_levels = {
-                    "i1": 392.35, "i2": 310.25, "i3": 260.00, 
-                    "i5": 219.15, "i6": 178.25, "i7": 122.15, "i0": 45.95,
-                    "sl": 207.15 # entry - 12
+                    "i1": 547.1, "i2": 433.4, "i3": 363.8, 
+                    "i5": 307.15, "i6": 250.5, "i7": 172.8, "i0": 67.2,
+                    "sl": 250.5 - 12.0 # Fixed 12-point SL from Entry i6
                 }
-                ai_msg = "🚀 GVN PRO v2 LADDER: 219 -> 260 -> 310"
-            elif strike_name == "23600 CE":
-                custom_levels = {"entry": 231.0, "target": 297.0, "sl": 208.0}
-                ai_msg = "🎯 TARGET 297"
-            elif strike_name == "23650 CE":
-                # 🎯 DOT-TO-DOT ACCURACY (User Specific)
-                custom_levels = {
-                    "level_0": 425.03, "level_236": 336.56, "level_382": 282.44, 
-                    "level_05": 238.40, "purple": 194.35, "gvn_7": 133.88, "gvn_1": 51.76
-                }
-                ai_msg = "🚀 INCH-TO-INCH LADDER: 238 -> 282 -> 336"
+                ai_msg = "🚀 GVN i-LADDER: 250.5 -> 307.1 -> 363.8"
             elif strike_name == "23800 PE":
-                custom_levels = {"i7": 134.25, "i6": 198.99, "i5": 246.0, "i3": 293.0}
-                ai_msg = "🎯 LADDER: 199 -> 246 -> 293"
+                # 🚀 GVN OFFICIAL: 23800 PE (High: 240.0, Low: 152.6)
+                # i1: 446.0, i0: 46.3, i5: 246.15, i6: 199.0, i3: 293.3
+                custom_levels = {
+                    "i1": 446.0, "i2": 351.3, "i3": 293.3, 
+                    "i5": 246.15, "i6": 199.0, "i7": 134.3, "i0": 46.3,
+                    "sl": 199.0 - 12.0 # Fixed 12-point SL from Entry i6
+                }
+                ai_msg = "🚀 GVN i-LADDER: 199.0 -> 246.1 -> 293.3"
+            elif strike_name == "23700 CE":
             
             # Check if already added
             if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
