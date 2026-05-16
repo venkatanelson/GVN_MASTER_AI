@@ -14,7 +14,8 @@ class GVNAiWindEngine:
     
     def __init__(self):
         self.vacuum_zones = []
-        self.history = deque(maxlen=60)
+        self.price_history = {} # Stores LTP history per symbol to detect patterns
+        self.swing_history = {} # Stores (type, price) for highs and lows
         
     def calculate_wind_direction(self, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
         """
@@ -57,10 +58,18 @@ class GVNAiWindEngine:
             elif ltp < vwap and ce_coi > pe_coi and delta < -0.2 and gamma > 0.005:
                 wind_state = "🔴 DOWN WIND (Bearish - CALL Writing)"
                 
-            # 5. SIDEWAYS MARKET (Premium Eating)
-            elif abs(ce_oi - pe_oi) < (min_oi * 0.15) and abs(delta) < 0.2 and gamma < 0.005:
-                wind_state = "⚫ PREMIUM EATING (Sideways Market)"
-                wind_power = min(wind_power, 0.7) # Force low power
+            # 5. THE SMALL SOLDIERS WAR (Micro-Trend Level-to-Level)
+            # Elephants are fighting (Massive OI on both sides), but small COI shifts are pushing the price
+            elif abs(ce_oi - pe_oi) < (min_oi * 0.30) and abs(delta) < 0.25:
+                if pe_coi > (ce_coi * 1.2) and ltp >= vwap:
+                    wind_state = "🟡 SLOW UP WIND (Level-to-Level)"
+                    wind_power = max(wind_power, 1.0) # Enough power for level-to-level
+                elif ce_coi > (pe_coi * 1.2) and ltp <= vwap:
+                    wind_state = "🟠 SLOW DOWN WIND (Level-to-Level)"
+                    wind_power = max(wind_power, 1.0) # Enough power for level-to-level
+                else:
+                    wind_state = "⚫ PREMIUM EATING (Sideways Market)"
+                    wind_power = min(wind_power, 0.7) # Force low power
             
             # --- MARKET STATES BASED ON WIND POWER ---
             if wind_power > 2.0:
@@ -106,7 +115,103 @@ class GVNAiWindEngine:
         except Exception:
             return "Stable Liquidity"
 
-    def get_market_dna(self, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
+    def analyze_battle_zone(self, ce_oi, pe_oi, ce_coi, pe_coi):
+        """
+        Tracks the Soldiers War (Momentum of OI)
+        Detects if Support or Resistance is strengthening, weakening, or breaking.
+        """
+        # Prevent tiny values from creating false signals
+        if ce_oi < 1000 or pe_oi < 1000: return "🛡️ HOLDING LINES (Consolidation)"
+        
+        # Calculate momentum (Step forward / Step backward ratio)
+        ce_momentum = ce_coi / ce_oi
+        pe_momentum = pe_coi / pe_oi
+        
+        # 1. Support Breaking (Bulls retreating, Bears advancing)
+        if pe_momentum < -0.05 and ce_momentum > 0.05:
+            return "🚨 SUPPORT BREAKING (Bulls Retreating, Bears Advancing)"
+            
+        # 2. Resistance Breaking (Bears retreating, Bulls advancing)
+        elif ce_momentum < -0.05 and pe_momentum > 0.05:
+            return "🚀 RESISTANCE BREAKING (Bears Retreating, Bulls Advancing)"
+            
+        # 3. Support Weakening (Bulls scared, Bears aggressive)
+        elif pe_momentum < 0.02 and ce_momentum > 0.08:
+            return "⚠️ SUPPORT WEAKENING (Heavy Call Writing)"
+            
+        # 4. Resistance Weakening (Bears scared, Bulls aggressive)
+        elif ce_momentum < 0.02 and pe_momentum > 0.08:
+            return "⚠️ RESISTANCE WEAKENING (Heavy Put Writing)"
+            
+        # 5. Intense Battle (Both fighting hard)
+        elif ce_momentum > 0.05 and pe_momentum > 0.05:
+            return "⚔️ INTENSE BATTLE (Both sides adding troops)"
+            
+        # 6. Mutual Retreat
+        elif ce_momentum < -0.02 and pe_momentum < -0.02:
+            return "🏳️ MUTUAL RETREAT (Consolidation/Unwinding)"
+            
+        return "🛡️ HOLDING LINES (Consolidation)"
+
+    def detect_price_pattern(self, symbol, ltp):
+        """
+        Price Action Memory Tracker (Smart Money Footprints)
+        Detects N-Pattern (Creeping Trend), M-Pattern (Double Top), W-Pattern (Double Bottom)
+        """
+        if symbol not in self.price_history:
+            self.price_history[symbol] = []
+            self.swing_history[symbol] = {"highs": [], "lows": []}
+            
+        history = self.price_history[symbol]
+        history.append(ltp)
+        if len(history) > 60: history.pop(0)
+        
+        # We need at least some data to detect swings
+        if len(history) < 10:
+            return "SCANNING PATTERNS..."
+            
+        # Basic Swing Detection (simplified for real-time tracking)
+        recent_prices = history[-10:]
+        current_max = max(recent_prices)
+        current_min = min(recent_prices)
+        
+        highs = self.swing_history[symbol]["highs"]
+        lows = self.swing_history[symbol]["lows"]
+        
+        # Register new high
+        if not highs or current_max > highs[-1] * 1.001:
+            highs.append(current_max)
+            if len(highs) > 3: highs.pop(0)
+            
+        # Register new low
+        if not lows or current_min < lows[-1] * 0.999:
+            lows.append(current_min)
+            if len(lows) > 3: lows.pop(0)
+            
+        # --- PATTERN RECOGNITION LOGIC ---
+        if len(highs) >= 2 and len(lows) >= 2:
+            h1, h2 = highs[-2], highs[-1]
+            l1, l2 = lows[-2], lows[-1]
+            
+            # 1. N-PATTERN (Bullish Creeping Trend / Ascending Channel)
+            if h2 > h1 and l2 > l1:
+                return "📈 BULLISH N-PATTERN (Smart Money Accumulation)"
+                
+            # 2. INVERTED N-PATTERN (Bearish Creeping Trend / Descending Channel)
+            elif h2 < h1 and l2 < l1:
+                return "📉 BEARISH N-PATTERN (Smart Money Distribution)"
+                
+            # 3. M-PATTERN (Double Top Reversal)
+            elif abs(h2 - h1) / h1 < 0.002 and ltp < l2:
+                return "🔴 M-PATTERN REVERSAL (Double Top)"
+                
+            # 4. W-PATTERN (Double Bottom Reversal)
+            elif abs(l2 - l1) / l1 < 0.002 and ltp > h2:
+                return "🟢 W-PATTERN REVERSAL (Double Bottom)"
+                
+        return "⚖️ CONSOLIDATION"
+
+    def get_market_dna(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
         """
         Returns full Market DNA Report (Smart Money Tracker)
         """
@@ -120,12 +225,20 @@ class GVNAiWindEngine:
             smart_money = "🔴 INSTITUTIONS SELLING (CALL Writing + Negative Delta)"
         elif "PREMIUM EATING" in wind_data["wind_state"]:
             smart_money = "⚫ OPTION WRITERS DOMINATING (Theta Decay Trap)"
+            
+        # Detect Price Action Pattern
+        pattern = self.detect_price_pattern(symbol, ltp)
+        
+        # Battle Zone (Support/Resistance Momentum)
+        battle_status = self.analyze_battle_zone(ce_oi, pe_oi, ce_coi, pe_coi)
 
         return {
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "wind_engine": wind_data,
             "smart_money_status": smart_money,
-            "insight": "OPTION CHAIN = MARKET DNA"
+            "price_pattern": pattern,
+            "battle_status": battle_status,
+            "insight": f"{pattern} | {battle_status}"
         }
 
 # --- Quick Test ---
@@ -134,7 +247,7 @@ if __name__ == "__main__":
     
     # Simulating a SHORT COVERING scenario (Price UP, CE OI Unwinding)
     test_result = engine.get_market_dna(
-        ltp=25100, vwap=25000, 
+        symbol="NIFTY", ltp=25100, vwap=25000, 
         ce_oi=80000, pe_oi=150000, 
         ce_coi=-20000, pe_coi=30000, # CE unwinding (-20k), PE writing (+30k)
         ce_vol=200000, pe_vol=120000, 
@@ -142,4 +255,5 @@ if __name__ == "__main__":
     )
     
     print("\n🌪️ GVN OPTION CHAIN WIND ENGINE 🌪️")
+    import json
     print(json.dumps(test_result, indent=2))

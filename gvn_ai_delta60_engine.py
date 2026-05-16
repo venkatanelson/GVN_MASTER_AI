@@ -154,13 +154,30 @@ class GVNAiDelta60Engine:
         if not levels: return
 
         if key not in self.memory["active_trades"]:
-            # CE Entry: Bullish Sentiment (Score >= 65)
-            # PE Entry: Bearish Sentiment (Score <= 35)
-            is_bullish = strike['type'] == 'CE' and shared_data.market_pulse["score"] >= 65
-            is_bearish = strike['type'] == 'PE' and shared_data.market_pulse["score"] <= 35
+            # CE Entry: Bullish Sentiment (Score >= 65) or UP WIND
+            # PE Entry: Bearish Sentiment (Score <= 35) or DOWN WIND
+            wind_dir = shared_data.market_pulse.get("wind_direction", "NEUTRAL")
+            wind_power = shared_data.market_pulse.get("wind_power", 1.0)
             
-            if (ltp <= levels["i7"] * 1.01 or (ltp >= levels["i5"] and ltp <= levels["i5"] * 1.03)) \
-               and (is_bullish or is_bearish):
+            is_bullish = strike['type'] == 'CE' and (shared_data.market_pulse.get("score", 50) >= 65 or any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]))
+            is_bearish = strike['type'] == 'PE' and (shared_data.market_pulse.get("score", 50) <= 35 or any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]))
+            
+            # 🛡️ THE GVN WIND FILTER (AVOIDING 12-PT SL HITS)
+            # 1. Reject CE entries if the wind is blowing DOWN
+            if strike['type'] == 'CE' and any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]):
+                is_bullish = False
+            # 2. Reject PE entries if the wind is blowing UP
+            if strike['type'] == 'PE' and any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]):
+                is_bearish = False
+            # 3. Reject ALL entries if it's a Trap / Premium Eating zone
+            if "PREMIUM EATING" in wind_dir or wind_power < 0.8:
+                is_bullish = False
+                is_bearish = False
+
+            # i5 Momentum Entry or i7 Safe Entry
+            valid_entry = (ltp >= levels["i5"] and ltp <= levels["i5"] * 1.03) or (ltp <= levels["i7"] * 1.01 and ltp >= levels["i7"] * 0.98)
+            
+            if valid_entry and (is_bullish or is_bearish):
                 self._execute_smart_entry(symbol, strike, ltp, levels)
         else:
             trade = self.memory["active_trades"][key]
@@ -179,11 +196,19 @@ class GVNAiDelta60Engine:
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
         key = f"{strike['strike']}_{strike['type']}"
+        
+        # Determine targets based on entry level (i5 vs i7)
         t1 = levels["i6"] if price < levels["i5"] else levels["i3"]
         t2 = levels["i5"] if price < levels["i5"] else levels["i2"]
-        sl = levels["i7"] * 0.95
+        
+        # 🛡️ USER REQUESTED EXACTLY 12-POINT FIXED STOP LOSS
+        sl = price - 12
+        
+        wind_dir = shared_data.market_pulse.get("wind_direction", "UNKNOWN")
+        reason = f"Smart Entry @ i-Level | Wind: {wind_dir} | SL: 12pts"
+        
         self.memory["active_trades"][key] = {"entry": price, "t1": t1, "t2": t2, "sl": sl, "t1_hit": False, "total_lots": target_lots}
-        self._fire_order(symbol, strike, "BUY", target_lots, f"Smart Entry ({target_lots} Lots)")
+        self._fire_order(symbol, strike, "BUY", target_lots, reason)
         self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], price, t2, sl)
 
     def _fire_order(self, symbol, strike, side, qty, reason):

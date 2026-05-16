@@ -895,20 +895,20 @@
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Trend</small>
+                        <small style="color: var(--text-dim); font-size: 10px;">Wind Status</small>
                         <span id="pulse-trend" style="font-weight: 900; font-size: 18px; color: var(--warning);">SIDEWAYS</span>
                     </div>
                     <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Inst. Activity</small>
-                        <span id="pulse-inst" style="font-weight: 900; font-size: 18px;">QUIET</span>
+                        <small style="color: var(--text-dim); font-size: 10px;">Smart Money</small>
+                        <span id="pulse-inst" style="font-weight: 900; font-size: 16px;">QUIET</span>
                     </div>
                     <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Vol. Strength</small>
+                        <small style="color: var(--text-dim); font-size: 10px;">Wind Power</small>
                         <span id="pulse-vol" style="font-weight: 900; font-size: 18px;">NORMAL</span>
                     </div>
                     <div class="pnl-item" style="text-align: left; background: rgba(0,0,0,0.2);">
-                        <small style="color: var(--text-dim); font-size: 10px;">Update</small>
-                        <span id="pulse-time" style="font-weight: 900; font-size: 16px; color: var(--primary);">--:--:--</span>
+                        <small style="color: var(--text-dim); font-size: 10px;">Trap / Memory</small>
+                        <span id="pulse-trap" style="font-weight: 900; font-size: 16px; color: var(--danger);">Scanning...</span>
                     </div>
                 </div>
             </div>
@@ -1401,10 +1401,10 @@
                     if (pulse) {
                         document.getElementById('pulse-sentiment').innerText = pulse.sentiment;
                         document.getElementById('pulse-score').innerText = `AI SCORE: ${pulse.score}`;
-                        document.getElementById('pulse-trend').innerText = pulse.trend;
+                        document.getElementById('pulse-trend').innerText = pulse.wind_direction || pulse.trend;
                         
                         // 🌟 New GVN v1.0 Logic Fields
-                        if (document.getElementById('ai-trap')) document.getElementById('ai-trap').innerText = pulse.trap || 'Safe';
+                        if (document.getElementById('ai-trap')) document.getElementById('ai-trap').innerText = pulse.trap_zone || pulse.trap || 'Safe';
                         if (document.getElementById('ai-currency')) document.getElementById('ai-currency').innerText = pulse.currency || '₹ 95.74';
                         if (document.getElementById('ai-insight')) document.getElementById('ai-insight').innerText = pulse.ai_insight || 'Scanning...';
                         if (document.getElementById('ai-support')) document.getElementById('ai-support').innerText = pulse.support || 'Scanning...';
@@ -1412,9 +1412,10 @@
                         if (document.getElementById('ai-pcr')) document.getElementById('ai-pcr').innerText = pulse.pcr || '--';
                         if (document.getElementById('ai-pressure')) document.getElementById('ai-pressure').innerText = pulse.pressure || 'Neutral';
 
-                        document.getElementById('pulse-inst').innerText = pulse.inst_activity;
-                        document.getElementById('pulse-vol').innerText = pulse.volume || 'NORMAL';
-                        document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
+                        document.getElementById('pulse-inst').innerText = pulse.smart_money || pulse.inst_activity;
+                        document.getElementById('pulse-vol').innerText = pulse.wind_power || pulse.volume || 'NORMAL';
+                        if (document.getElementById('pulse-trap')) document.getElementById('pulse-trap').innerText = pulse.vacuum_detected ? '🚨 VACUUM' : (pulse.trap_zone || 'SAFE');
+                        if (document.getElementById('pulse-time')) document.getElementById('pulse-time').innerText = new Date().toLocaleTimeString();
                         
                         // 🌟 DYNAMIC CHART UPDATE — switch to correct free index symbol
                         const correctSym = GVN_TV_SYMBOLS[currentActiveIndex] || 'NSE:NIFTY50';

@@ -16,6 +16,10 @@ logger = logging.getLogger("NSE_OptionChain")
 
 td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
 
+# 🌪️ GVN WIND ENGINE INTEGRATION
+from gvn_ai_wind_engine import GVNAiWindEngine
+wind_engine = GVNAiWindEngine()
+
 
 # Global memory to store the latest Delta 60 strikes per index
 current_delta_60_strikes = {
@@ -1139,13 +1143,31 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             ai_insight += f" | ⚠️ INR {usd_inr} pressure detected."
 
         # 📉 PREMIUM EATING DETECTION
-        # 🚀 GVN FIX: benchmark.get("open") was causing NoneType error. Using high/low average.
         ref_price = (benchmark.get("high", spot) + benchmark.get("low", spot)) / 2 if benchmark else spot
         if abs(spot - ref_price) < 30:
             if pcr > 0.8 and pcr < 1.2:
                 trend = "PREMIUM EATING 📉"
                 ai_insight = "Slow Move + Expiry = Theta Trap. Premium not expanding."
 
+        # 🌪️ WIND ENGINE MARKET DNA CALCULATION
+        ce_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
+        pe_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
+        ce_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
+        pe_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
+        
+        # Approximate global Greeks based on PCR bias
+        mock_delta = min(1.0, max(-1.0, (pcr - 1) * 2)) 
+        
+        dna = wind_engine.get_market_dna(
+            symbol=symbol, ltp=spot, vwap=ref_price, 
+            ce_oi=total_ce_oi, pe_oi=total_pe_oi,
+            ce_coi=ce_coi, pe_coi=pe_coi,
+            ce_vol=ce_vol, pe_vol=pe_vol,
+            delta=mock_delta, gamma=0.015, theta=-0.5
+        )
+        
+        vacuum_status = wind_engine.detect_liquidity_vacuum(total_ce_oi, total_pe_oi, max_ce_oi, max_pe_oi)
+        
         market_pulse[symbol] = {
             "sentiment": sentiment,
             "score": int(pcr * 100) if pcr < 1 else 100,
@@ -1155,7 +1177,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             "support": max_pe_strike,
             "resistance": max_ce_strike,
             "ai_insight": ai_insight,
-            "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW"
+            "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW",
+            "wind_direction": dna["wind_engine"]["wind_state"],
+            "wind_power": dna["wind_engine"]["wind_power"],
+            "smart_money": dna["smart_money_status"],
+            "trap_zone": dna["wind_engine"]["trend_type"],
+            "vacuum_detected": "VACUUM" in vacuum_status
         }
         
         # Update Global Pulse for Dashboard
