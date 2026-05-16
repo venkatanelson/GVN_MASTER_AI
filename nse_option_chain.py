@@ -1188,11 +1188,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         # Update Global Pulse for Dashboard
         # 🚀 GVN IRON WALL ENGINE: Update global market pulse with real OI data
         shared_data.market_pulse.update({
-            "sentiment": symbol_pulse["sentiment"],
-            "score": symbol_pulse["score"],
-            "trend": symbol_pulse["trend"],
-            "volume": symbol_pulse["volume"],
-            "inst_activity": symbol_pulse["inst_activity"],
+            "sentiment": market_pulse[symbol]["sentiment"],
+            "score": market_pulse[symbol]["score"],
+            "trend": market_pulse[symbol]["trend"],
+            "volume": market_pulse[symbol].get("volume", 0),
+            "inst_activity": market_pulse[symbol]["inst_activity"],
             "support": max_pe_strike,
             "resistance": max_ce_strike,
             "pcr": round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0,
