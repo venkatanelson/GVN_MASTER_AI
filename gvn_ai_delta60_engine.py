@@ -152,6 +152,9 @@ class GVNAiDelta60Engine:
         ltp = strike["ltp"]
         levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
         if not levels: return
+        
+        if "alerted_levels" not in self.memory:
+            self.memory["alerted_levels"] = {}
 
         if key not in self.memory["active_trades"]:
             # CE Entry: Bullish Sentiment (Score >= 65) or UP WIND
@@ -174,38 +177,98 @@ class GVNAiDelta60Engine:
                 is_bullish = False
                 is_bearish = False
 
-            # i5 Momentum Entry or i7 Safe Entry
-            valid_entry = (ltp >= levels["i5"] and ltp <= levels["i5"] * 1.03) or (ltp <= levels["i7"] * 1.01 and ltp >= levels["i7"] * 0.98)
-            
-            if valid_entry and (is_bullish or is_bearish):
-                self._execute_smart_entry(symbol, strike, ltp, levels)
+            # 🎯 GVN PROBABILITY & PRIORITY LEVEL DETECTION
+            hit_level_name = None
+            target_price = None
+            priority = None
+
+            def is_near(price, level):
+                return level > 0 and (level * 0.98 <= price <= level * 1.02)
+
+            # Priority 1: i5 Level (50% Level)
+            if is_near(ltp, levels["i5"]):
+                hit_level_name, target_price, priority = "i5 (Priority 1: 50% Level)", levels["i3"], 1
+            # Priority 2: i7 Level
+            elif is_near(ltp, levels["i7"]):
+                hit_level_name, target_price, priority = "i7 (Priority 2)", levels["i5"], 2
+            # Priority 3: i1 / i0 Level (Bottom Bounce - Huge Target to i5)
+            elif is_near(ltp, levels.get("i1", 0)) or is_near(ltp, levels.get("i0", 0)):
+                hit_level_name, target_price, priority = "i1/i0 (Priority 3: Bottom Reversal)", levels["i5"], 3
+            # Priority Gap Up/Down: i6 Level
+            elif is_near(ltp, levels["i6"]) and ("GAP" in wind_dir or ltp > strike["high_915"] * 1.05 or ltp < strike["low_915"] * 0.95):
+                hit_level_name, target_price, priority = "i6 (Priority Gap Zone)", levels["i3"], 4
+
+            if hit_level_name:
+                alert_key = f"{key}_{hit_level_name}"
+                if alert_key not in self.memory["alerted_levels"]:
+                    # Create Alert on Touch!
+                    alert_msg = f"🔔 <b>GVN LEVEL ALERT</b> 🔔\n{symbol} {strike['strike']} {strike['type']} touched <b>{hit_level_name}</b> @ {ltp}\nTarget Probability: {target_price}"
+                    if self.telegram: self.telegram.send_alert(alert_msg)
+                    self.memory["alerted_levels"][alert_key] = True
+
+                # If Wind Direction supports the probability, execute!
+                if is_bullish or is_bearish:
+                    self._execute_smart_entry(symbol, strike, ltp, levels, priority)
         else:
             trade = self.memory["active_trades"][key]
-            # Multi-Stage Exit
+            
+            # 🌪️ WIND DIRECTION REVERSAL EXIT
+            wind_dir = shared_data.market_pulse.get("wind_direction", "UNKNOWN")
+            is_wind_against = (strike["type"] == "CE" and any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"])) or \
+                              (strike["type"] == "PE" and any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]))
+            
+            if is_wind_against:
+                remaining = trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0)
+                if remaining > 0:
+                    self._fire_order(symbol, strike, "SELL", remaining, "Full Exit (Wind Reversal)")
+                del self.memory["active_trades"][key]
+                return
+
+            # 📈 LEVEL-BASED TRAILING STOP LOSS (TSL)
+            # Find the highest GVN level crossed by the LTP
+            highest_crossed = max([lvl for lvl in levels.values() if lvl <= ltp], default=0)
+            
+            if highest_crossed > trade.get("highest_level", 0) and highest_crossed > trade["entry"]:
+                trade["highest_level"] = highest_crossed
+                new_sl = highest_crossed - 12
+                # Only trail upwards
+                if new_sl > trade["sl"]:
+                    trade["sl"] = new_sl
+                    if self.telegram:
+                        self.telegram.send_alert(f"📈 <b>GVN TSL TRAILED</b>\n{symbol} {strike['strike']} {strike['type']} crossed {highest_crossed}\nNew SL: {new_sl}")
+
+            # Target Exit
             if not trade["t1_hit"] and ltp >= trade["t1"]:
-                trade["t1_hit"], trade["sl"] = True, trade["entry"]
+                trade["t1_hit"] = True
                 self._fire_order(symbol, strike, "SELL", trade["total_lots"] // 2, "Partial Exit (T1 Hit)")
             elif ltp >= trade["t2"]:
                 self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (T2 Hit)")
                 del self.memory["active_trades"][key]
+            # Stop Loss / Trailing Stop Loss Exit
             elif ltp <= trade["sl"]:
                 self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (SL Hit)")
                 del self.memory["active_trades"][key]
 
-    def _execute_smart_entry(self, symbol, strike, price, levels):
+    def _execute_smart_entry(self, symbol, strike, price, levels, priority):
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
         key = f"{strike['strike']}_{strike['type']}"
         
-        # Determine targets based on entry level (i5 vs i7)
-        t1 = levels["i6"] if price < levels["i5"] else levels["i3"]
-        t2 = levels["i5"] if price < levels["i5"] else levels["i2"]
+        # We use the custom probability target defined by the priority engine (like i1 bouncing to i5)
+        if priority == 3: # i1 / i0 hit (Zero to Hero)
+            t1, t2 = levels.get("i7", price + 15), levels.get("i5", price + 30)
+        elif priority == 2: # i7 hit
+            t1, t2 = levels.get("i6", price + 10), levels.get("i5", price + 20)
+        elif priority == 1: # i5 hit
+            t1, t2 = levels.get("i3", price + 20), levels.get("i2", price + 40)
+        else:
+            t1, t2 = levels.get("i3", price + 15), levels.get("i2", price + 30)
         
         # 🛡️ USER REQUESTED EXACTLY 12-POINT FIXED STOP LOSS
         sl = price - 12
         
         wind_dir = shared_data.market_pulse.get("wind_direction", "UNKNOWN")
-        reason = f"Smart Entry @ i-Level | Wind: {wind_dir} | SL: 12pts"
+        reason = f"Smart Priority Entry | Wind: {wind_dir} | SL: 12pts"
         
         self.memory["active_trades"][key] = {"entry": price, "t1": t1, "t2": t2, "sl": sl, "t1_hit": False, "total_lots": target_lots}
         self._fire_order(symbol, strike, "BUY", target_lots, reason)
