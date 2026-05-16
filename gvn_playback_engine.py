@@ -225,8 +225,8 @@ def run_playback(speed=1.0, symbol="NIFTY"):
                 cur_price = round(next((float(h[4]) for h in historical_option_data.get(f"{ce_strike}_CE", []) if h[0] == candle['Datetime'].strftime("%y%m%d%H%M%S")), 0), 2)
                 if cur_price == 0: cur_price = round(c_p, 2)
                 
-                active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "CE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 20, "qty": 50}
-                shared_data.demo_logs.append(f"🚀 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']}")
+                active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "CE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 12, "qty": 50}
+                shared_data.demo_logs.append(f"🚀 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']} | SL: 12pts")
                 active_trade["db_id"] = _record_trade_db(app, db, AlgoTrade, User, active_trade)
                 
                 # --- TELEGRAM ALERT ---
@@ -242,8 +242,8 @@ def run_playback(speed=1.0, symbol="NIFTY"):
                 cur_price = round(next((float(h[4]) for h in historical_option_data.get(f"{pe_strike}_PE", []) if h[0] == candle['Datetime'].strftime("%y%m%d%H%M%S")), 0), 2)
                 if cur_price == 0: cur_price = round(p_p, 2)
                 
-                active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "PE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 20, "qty": 50}
-                shared_data.demo_logs.append(f"🔥 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']}")
+                active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "PE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 12, "qty": 50}
+                shared_data.demo_logs.append(f"🔥 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']} | SL: 12pts")
                 active_trade["db_id"] = _record_trade_db(app, db, AlgoTrade, User, active_trade)
                 
                 # --- TELEGRAM ALERT ---
