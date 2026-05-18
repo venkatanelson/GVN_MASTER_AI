@@ -787,14 +787,35 @@
                     ticker.innerHTML = `<span style="color: var(--warning);">⚠️ Wait for Signal</span> | Institutional Scanning in Progress... | ${currentActiveIndex} SPOT: ${spotPrice}`;
                 }
                 
-                // Update Robot Badges
-                const robotStatus = document.getElementById('scannerStatus');
-                if (d.state === "ACTIVE") {
-                    robotStatus.innerText = 'TRADE LIVE';
-                    robotStatus.className = 'badge bg-success';
+                // Update Robot Toggle state dynamically from backend
+                const robotToggle = document.getElementById('robotToggle');
+                const statusText = document.getElementById('robotStatusText');
+                const execBadge = document.getElementById('execStatus');
+                const scannerBadge = document.getElementById('scannerStatus');
+                const infoBox = document.getElementById('robotActiveInfo');
+                
+                if (d.robot_active) {
+                    robotToggle.checked = true;
+                    statusText.innerText = "RUNNING";
+                    execBadge.innerText = "READY";
+                    execBadge.className = "badge bg-success";
+                    
+                    if (d.state === "ACTIVE") {
+                        scannerBadge.innerText = 'TRADE LIVE';
+                        scannerBadge.className = 'badge bg-success';
+                    } else {
+                        scannerBadge.innerText = 'SCANNING';
+                        scannerBadge.className = 'badge bg-warning text-dark';
+                    }
+                    infoBox.style.display = 'block';
                 } else {
-                    robotStatus.innerText = 'SCANNING';
-                    robotStatus.className = 'badge bg-warning text-dark';
+                    robotToggle.checked = false;
+                    statusText.innerText = "OFF";
+                    execBadge.innerText = "PAUSED";
+                    execBadge.className = "badge bg-secondary";
+                    scannerBadge.innerText = "IDLE";
+                    scannerBadge.className = "badge bg-secondary";
+                    infoBox.style.display = 'none';
                 }
             });
         }

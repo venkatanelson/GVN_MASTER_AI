@@ -551,14 +551,28 @@ def user_status():
                 theory_msg = log
                 break
 
-    # Calculate Running P&L
+    # Calculate Running P&L with dynamic lot size
     running_pnl = 0
+    trade_lots = 1
+    try:
+        from models import User
+        db_user = User.query.filter_by(is_blocked=False).first()
+        if db_user:
+            trade_lots = db_user.trade_lots or 1
+    except: pass
+
     if trade.get("active"):
         entry = trade.get("entry_price", 0)
-        qty = trade.get("qty", 50) # Standard GVN Lot Size
+        qty = trade_lots * 50  # Dynamic lot size (e.g. 2 lots * 50 = 100 qty)
         tsym = trade.get("symbol", "")
-        # 🎯 GVN FIX: Get exact LTP for the specific strike
-        current_ltp = shared_data.market_data.get(tsym, 0)
+        # 🎯 GVN FIX: Map 'NIFTY_23400_CE' to '23400 CE' to query live WebSocket LTP
+        search_key = tsym
+        if "_CE" in tsym or "_PE" in tsym:
+            parts = tsym.split("_")
+            if len(parts) >= 3:
+                search_key = f"{parts[1]} {parts[2]}"
+        
+        current_ltp = shared_data.market_data.get(search_key, shared_data.market_data.get(tsym, 0))
         
         if current_ltp > 0:
             pts = current_ltp - entry
@@ -597,7 +611,8 @@ def user_status():
         "pcr": pcr,
         "pressure": pressure,
         "locked_ce": locked_ce,
-        "locked_pe": locked_pe
+        "locked_pe": locked_pe,
+        "robot_active": getattr(shared_data, 'robot_active', False)
     })
 
 @app.route('/api/ai-memory')
