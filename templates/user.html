@@ -1182,6 +1182,19 @@
                         if (x.type === "password") { x.type = "text"; } else { x.type = "password"; }
                     }
 
+                    // 🧠 GVN MULTI-BROKER ZERO-DB CACHING ENGINE
+                    window.addEventListener('DOMContentLoaded', () => {
+                        const initialBroker = document.querySelector('select[name="broker_name"]').value;
+                        const clientId = document.getElementById('api_client_id').value;
+                        if (clientId && !clientId.includes('*')) {
+                            localStorage.setItem('gvn_broker_' + initialBroker + '_client_id', clientId);
+                            localStorage.setItem('gvn_broker_' + initialBroker + '_access_token', document.getElementById('api_access_token').value);
+                            localStorage.setItem('gvn_broker_' + initialBroker + '_client_secret', document.getElementById('api_client_secret').value);
+                            localStorage.setItem('gvn_broker_' + initialBroker + '_totp', document.getElementById('api_totp').value);
+                            localStorage.setItem('gvn_broker_' + initialBroker + '_password', document.getElementById('api_broker_password').value);
+                        }
+                    });
+
                     document.querySelector('select[name="broker_name"]').addEventListener('change', function() {
                         const broker = this.value;
                         const clientId = document.getElementById('api_client_id');
@@ -1189,6 +1202,34 @@
                         const clientSecret = document.getElementById('api_client_secret');
                         const totpKey = document.getElementById('api_totp');
                         const brokerPassword = document.getElementById('api_broker_password');
+
+                        // Save current inputs to localStorage before switching
+                        const prevBroker = this.dataset.prevBroker || "{{ broker_config.broker_name if broker_config else 'Shoonya' }}";
+                        if (prevBroker && clientId.value && !clientId.value.includes('*')) {
+                            localStorage.setItem('gvn_broker_' + prevBroker + '_client_id', clientId.value);
+                            localStorage.setItem('gvn_broker_' + prevBroker + '_access_token', accessToken.value);
+                            localStorage.setItem('gvn_broker_' + prevBroker + '_client_secret', clientSecret.value);
+                            localStorage.setItem('gvn_broker_' + prevBroker + '_totp', totpKey.value);
+                            localStorage.setItem('gvn_broker_' + prevBroker + '_password', brokerPassword.value);
+                        }
+                        this.dataset.prevBroker = broker;
+
+                        // Load new values from localStorage for the newly selected broker
+                        const cachedClientId = localStorage.getItem('gvn_broker_' + broker + '_client_id');
+                        if (cachedClientId) {
+                            clientId.value = cachedClientId;
+                            accessToken.value = localStorage.getItem('gvn_broker_' + broker + '_access_token') || '';
+                            clientSecret.value = localStorage.getItem('gvn_broker_' + broker + '_client_secret') || '';
+                            totpKey.value = localStorage.getItem('gvn_broker_' + broker + '_totp') || '';
+                            brokerPassword.value = localStorage.getItem('gvn_broker_' + broker + '_password') || '';
+                        } else {
+                            // Clear fields if no cache exists for this broker
+                            clientId.value = '';
+                            accessToken.value = '';
+                            clientSecret.value = '';
+                            totpKey.value = '';
+                            brokerPassword.value = '';
+                        }
 
 
                         const lblClientId = document.getElementById('label_client_id');

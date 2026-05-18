@@ -84,6 +84,52 @@ def _record_trade_db(app, db, AlgoTrade, User, trade):
             logger.error(f"DB Error: {e}")
     return None
 
+import threading
+def _dispatch_live_playback_orders(app, trade):
+    """Dynamically routes playback simulated trades to live connected users!"""
+    with app.app_context():
+        try:
+            from app import User, UserBrokerConfig
+            from broker_api import place_order_universal
+            import shared_data
+            
+            live_users = User.query.filter_by(algo_status='ON', user_type='LIVE', is_approved=True).all()
+            if not live_users: return
+            
+            def order_worker(u, t):
+                try:
+                    cfg = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                    if not cfg: return
+                    broker_key = (cfg.broker_name or "Shoonya").replace(" ", "")
+                    
+                    # Only execute if broker is actively connected
+                    if shared_data.broker_connection_status.get(broker_key, False) or shared_data.broker_connection_status.get(cfg.broker_name, False):
+                        qty = t["qty"] * u.trade_lots
+                        creds = cfg.get_credentials()
+                        broker_cfg = {
+                            "broker": cfg.broker_name,
+                            "client_id": cfg.client_id,
+                            "password": creds.get("password"),
+                            "api_key": creds.get("api_key"),
+                            "api_secret": creds.get("api_secret"),
+                            "totp_key": creds.get("totp_key")
+                        }
+                        shared_data.demo_logs.append(f"⚡ [MULTI-ROUTER] Routing {t['type']} order for {u.username} to {cfg.broker_name}...")
+                        
+                        # FIRE THE REAL ORDER!
+                        order_id = place_order_universal(broker_cfg, t["symbol"], t["type"], qty)
+                        if order_id:
+                            shared_data.demo_logs.append(f"✅ [MULTI-ROUTER] Order Placed for {u.username}! ID: {order_id}")
+                        else:
+                            shared_data.demo_logs.append(f"❌ [MULTI-ROUTER] Order Failed for {u.username} via {cfg.broker_name}")
+                except Exception as e:
+                    shared_data.demo_logs.append(f"⚠️ Live Dispatch Error for User {u.id}: {e}")
+            
+            for usr in live_users:
+                threading.Thread(target=order_worker, args=(usr, trade), daemon=True).start()
+        except Exception as e:
+            logger.error(f"Dispatch Error: {e}")
+
 def get_real_historical_data(symbol="NIFTY"):
     yf_symbols = {"NIFTY": "^NSEI", "BANKNIFTY": "^NSEBANK", "FINNIFTY": "NIFTY_FIN_SERVICE.NS", "SENSEX": "^BSESN"}
     ticker = yf_symbols.get(symbol, "^NSEI")
@@ -228,6 +274,7 @@ def run_playback(speed=1.0, symbol="NIFTY"):
                 active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "CE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 12, "qty": 50}
                 shared_data.demo_logs.append(f"🚀 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']} | SL: 12pts")
                 active_trade["db_id"] = _record_trade_db(app, db, AlgoTrade, User, active_trade)
+                _dispatch_live_playback_orders(app, active_trade)
                 
                 # --- TELEGRAM ALERT ---
                 try:
@@ -245,6 +292,7 @@ def run_playback(speed=1.0, symbol="NIFTY"):
                 active_trade = {"symbol": full_sym, "entry_price": cur_price, "type": "BUY", "option_type": "PE", "delta": 0.6, "target": cur_price + 30, "sl": cur_price - 12, "qty": 50}
                 shared_data.demo_logs.append(f"🔥 [SIGNAL] PLAYBACK BUY: {full_sym} @ ₹{active_trade['entry_price']} | SL: 12pts")
                 active_trade["db_id"] = _record_trade_db(app, db, AlgoTrade, User, active_trade)
+                _dispatch_live_playback_orders(app, active_trade)
                 
                 # --- TELEGRAM ALERT ---
                 try:
