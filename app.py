@@ -472,6 +472,15 @@ def user_dashboard(user_id):
 @app.route('/api/user-status')
 def user_status():
     """Provides high-fidelity state for the User Dashboard (Signal, P&L, Active Trade)."""
+    # 🧠 SYNC ALGO STATUS: Instantly sync database user.algo_status to background engine!
+    try:
+        from models import User
+        db_user = User.query.filter_by(is_blocked=False).first()
+        if db_user:
+            shared_data.market_pulse["algo_status"] = db_user.algo_status
+    except Exception as e:
+        pass
+
     symbol = request.args.get('symbol', 'NIFTY').upper()
     trade = getattr(shared_data, 'demo_trade', {"active": False})
     logs = getattr(shared_data, 'demo_logs', [])
@@ -563,7 +572,6 @@ def user_status():
     try:
         import os
         import json
-        from datetime import datetime
         if os.path.exists("morning_locked_strikes.json"):
             with open("morning_locked_strikes.json", "r") as f:
                 lock_data = json.load(f)
@@ -891,6 +899,7 @@ def toggle_algo(user_id):
     if user:
         user.algo_status = "ON" if user.algo_status == "OFF" else "OFF"
         db.session.commit()
+        shared_data.market_pulse["algo_status"] = user.algo_status
     return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/toggle-auto-mode/<int:user_id>')
