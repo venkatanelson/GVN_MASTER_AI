@@ -143,7 +143,8 @@ class GVNAiDelta60Engine:
                             "strike": item["strikePrice"], "type": t,
                             "ltp": opt.get("lastPrice", 0), "delta": delta,
                             "high_915": opt.get("high_915", opt.get("lastPrice", 0) + 15),
-                            "low_915": opt.get("low_915", opt.get("lastPrice", 0) - 15)
+                            "low_915": opt.get("low_915", opt.get("lastPrice", 0) - 15),
+                            "symbol": opt.get("symbol") or opt.get("tradingSymbol") or f"{symbol}{item['strikePrice']}{t}"
                         })
         return sorted(alpha_grid, key=lambda x: abs(x["delta"] - target_d))[:14]
 
@@ -309,8 +310,44 @@ class GVNAiDelta60Engine:
         self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], price, t2, sl)
 
     def _fire_order(self, symbol, strike, side, qty, reason):
-        full_symbol = f"{symbol}{strike['strike']}{strike['type']}"
-        alert = f"🛡️ <b>GVN MASTER EXECUTION</b> 🛡️\n{full_symbol} {side} @ {strike['ltp']}\nQty: {qty} Lots\nReason: {reason}"
+        full_symbol = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
+        
+        # Calculate levels to display in the alert
+        levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
+        target_price = strike.get("ltp", 0.0) + 12.0
+        sl_price = strike.get("ltp", 0.0) - 12.0
+        
+        level_name = "I3"
+        if "i5" in reason.lower(): level_name = "I5"
+        elif "i7" in reason.lower(): level_name = "I7"
+        elif "i1" in reason.lower() or "i0" in reason.lower(): level_name = "I1/I0"
+        elif "i6" in reason.lower(): level_name = "I6"
+        
+        if levels:
+            if level_name == "I5":
+                target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
+            elif level_name == "I7":
+                target_price, sl_price = levels["i5"], round(levels["i7"] - 12.0, 2)
+            elif level_name == "I1/I0":
+                target_price, sl_price = levels["i5"], round(levels["i1"] - 12.0, 2)
+            elif level_name == "I6":
+                target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
+            elif level_name == "I3":
+                target_price, sl_price = levels["i2"], round(levels["i3"] - 12.0, 2)
+
+        tsym = f"{symbol}_{int(strike['strike'])}_{strike['type']}"
+        
+        alert = (
+            f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 Symbol: <b>{tsym}</b>\n"
+            f"⚡ Level Triggered: <b>{level_name}</b>\n"
+            f"💸 Entry Price: <b>₹{strike['ltp']}</b>\n"
+            f"✅ Target: <b>₹{target_price}</b>\n"
+            f"⛔ Stop Loss: <b>₹{sl_price}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚡ Processed exactly as per GVN Settings"
+        )
         if self.telegram: self.telegram.send_alert(alert)
         
         # 🚀 GVN MULTI-USER DYNAMIC ROUTING ENGINE

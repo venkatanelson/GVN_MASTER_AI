@@ -240,9 +240,23 @@ def _place_angel_order(cfg, token, symbol, txn_type, qty):
     Place order directly on Angel One via SmartAPI
     """
     try:
-        # 🌟 Angel One requires Symbol Token. We usually get it from our chain data.
-        # For indices, token is fixed. For others, we lookup.
+        # 🌟 GVN ROBOT DYNAMIC SYMBOL TOKEN LOOKUP FOR ANGEL ONE
         token_id = "26000" if "NIFTY" in symbol.upper() else "99926000"
+        try:
+            import shared_data
+            for idx_key in ["NIFTY", "SENSEX"]:
+                chain = shared_data.truedata_option_chains.get(idx_key, [])
+                for opt in chain:
+                    ce_sym = opt.get("ce_symbol") or opt.get("CE", {}).get("symbol")
+                    pe_sym = opt.get("pe_symbol") or opt.get("PE", {}).get("symbol")
+                    if ce_sym == symbol:
+                        token_id = str(opt.get("ce_token") or opt.get("CE", {}).get("token") or "26000")
+                        break
+                    if pe_sym == symbol:
+                        token_id = str(opt.get("pe_token") or opt.get("PE", {}).get("token") or "26000")
+                        break
+        except Exception as token_err:
+            logger.error(f"⚠️ Angel Token Lookup Error: {token_err}")
         
         url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/order/v1/placeOrder"
         headers = {
