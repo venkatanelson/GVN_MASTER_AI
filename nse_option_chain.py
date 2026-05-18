@@ -1540,14 +1540,15 @@ def nse_background_worker():
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
-            # 🌟 GVN SPECIAL: Run worker regardless of 'active' to support Mock Data/Demo
-            for symbol in ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY", "MCX"]:
+            # 🌟 GVN ULTRA-FAST TICK-BY-TICK NIFTY SCANNING
+            # Bypassing other symbols and reducing sleep to achieve sub-second execution!
+            for symbol in ["NIFTY"]:
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                 analyze_and_update_gvn_scanner(symbol)
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
-                time.sleep(3)
+                time.sleep(0.5)
                 
         except Exception as e:
             import traceback
@@ -1558,9 +1559,9 @@ def nse_background_worker():
                     f.write(f"{datetime.now()}: FATAL ERROR in Worker: {err_msg}\n")
             except OSError:
                 print("[NSE Worker] Failed to write error log (Disk Full). Retrying soon...")
-            time.sleep(10) # Wait more on fatal error
+            time.sleep(5)
         
-        time.sleep(15)
+        time.sleep(1.0)
 
 def start_nse_worker():
     print("\n" + "="*50)

@@ -81,7 +81,7 @@ class GVNAiDelta60Engine:
                     for strike in strikes:
                         self._manage_trade_cycle(index, strike)
                 
-                time.sleep(2)
+                time.sleep(0.1)
             except Exception as e:
                 logger.error(f"❌ Safety Loop Error: {e}")
                 time.sleep(5)
@@ -150,6 +150,11 @@ class GVNAiDelta60Engine:
     def _manage_trade_cycle(self, symbol, strike):
         key = f"{strike['strike']}_{strike['type']}"
         ltp = strike["ltp"]
+        # ⚡ REAL-TIME WEBSOCKET LTP OVERRIDE (Sub-second execution)
+        search_key = f"{int(strike['strike'])} {strike['type']}"
+        real_ltp = shared_data.market_data.get(search_key, 0)
+        if real_ltp > 0:
+            ltp = real_ltp
         levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
         if not levels: return
         
@@ -211,6 +216,9 @@ class GVNAiDelta60Engine:
             # Priority 3: i1 / i0 Level (Bottom Bounce - Huge Target to i5)
             elif is_near(ltp, levels.get("i1", 0)) or is_near(ltp, levels.get("i0", 0)):
                 hit_level_name, target_price, priority = "i1/i0 (Priority 3: Bottom Reversal)", levels["i5"], 3
+            # Priority 4: i3 Level (Breakout Level Touch)
+            elif is_near(ltp, levels["i3"]):
+                hit_level_name, target_price, priority = "i3 (Breakout Level)", levels["i2"], 5
             # Priority Gap Up/Down: i6 Level
             elif is_near(ltp, levels["i6"]) and ("GAP" in wind_dir or ltp > strike["high_915"] * 1.05 or ltp < strike["low_915"] * 0.95):
                 hit_level_name, target_price, priority = "i6 (Priority Gap Zone)", levels["i3"], 4
@@ -223,9 +231,8 @@ class GVNAiDelta60Engine:
                     if self.telegram: self.telegram.send_alert(alert_msg)
                     self.memory["alerted_levels"][alert_key] = True
 
-                # If Wind Direction supports the probability, execute!
-                if is_bullish or is_bearish:
-                    self._execute_smart_entry(symbol, strike, ltp, levels, priority)
+                # 🎯 GVN MECHANICAL ENTRY: Execute immediately on GVN level touch!
+                self._execute_smart_entry(symbol, strike, ltp, levels, priority)
         else:
             trade = self.memory["active_trades"][key]
             
