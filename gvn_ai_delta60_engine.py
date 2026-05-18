@@ -276,10 +276,71 @@ class GVNAiDelta60Engine:
 
     def _fire_order(self, symbol, strike, side, qty, reason):
         full_symbol = f"{symbol}{strike['strike']}{strike['type']}"
-        alert = f"🛡️ <b>GVN SAFETY EXECUTION</b> 🛡️\n{full_symbol} {side} @ {strike['ltp']}\nQty: {qty} Lots\nReason: {reason}"
+        alert = f"🛡️ <b>GVN MASTER EXECUTION</b> 🛡️\n{full_symbol} {side} @ {strike['ltp']}\nQty: {qty} Lots\nReason: {reason}"
         if self.telegram: self.telegram.send_alert(alert)
-        cfg = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel", {})
-        place_order_universal(cfg, full_symbol, side, qty * 50)
+        
+        # 🚀 GVN MULTI-USER DYNAMIC ROUTING ENGINE
+        try:
+            from app import app, db, User, UserBrokerConfig, AlgoTrade
+            from datetime import datetime
+            
+            with app.app_context():
+                # Query all active users whose Algo is turned ON and are not blocked
+                active_users = User.query.filter_by(algo_status='ON', is_blocked=False).all()
+                logger.info(f"🛰️ [GVN MULTI-USER ENGINE] Found {len(active_users)} active users with Algo ON.")
+                
+                for u in active_users:
+                    try:
+                        user_lots = u.trade_lots or 1
+                        
+                        # 1. Check if user has active and approved live subscription
+                        is_live_allowed = False
+                        if u.user_type == 'LIVE' and u.is_approved:
+                            if u.expiry_date and u.expiry_date > datetime.utcnow():
+                                is_live_allowed = True
+                        
+                        # 2. Add trade to their database dashboard
+                        new_trade = AlgoTrade(
+                            user_id=u.id,
+                            symbol=full_symbol,
+                            entry_price=float(strike['ltp']) if side == 'BUY' else 0.0,
+                            exit_price=float(strike['ltp']) if side == 'SELL' else 0.0,
+                            quantity=user_lots * 50, # 1 lot = 50 qty
+                            trade_type=side,
+                            status='Open' if side == 'BUY' else 'Closed',
+                            delta=float(strike.get('delta', 0.60)),
+                            sentiment=reason
+                        )
+                        db.session.add(new_trade)
+                        db.session.commit()
+                        
+                        # 3. If LIVE subscription and API is configured, place REAL trade
+                        config = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                        if is_live_allowed and config and config.client_id:
+                            creds = config.get_credentials()
+                            cfg = {
+                                "broker_name": config.broker_name or "Shoonya",
+                                "client_id": config.client_id,
+                                "password": creds.get('password'),
+                                "api_key": creds.get('api_key'),
+                                "api_secret": creds.get('api_secret'),
+                                "totp_key": creds.get('totp_key'),
+                                "webhook_url": config.webhook_url,
+                                "tv_secret": config.tv_secret
+                            }
+                            
+                            from broker_api import execute_broker_order_async
+                            execute_broker_order_async(cfg, full_symbol, side, user_lots * 50, u.username)
+                            logger.info(f"💼 [LIVE ROUTED] real broker order submitted for user {u.username} via {config.broker_name}")
+                        else:
+                            # Otherwise, run as PAPER / DEMO trade
+                            logger.info(f"📊 [PAPER RECORDED] Demo trade saved to dashboard for user {u.username}")
+                            
+                    except Exception as ex:
+                        logger.error(f"❌ Failed executing trade block for user {u.username}: {ex}")
+                        
+        except Exception as e:
+            logger.error(f"❌ Multi-user routing critical failure: {e}")
 
 if __name__ == "__main__":
     ai = GVNAiDelta60Engine()

@@ -1702,5 +1702,64 @@
             }
         }
     </script>
+    <!-- 🛡️ GVN SCREENSHOT PROTECTION & KEY LOCK SHIELD -->
+    <script>
+        // Disable PrintScreen button
+        document.addEventListener('keyup', function(e) {
+            if (e.key == 'PrintScreen') {
+                navigator.clipboard.writeText(''); // Clear clipboard immediately
+                alert('📸 Screenshot Protection Active: Capture Disabled on GVN Master Engine.');
+                document.body.style.filter = "blur(30px)";
+                setTimeout(() => { document.body.style.filter = "none"; }, 1500);
+            }
+        });
+
+        // Detect focus loss (often happens during snip tool activation) and blur window
+        window.addEventListener('blur', function() {
+            document.body.style.filter = "blur(20px)";
+        });
+        window.addEventListener('focus', function() {
+            document.body.style.filter = "none";
+        });
+
+        // Block Developer tools and other shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Block F12
+            if (e.keyCode == 123) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+Shift+I (Inspect element)
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 73) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+Shift+C (Inspect component)
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 67) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+Shift+J (Console)
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 74) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+S (Save Page)
+            if (e.ctrlKey && e.keyCode == 83) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+P (Print Page)
+            if (e.ctrlKey && e.keyCode == 80) {
+                e.preventDefault();
+                return false;
+            }
+            // Block Ctrl+U (View Source)
+            if (e.ctrlKey && e.keyCode == 85) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    </script>
 </body>
 </html>

@@ -380,7 +380,7 @@ def demo_register():
         phone=phone,
         email=data.get('email', ''),
         demo_capital=float(data.get('demo_capital', 100000.0)),
-        user_type='PAPER',
+        user_type='DEMO',
         is_approved=False,
         is_locked=True
     )
@@ -451,6 +451,11 @@ def user_dashboard(user_id):
             'sentiment': t.sentiment or "Analyzing..."
         })
 
+    remaining_days = 0
+    if user.expiry_date:
+        delta = user.expiry_date - datetime.utcnow()
+        remaining_days = max(0, delta.days)
+
     return render_template('user.html', 
                            user=user, 
                            todays_trades=trades, 
@@ -461,7 +466,7 @@ def user_dashboard(user_id):
                            password=decrypted_keys['broker_password'],
                            pnl_total_30d=pnl_total_30d,
                            daily_history=daily_history,
-                           remaining_days=30, 
+                           remaining_days=remaining_days, 
                            build_version="2.5.1")
 
 @app.route('/api/user-status')
@@ -789,8 +794,33 @@ def get_live_signals():
 
 @app.route('/api/broker-status')
 def get_broker_status():
-    """Returns connectivity status for all brokers"""
-    return jsonify(shared_data.broker_connection_status)
+    """Returns connectivity status for the active user's broker"""
+    uid = session.get('user_id', 1)
+    config = UserBrokerConfig.query.filter_by(user_id=uid).first()
+    active_broker = "AngelOne"
+    if config and config.broker_name:
+        active_broker = config.broker_name
+        
+    connected = shared_data.broker_connection_status.get(active_broker, False)
+    
+    # Support check for variations in casing
+    if not connected:
+        for k, v in shared_data.broker_connection_status.items():
+            if k.lower() == active_broker.lower():
+                connected = v
+                break
+                
+    spot = shared_data.market_data.get("NIFTY", 0)
+    if spot == 0:
+        spot = shared_data.market_data.get("NIFTY 50", 0)
+        
+    return jsonify({
+        "connected": connected,
+        "broker_name": active_broker,
+        "data_source": active_broker,
+        "nifty_spot": spot,
+        "reason": "High-Speed Data Flow Active" if connected else "Waiting for Feed Connection..."
+    })
 
 @app.route('/api/user-status')
 def get_user_status():
@@ -881,17 +911,29 @@ def force_close(trade_id):
 def admin_dashboard():
     admin = db.session.get(User, 1) # Assumes ID 1 is admin
     
-    # Update all users to DEMO as requested
-    users = User.query.filter(User.role == 'user').all()
-    for u in users:
-        if u.user_type != 'DEMO':
-            u.user_type = 'DEMO'
-    db.session.commit()
+    # Properly separate Live Approved subscribers from trial/demo clients
+    real_users = User.query.filter(User.role == 'user', User.user_type == 'LIVE', User.is_approved == True).all()
+    demo_users = User.query.filter(User.role == 'user', (User.user_type == 'DEMO') | (User.is_approved == False)).all()
     
-    real_users = User.query.filter(User.role == 'user').all()
     active_subscriptions = Subscription.query.filter_by(status='active').all()
+    pending_payments = PendingPayment.query.filter_by(status='Pending').all()
     
-    return render_template('admin.html', user=admin, real_users=real_users, subscriptions=active_subscriptions)
+    # Retrieve system config from user 1's broker settings
+    config = UserBrokerConfig.query.filter_by(user_id=1).first()
+    if not config:
+        config = UserBrokerConfig(user_id=1)
+        db.session.add(config)
+        db.session.commit()
+    
+    return render_template(
+        'admin.html', 
+        user=admin, 
+        real_users=real_users, 
+        demo_users=demo_users, 
+        subscriptions=active_subscriptions, 
+        pending_payments=pending_payments,
+        config=config
+    )
 
 @app.route('/toggle-signal-lock/<int:user_id>')
 def toggle_signal_lock(user_id):
@@ -1137,12 +1179,28 @@ def init_gvn():
 
         try:
             config = UserBrokerConfig.query.filter_by(user_id=1).first()
-            # Force Angel One as the primary broker
-            try:
-                import angel_live_feed
-                angel_live_feed.start_angel_worker()
-            except Exception as e:
-                print(f"⚠️ Angel Feed Failed: {e}")
+            if config:
+                broker = (config.broker_name or "angelone").lower()
+                if "shoonya" in broker:
+                    try:
+                        import shoonya_live_feed
+                        shoonya_live_feed.start_shoonya_worker()
+                        print("🛰️ [STARTUP] Started SHOONYA Live Feed Worker.")
+                    except Exception as e:
+                        print(f"⚠️ Shoonya Feed Failed: {e}")
+                else:
+                    try:
+                        import angel_live_feed
+                        angel_live_feed.start_angel_worker()
+                        print("🛰️ [STARTUP] Started ANGEL ONE Live Feed Worker.")
+                    except Exception as e:
+                        print(f"⚠️ Angel Feed Failed: {e}")
+            else:
+                try:
+                    import angel_live_feed
+                    angel_live_feed.start_angel_worker()
+                except Exception as e:
+                    print(f"⚠️ Angel Feed Failed: {e}")
         except Exception as e:
             print(f"⚠️ Feed Worker Start Failed: {e}")
 
