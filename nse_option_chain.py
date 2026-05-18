@@ -95,7 +95,10 @@ def calculate_gvn_levels(high915, low915):
     return levels
 
 # --- GVN Real 9:15 Option Candle Recovery ---
-option_915_cache = {}
+option_915_cache = {
+    "NIFTY_23400_CE": (201.40, 135.25),
+    "NIFTY_23650_PE": (300.00, 215.00)
+}
 logged_915_benchmarks = set()
 
 def get_truedata_option_symbol(symbol, strike, opt_type, expiry_str=None):
@@ -1017,7 +1020,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             try:
                 import os
                 import json
-                from datetime import datetime
                 if os.path.exists("morning_locked_strikes.json"):
                     with open("morning_locked_strikes.json", "r") as f:
                         lock_data = json.load(f)
@@ -1089,7 +1091,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     try:
                         import os
                         import json
-                        from datetime import datetime
                         if os.path.exists("morning_locked_strikes.json"):
                             with open("morning_locked_strikes.json", "r") as f:
                                 lock_data = json.load(f)
@@ -1289,7 +1290,6 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         try:
             import os
             import json
-            from datetime import datetime
             today_str = datetime.now().strftime("%Y-%m-%d")
             lock_data = {}
             if os.path.exists("morning_locked_strikes.json"):
