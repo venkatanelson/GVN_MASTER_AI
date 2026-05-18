@@ -153,6 +153,24 @@ class GVNAiDelta60Engine:
         levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
         if not levels: return
         
+        # 🔒 PERSISTENT MORNING LOCK: Only allow trades on the morning locked strike
+        locked_strike = 0
+        try:
+            import os
+            import json
+            from datetime import datetime
+            if os.path.exists("morning_locked_strikes.json"):
+                with open("morning_locked_strikes.json", "r") as f:
+                    lock_data = json.load(f)
+                if lock_data.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                    locked_strike = lock_data.get(symbol, {}).get(strike["type"], 0)
+        except: pass
+
+        if locked_strike > 0 and int(strike["strike"]) != locked_strike:
+            # Skip new entries for non-locked strikes, but manage active trades if they exist
+            if key not in self.memory["active_trades"]:
+                return
+        
         if "alerted_levels" not in self.memory:
             self.memory["alerted_levels"] = {}
 

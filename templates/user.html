@@ -524,6 +524,25 @@
                     <span id="master-pnl-value" style="font-size: 24px; font-weight: 900; color: var(--secondary);">+₹ 0.00</span>
                 </div>
             </div>
+            
+            <!-- 🔒 GVN MORNING STRIKE LOCK HUD -->
+            <div id="morning-lock-hud" style="margin-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 14px;">🔒</span>
+                    <div>
+                        <small style="color: var(--text-dim); font-size: 9px; font-weight: 800; text-transform: uppercase; display: block; letter-spacing: 0.5px;">Persistent Morning Strike Lock</small>
+                        <span id="morning-lock-status" style="font-size: 11px; font-weight: 700; color: #10b981;">STABLE & ACTIVE</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <span id="locked-ce-badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 12px; border-radius: 50px; font-size: 11px; font-weight: 900; color: #10b981;">
+                        CE: SCANNING...
+                    </span>
+                    <span id="locked-pe-badge" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 12px; border-radius: 50px; font-size: 11px; font-weight: 900; color: #ef4444;">
+                        PE: SCANNING...
+                    </span>
+                </div>
+            </div>
         </div>
 
         <!-- 📺 GVN LIVE TV: DALAL STREET TICKER & ANALYSIS -->
@@ -745,6 +764,21 @@
                     pressEl.style.color = d.pressure.includes('🛑') || d.pressure.includes('IRON') ? '#ef4444' : (d.pressure.includes('🚀') ? '#10b981' : '#fff');
                 }
                 
+                // Update Morning Locked Strikes HUD
+                const ceBadge = document.getElementById('locked-ce-badge');
+                const peBadge = document.getElementById('locked-pe-badge');
+                const lockStatus = document.getElementById('morning-lock-status');
+                
+                if (d.locked_ce && d.locked_pe) {
+                    ceBadge.innerText = `LOCKED CE: ${d.locked_ce}`;
+                    peBadge.innerText = `LOCKED PE: ${d.locked_pe}`;
+                    lockStatus.innerHTML = `<span style="color: #10b981;">● STABLE LOCK ACTIVE</span>`;
+                } else {
+                    ceBadge.innerText = `CE: SCANNING...`;
+                    peBadge.innerText = `PE: SCANNING...`;
+                    lockStatus.innerHTML = `<span style="color: var(--warning);">● SCANNING OPEN DELTAS</span>`;
+                }
+
                 // Update Ticker Content
                 const ticker = document.getElementById('ticker-content');
                 if (d.state === "ACTIVE") {

@@ -557,6 +557,21 @@ def user_status():
                 pts = entry - current_ltp
             running_pnl = round(pts * qty, 2)
 
+    # Load locked strikes from morning_locked_strikes.json
+    locked_ce = 0
+    locked_pe = 0
+    try:
+        import os
+        import json
+        from datetime import datetime
+        if os.path.exists("morning_locked_strikes.json"):
+            with open("morning_locked_strikes.json", "r") as f:
+                lock_data = json.load(f)
+            if lock_data.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                locked_ce = lock_data.get(symbol, {}).get("CE", 0)
+                locked_pe = lock_data.get(symbol, {}).get("PE", 0)
+    except: pass
+
     return jsonify({
         "spot": spot,
         "state": state,
@@ -572,7 +587,9 @@ def user_status():
         "condition": f"PCR: {pcr} | {pressure}",
         "ai_insight": ai_insight,
         "pcr": pcr,
-        "pressure": pressure
+        "pressure": pressure,
+        "locked_ce": locked_ce,
+        "locked_pe": locked_pe
     })
 
 @app.route('/api/ai-memory')
@@ -1267,11 +1284,10 @@ def start_system():
         threading.Thread(target=init_gvn, daemon=True).start()
         _initialized = True
 
-# Start system only in the main worker process
-if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-    start_system()
-
+# Start system only when running as the main application
 if __name__ == '__main__':
+    start_system()
+    
     port = int(os.environ.get("PORT", 8080))
     print("\n" + "="*60)
     print(f"🔥 GVN MASTER DASHBOARD IS NOW LIVE!")
