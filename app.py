@@ -1082,14 +1082,56 @@ def save_api_settings():
     if data.get('call_strike'): config.call_strike = data.get('call_strike')
     if data.get('put_strike'): config.put_strike = data.get('put_strike')
     
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as commit_err:
+        db.session.rollback()
+        flash("❌ Database full or locked! Please pause OneDrive sync, run 'python fix_disk_full.py' in your command prompt, and try again.")
+        return redirect(url_for('user_dashboard', user_id=uid))
+    
+    # Immediately test connection for the user's broker config
+    broker_name = config.broker_name
+    broker_key = broker_name.replace(" ", "") if broker_name else "Shoonya"
+    
+    # Reset connection status to False initially
+    shared_data.broker_connection_status[broker_key] = False
+    
+    try:
+        from broker_api import shoonya_http_login, angel_http_login, dhan_http_test
+        creds = config.get_credentials()
+        cfg = {
+            "client_id": config.client_id,
+            "password": creds.get('password'),
+            "client_secret": creds.get('api_secret'),
+            "access_token": creds.get('api_key'),
+            "totp_key": creds.get('totp_key')
+        }
+        
+        test_success = False
+        if broker_key.lower() == "shoonya":
+            token = shoonya_http_login(cfg)
+            if token:
+                test_success = True
+        elif broker_key.lower() == "angelone":
+            token = angel_http_login(cfg)
+            if token:
+                test_success = True
+        elif broker_key.lower() == "dhan":
+            test_success = dhan_http_test(cfg)
+            
+        if test_success:
+            shared_data.broker_connection_status[broker_key] = True
+            flash(f"🎉 Successfully connected to {broker_name}!")
+        else:
+            flash(f"❌ Connection Failed for {broker_name}! Please double check your Client ID, Secret, Password, and TOTP key.")
+    except Exception as login_err:
+        print(f"Error testing broker login: {login_err}")
     
     # Re-initialize orchestrator with new settings
     try:
         init_gvn()
-        flash("Settings Saved and Orchestrator Re-initialized!")
     except Exception as e:
-        flash(f"Settings Saved but Orchestrator Failed: {e}")
+        pass
         
     return redirect(url_for('user_dashboard', user_id=uid))
 
