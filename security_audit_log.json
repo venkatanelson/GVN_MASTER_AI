@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "timestamp": "2026-05-18T07:04:06.053399",
+    "event_type": "INTEGRITY_RESET",
+    "ip": "ADMIN",
+    "path": "SYSTEM",
+    "description": "Authorized hash update performed"
+  }
+]
