@@ -158,7 +158,6 @@ class GVNAiDelta60Engine:
         try:
             import os
             import json
-            from datetime import datetime
             if os.path.exists("morning_locked_strikes.json"):
                 with open("morning_locked_strikes.json", "r") as f:
                     lock_data = json.load(f)
@@ -242,18 +241,28 @@ class GVNAiDelta60Engine:
                 del self.memory["active_trades"][key]
                 return
 
-            # 📈 LEVEL-BASED TRAILING STOP LOSS (TSL)
-            # Find the highest GVN level crossed by the LTP
-            highest_crossed = max([lvl for lvl in levels.values() if lvl <= ltp], default=0)
+            # 📈 INSTITUTIONAL LEVEL-TO-LEVEL TRAILING STOP LOSS (TSL)
+            # GVN levels are sorted in ascending order.
+            # Once premium crosses a level, TSL trails to the PREVIOUS crossed level!
+            sorted_lvls = sorted([v for k, v in levels.items() if k.startswith("i")])
+            crossed_lvls = [lvl for lvl in sorted_lvls if lvl <= ltp]
             
-            if highest_crossed > trade.get("highest_level", 0) and highest_crossed > trade["entry"]:
-                trade["highest_level"] = highest_crossed
-                new_sl = highest_crossed - 12
-                # Only trail upwards
-                if new_sl > trade["sl"]:
-                    trade["sl"] = new_sl
-                    if self.telegram:
-                        self.telegram.send_alert(f"📈 <b>GVN TSL TRAILED</b>\n{symbol} {strike['strike']} {strike['type']} crossed {highest_crossed}\nNew SL: {new_sl}")
+            if len(crossed_lvls) >= 2:
+                highest_crossed = crossed_lvls[-1]
+                new_sl = crossed_lvls[-2] # Previous level is the new stop-loss!
+                
+                if highest_crossed > trade.get("highest_level", 0) and highest_crossed > trade["entry"]:
+                    trade["highest_level"] = highest_crossed
+                    
+                    # Only trail upwards
+                    if new_sl > trade["sl"]:
+                        trade["sl"] = new_sl
+                        if self.telegram:
+                            self.telegram.send_alert(
+                                f"📈 <b>GVN LEVEL TSL TRAILED</b>\n"
+                                f"🎯 {symbol} {strike['strike']} {strike['type']} crossed {highest_crossed}\n"
+                                f"🛡️ <b>New Stop Loss (Previous Level):</b> ₹{new_sl}"
+                            )
 
             # Multi-Stage Exit
             if not trade["t1_hit"] and ltp >= trade["t1"]:
@@ -300,7 +309,6 @@ class GVNAiDelta60Engine:
         # 🚀 GVN MULTI-USER DYNAMIC ROUTING ENGINE
         try:
             from app import app, db, User, UserBrokerConfig, AlgoTrade
-            from datetime import datetime
             
             with app.app_context():
                 # Query all active users whose Algo is turned ON and are not blocked
