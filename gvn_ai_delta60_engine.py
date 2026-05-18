@@ -224,7 +224,6 @@ class GVNAiDelta60Engine:
                 del self.memory["active_trades"][key]
                 return
 
-<<<<<<< HEAD
             # 📈 LEVEL-BASED TRAILING STOP LOSS (TSL)
             # Find the highest GVN level crossed by the LTP
             highest_crossed = max([lvl for lvl in levels.values() if lvl <= ltp], default=0)
@@ -238,10 +237,7 @@ class GVNAiDelta60Engine:
                     if self.telegram:
                         self.telegram.send_alert(f"📈 <b>GVN TSL TRAILED</b>\n{symbol} {strike['strike']} {strike['type']} crossed {highest_crossed}\nNew SL: {new_sl}")
 
-            # Target Exit
-=======
             # Multi-Stage Exit
->>>>>>> 9291f8a (🚀 Added Priority Level Targets (i1->i5) and Wind Reversal Exit logic for both CE and PE)
             if not trade["t1_hit"] and ltp >= trade["t1"]:
                 trade["t1_hit"] = True
                 self._fire_order(symbol, strike, "SELL", trade["total_lots"] // 2, "Partial Exit (T1 Hit)")
