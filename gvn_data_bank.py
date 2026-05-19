@@ -66,6 +66,47 @@ def save_option_snapshot(symbol, data_list):
     except Exception as e:
         logger.error(f"❌ Error saving to Data Bank: {e}")
 
+def save_option_915_benchmark(symbol, strike, opt_type, high, low, delta, levels):
+    """
+    Saves the 9:15 AM benchmark (high, low, delta, and i-levels) to sqlite.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Ensure table exists
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS option_915_benchmarks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                symbol TEXT,
+                strike FLOAT,
+                option_type TEXT,
+                high FLOAT,
+                low FLOAT,
+                delta FLOAT,
+                i1 FLOAT,
+                i5 FLOAT,
+                i7 FLOAT
+            )
+        ''')
+        
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO option_915_benchmarks 
+            (timestamp, symbol, strike, option_type, high, low, delta, i1, i5, i7)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            ts, symbol, float(strike), opt_type, float(high), float(low), float(delta),
+            float(levels.get("i1", 0)), float(levels.get("i5", 0)), float(levels.get("i7", 0))
+        ))
+        
+        conn.commit()
+        conn.close()
+        logger.info(f"💾 9:15 Option Benchmark Saved: {symbol} {strike} {opt_type} (H:{high} L:{low})")
+    except Exception as e:
+        logger.error(f"❌ Error saving 9:15 benchmark to Data Bank: {e}")
+
 def record_to_csv(symbol, item):
     """Records a single data point to CSV for playback/backtesting"""
     try:
