@@ -1049,6 +1049,12 @@ def clear_demo_history():
     
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/restart-server')
+def restart_server():
+    import os
+    print("⚠️ [ADMIN] Server restart triggered. Terminating process...")
+    os._exit(0)
+
 @app.route('/admin-extend-demo/<int:user_id>')
 def admin_extend_demo(user_id):
     user = db.session.get(User, user_id)

@@ -403,10 +403,13 @@ def fetch_nse_option_chain(symbol="NIFTY", exchange="NSE"):
         # Transform TrueData WS format to system format
         formatted_data = []
         for row in ws_chain:
+            strike_val = float(row.get("strike_price", row.get("strike", 0)))
             # Map column names if they differ (TrueData WS df usually has 'call_ltp', 'put_ltp', etc.)
             formatted_data.append({
-                "strike": float(row.get("strike_price", row.get("strike", 0))),
+                "strike": strike_val,
                 "CE": {
+                    "strikePrice": strike_val,
+                    "strike": strike_val,
                     "lastPrice": float(row.get("call_ltp", 0)),
                     "oi": int(row.get("call_oi", 0)),
                     "volume": int(row.get("call_v", row.get("call_volume", 0))),
@@ -414,6 +417,8 @@ def fetch_nse_option_chain(symbol="NIFTY", exchange="NSE"):
                     "lastTradedPrice": float(row.get("call_ltp", 0))
                 },
                 "PE": {
+                    "strikePrice": strike_val,
+                    "strike": strike_val,
                     "lastPrice": float(row.get("put_ltp", 0)),
                     "oi": int(row.get("put_oi", 0)),
                     "volume": int(row.get("put_v", row.get("put_volume", 0))),
@@ -1106,6 +1111,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     closest_pe_diff = 1.0
     best_ce_60 = None
     best_pe_60 = None
+    true_best_ce_60 = None
+    true_best_pe_60 = None
 
     options_count = len(records.get("data", []))
     with open("nse_status.log", "a") as f:
@@ -1208,19 +1215,24 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         locked_strike = lock_data.get(symbol, {}).get("CE" if opt_type == "CE" else "PE", 0)
             except: pass
             
+            # Always calculate the actual unconstrained real-time closest Delta 60 strike
+            if abs(current_delta_abs - target_delta) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
+                if opt_type == "CE":
+                    closest_ce_diff = abs(current_delta_abs - target_delta)
+                    true_best_ce_60 = strike
+                else:
+                    closest_pe_diff = abs(current_delta_abs - target_delta)
+                    true_best_pe_60 = strike
+
             if locked_strike > 0:
-                # Force selection to the locked strike
+                # Force selection to the locked strike for signals in current loop
                 if strike == locked_strike:
                     if opt_type == "CE": best_ce_60 = strike
                     else: best_pe_60 = strike
             else:
-                if abs(current_delta_abs - target_delta) < (closest_ce_diff if opt_type == "CE" else closest_pe_diff):
-                    if opt_type == "CE":
-                        closest_ce_diff = abs(current_delta_abs - target_delta)
-                        best_ce_60 = strike
-                    else:
-                        closest_pe_diff = abs(current_delta_abs - target_delta)
-                        best_pe_60 = strike
+                # Default selection to the unconstrained best
+                if opt_type == "CE": best_ce_60 = true_best_ce_60
+                else: best_pe_60 = true_best_pe_60
                         
             # Note: We only log once the loops complete to avoid spam
 
@@ -1453,6 +1465,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         live_option_chain_summary[symbol]["atm"] = int(round(underlying_value / base) * base)
         live_option_chain_summary["last_updated"] = datetime.now().strftime("%H:%M:%S")
 
+    if not best_ce_60: best_ce_60 = true_best_ce_60
+    if not best_pe_60: best_pe_60 = true_best_pe_60
+
     # Update Global Strikes separately
     if best_ce_60 and best_pe_60:
         formatted_expiry = expiry_dt.strftime("%d %b").upper()
@@ -1480,15 +1495,49 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             if lock_data.get("date") != today_str:
                 lock_data = {"date": today_str}
             
-            if symbol not in lock_data or lock_data[symbol].get("CE", 0) == 0:
+            # 🔄 DYNAMIC STRIKE ROLLOVER: Relax lock if spot price has drifted by 60+ points
+            is_drifted = False
+            if symbol in lock_data:
+                saved_spot = lock_data[symbol].get("spot", 0)
+                target_ce = int(true_best_ce_60) if true_best_ce_60 else int(best_ce_60)
+                target_pe = int(true_best_pe_60) if true_best_pe_60 else int(best_pe_60)
+                
+                if saved_spot == 0:
+                    # Self-heal missing spot key from morning files
+                    is_drifted = True
+                    with open("nse_status.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: [STRIKE ROLLOVER] Initializing spot key in existing locked strikes to {underlying_value}...\n")
+                elif abs(underlying_value - saved_spot) >= 60.0:
+                    is_drifted = True
+                    with open("nse_status.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: [STRIKE ROLLOVER] {symbol} Spot drifted from {saved_spot} to {underlying_value} (>= 60 pts). Updating locked strikes to current Delta 60 CE: {target_ce}, PE: {target_pe}...\n")
+                    # Also append to shared_data.demo_logs for dashboard visual
+                    try:
+                        shared_data.demo_logs.append(f"🔄 [STRIKE ROLLOVER] Nifty Spot drifted >= 60 pts. Updating locked strikes to CE: {target_ce}, PE: {target_pe}")
+                    except: pass
+            
+            if symbol not in lock_data or lock_data[symbol].get("CE", 0) == 0 or is_drifted:
+                lock_ce = int(true_best_ce_60) if true_best_ce_60 else int(best_ce_60)
+                lock_pe = int(true_best_pe_60) if true_best_pe_60 else int(best_pe_60)
                 lock_data[symbol] = {
-                    "CE": int(best_ce_60),
-                    "PE": int(best_pe_60)
+                    "CE": lock_ce,
+                    "PE": lock_pe,
+                    "spot": float(underlying_value)
                 }
                 with open("morning_locked_strikes.json", "w") as f:
                     json.dump(lock_data, f, indent=4)
-                with open("nse_status.log", "a", encoding="utf-8") as f:
-                    f.write(f"{datetime.now()}: [MORNING LOCK] Locked morning strikes for {symbol} -> CE: {best_ce_60}, PE: {best_pe_60}\n")
+                
+                # Update current active selection to match the rollover strikes immediately
+                best_ce_60 = lock_ce
+                best_pe_60 = lock_pe
+                current_delta_60_strikes[symbol]["CE"] = lock_ce
+                current_delta_60_strikes[symbol]["PE"] = lock_pe
+                live_option_chain_summary[symbol]["ce_60"] = lock_ce
+                live_option_chain_summary[symbol]["pe_60"] = lock_pe
+                
+                if not is_drifted:
+                    with open("nse_status.log", "a", encoding="utf-8") as f:
+                        f.write(f"{datetime.now()}: [MORNING LOCK] Locked morning strikes for {symbol} -> CE: {best_ce_60}, PE: {best_pe_60} at Spot: {underlying_value}\n")
         except Exception as e:
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: [MORNING LOCK ERROR] {str(e)}\n")
