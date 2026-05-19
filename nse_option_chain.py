@@ -236,34 +236,50 @@ def generate_emulated_option_chain(symbol, spot_price):
     if spot_price <= 0:
         return None
         
-    # Determine base parameters per index
-    if "BANKNIFTY" in symbol.upper():
+    # Determine base parameters and expiry weekday per index
+    today = datetime.now()
+    symbol_upper = symbol.upper()
+    
+    expiry_weekday = 3 # Default: Thursday (NIFTY)
+    if "BANKNIFTY" in symbol_upper:
         base_strike = 100
         strike_range = range(int(spot_price // 100) * 100 - 1500, int(spot_price // 100) * 100 + 1600, 100)
         iv = 18.0
-    elif "FINNIFTY" in symbol.upper():
+        expiry_weekday = 2 # Wednesday
+    elif "FINNIFTY" in symbol_upper:
         base_strike = 50
         strike_range = range(int(spot_price // 50) * 50 - 800, int(spot_price // 50) * 50 + 850, 50)
         iv = 16.0
+        expiry_weekday = 1 # Tuesday
+    elif "MIDCPNIFTY" in symbol_upper:
+        base_strike = 25
+        strike_range = range(int(spot_price // 25) * 25 - 400, int(spot_price // 25) * 25 + 425, 25)
+        iv = 17.0
+        expiry_weekday = 0 # Monday
+    elif "SENSEX" in symbol_upper:
+        base_strike = 100
+        strike_range = range(int(spot_price // 100) * 100 - 2000, int(spot_price // 100) * 100 + 2100, 100)
+        iv = 17.5
+        expiry_weekday = 4 # Friday
     else: # NIFTY
         base_strike = 50
         strike_range = range(int(spot_price // 50) * 50 - 800, int(spot_price // 50) * 50 + 850, 50)
         iv = 15.0
+        expiry_weekday = 3 # Thursday
 
-    formatted_data = []
-    
-    # Expiry is upcoming Thursday
-    today = datetime.now()
-    days_to_thursday = (3 - today.weekday()) % 7
-    if days_to_thursday == 0 and today.hour >= 15:
-        days_to_thursday = 7
-    expiry_dt = today + timedelta(days=days_to_thursday)
+    days_to_expiry = (expiry_weekday - today.weekday()) % 7
+    # If today is the expiry day and market is closed (past 15:30), roll to the next week
+    if days_to_expiry == 0 and (today.hour > 15 or (today.hour == 15 and today.minute >= 30)):
+        days_to_expiry = 7
+        
+    expiry_dt = today + timedelta(days=days_to_expiry)
     expiry_str = expiry_dt.strftime("%d-%b-%Y")
     
-    days_to_expiry = max(days_to_thursday, 0.1)
-    T = days_to_expiry / 365.0
+    T = max(days_to_expiry, 0.1) / 365.0
     r = 0.07
     sigma = iv / 100.0
+
+    formatted_data = []
 
     for strike in strike_range:
         # Calculate theoretical prices using Black-Scholes
