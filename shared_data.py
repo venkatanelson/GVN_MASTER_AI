@@ -22,6 +22,9 @@ market_data = {
 # Live TrueData Option Chain Storage
 truedata_option_chains = {}
 
+# Forced/Locked Strike Price Storage (GVN Overrides)
+forced_strike_data = {}
+
 # Live Playback Terminal Logs
 demo_logs = []
 
