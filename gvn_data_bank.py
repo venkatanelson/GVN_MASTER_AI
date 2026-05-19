@@ -74,6 +74,12 @@ def save_option_915_benchmark(symbol, strike, opt_type, high, low, delta, levels
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
+        # 🛡️ GVN SCHEMA PROTECTION: Detect and fix outdated table schema
+        try:
+            cursor.execute("SELECT strike FROM option_915_benchmarks LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("DROP TABLE IF EXISTS option_915_benchmarks")
+        
         # Ensure table exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS option_915_benchmarks (
