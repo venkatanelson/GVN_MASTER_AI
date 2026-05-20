@@ -172,7 +172,7 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
         
     # 3. Try to fetch live from TrueData REST API
     td_opt_symbol = get_truedata_option_symbol(symbol, strike, opt_type, expiry_str)
-    today_str = datetime.now().strftime("%Y%m%d")
+    today_str = datetime.now().strftime("%y%m%d")
     from_dt = f"{today_str}091500"
     to_dt = f"{today_str}092000"
     
@@ -1058,8 +1058,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             if not strike_data or float(strike_data.get("lastPrice") or 0) == 0:
                 try:
                     td_opt_symbol = get_truedata_option_symbol(symbol, s_price, s_type, nearest_expiry)
-                    now_str = datetime.now().strftime("%Y%m%d%H%M%S")
-                    five_min_ago = (datetime.now() - timedelta(minutes=5)).strftime("%Y%m%d%H%M%S")
+                    now_str = datetime.now().strftime("%y%m%d%H%M%S")
+                    five_min_ago = (datetime.now() - timedelta(minutes=5)).strftime("%y%m%d%H%M%S")
                     hist = td_api.get_historical_data(td_opt_symbol, five_min_ago, now_str, resolution="1")
                     candles = []
                     if isinstance(hist, list):
