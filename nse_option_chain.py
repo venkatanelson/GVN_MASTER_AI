@@ -905,28 +905,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         except:
             pass
     else:
-        # 🚀 GVN HYBRID: Check for Live WebSocket Data first (Fastest/Lowest Latency)
-        ws_chain = shared_data.truedata_option_chains.get(symbol)
-        if ws_chain and len(ws_chain) > 0:
-            spot_val = shared_data.market_data.get(symbol, 0)
-            data = {
-                "records": {
-                    "data": ws_chain,
-                    "underlyingValue": spot_val
-                },
-                "source": "LIVE_WEBSOCKET"
-            }
-            # Log only occasionally to avoid bloat
-            if random.randint(1, 10) == 1:
-                with open("nse_status.log", "a") as f:
-                    f.write(f"{datetime.now()}: [INFO] Using Live WebSocket Chain for {symbol}\n")
-        else:
-            # Fallback to REST API (Angel One / NSE Direct)
-            exch = "MCX" if symbol == "MCX" else "NSE"
-            data = fetch_nse_option_chain(symbol, exchange=exch)
-            if ws_chain is not None:
-                 with open("nse_status.log", "a") as f:
-                    f.write(f"{datetime.now()}: [INFO] WS Active but no data for {symbol} yet. Skipping slow fallbacks.\n")
+        exch = "MCX" if symbol == "MCX" else "NSE"
+        data = fetch_nse_option_chain(symbol, exchange=exch)
 
         # 🕒 GVN SPECIAL: Capture 9:15 AM Benchmark during LIVE Trading
         if data and "records" in data:
