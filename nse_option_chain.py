@@ -320,12 +320,23 @@ def generate_emulated_option_chain(symbol, spot_price):
         iv = 15.0
         expiry_weekday = 3 # Thursday
 
-    days_to_expiry = (expiry_weekday - today.weekday()) % 7
-    # If today is the expiry day and market is closed (past 15:30), roll to the next week
-    if days_to_expiry == 0 and (today.hour > 15 or (today.hour == 15 and today.minute >= 30)):
-        days_to_expiry = 7
+    # 🌟 GVN SPECIAL: Use User-Verified/System-Active Expiries for accurate Black-Scholes pricing
+    if symbol_upper == "NIFTY":
+        expiry_str_raw = "26-05-2026"
+    elif "MCX" in symbol_upper or "CRUDE" in symbol_upper:
+        expiry_str_raw = "14-05-2026"
+    else:
+        expiry_str_raw = None
+
+    if expiry_str_raw:
+        expiry_dt = datetime.strptime(expiry_str_raw, "%d-%m-%Y")
+        days_to_expiry = max(0, (expiry_dt.date() - today.date()).days)
+    else:
+        days_to_expiry = (expiry_weekday - today.weekday()) % 7
+        if days_to_expiry == 0 and (today.hour > 15 or (today.hour == 15 and today.minute >= 30)):
+            days_to_expiry = 7
+        expiry_dt = today + timedelta(days=days_to_expiry)
         
-    expiry_dt = today + timedelta(days=days_to_expiry)
     expiry_str = expiry_dt.strftime("%d-%b-%Y")
     
     T = max(days_to_expiry, 0.1) / 365.0
