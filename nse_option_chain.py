@@ -1018,7 +1018,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     if symbol == "NIFTY":
         # Force specific strikes based on user request
         # Force specific strikes based on user request (Authorized Tracks)
-        forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE", "23650 PE"]
+        forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE", "23650 PE", "23750 PE"]
         
         # Also include the locked morning strikes if any
         if symbol in shared_data.daily_authorized_strikes:
@@ -1197,6 +1197,28 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 admin_low = 152.6
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 
+                custom_levels = {
+                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
+                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
+                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
+                }
+                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
+            elif strike_name == "23650 CE":
+                # Admin provided High/Low from TradingView screenshot
+                admin_high = 143.00
+                admin_low = 124.00
+                calc_levels = calculate_gvn_levels(admin_high, admin_low)
+                custom_levels = {
+                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
+                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
+                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
+                }
+                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
+            elif strike_name == "23750 PE":
+                # Admin provided High/Low from TradingView screenshot
+                admin_high = 435.00
+                admin_low = 346.00
+                calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 custom_levels = {
                     "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
                     "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
