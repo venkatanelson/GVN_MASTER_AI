@@ -1,23 +1,9 @@
 [
   {
-    "timestamp": "2026-05-20T15:23:36.117558",
+    "timestamp": "2026-05-20T15:44:20.104974",
     "event_type": "INTEGRITY_RESET",
     "ip": "ADMIN",
     "path": "SYSTEM",
     "description": "Authorized hash update performed"
-  },
-  {
-    "timestamp": "2026-05-20T15:26:00.959591",
-    "event_type": "FILE_MODIFIED",
-    "ip": "SYSTEM",
-    "path": "nse_option_chain.py",
-    "description": "Hash mismatch detected"
-  },
-  {
-    "timestamp": "2026-05-20T15:27:02.157087",
-    "event_type": "FILE_MODIFIED",
-    "ip": "SYSTEM",
-    "path": "nse_option_chain.py",
-    "description": "Hash mismatch detected"
   }
 ]

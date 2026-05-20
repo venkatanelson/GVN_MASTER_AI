@@ -1492,51 +1492,49 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 is_wind_aligned = True
                         
                         # If the wind direction does not match the option type (or is sideways), do not enter trade!
-                        if not is_wind_aligned:
-                            continue
-
-                        lower_lvl = None
-                        upper_lvl = None
-                        for i in range(len(sorted_lvls)):
-                            if ltp >= sorted_lvls[i]:
-                                lower_lvl = sorted_lvls[i]
-                                if i + 1 < len(sorted_lvls):
-                                    upper_lvl = sorted_lvls[i+1]
-                        
-                        # Trigger if price is within 1.5 points of a level (Dot-to-Dot)
-                        if lower_lvl and (abs(ltp - lower_lvl) < 1.5):
-                            manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
-                            # 🚀 GVN FIX: 12-Point Stop Loss
-                            manual_sl = ltp - 12.0 
+                        if is_wind_aligned:
+                            lower_lvl = None
+                            upper_lvl = None
+                            for i in range(len(sorted_lvls)):
+                                if ltp >= sorted_lvls[i]:
+                                    lower_lvl = sorted_lvls[i]
+                                    if i + 1 < len(sorted_lvls):
+                                        upper_lvl = sorted_lvls[i+1]
                             
-                            shared_data.demo_trade = {
-                                "active": True,
-                                "symbol": full_sym,
-                                "entry_price": ltp,
-                                "target": manual_tgt,
-                                "sl": manual_sl,
-                                "qty": 50 if symbol == "NIFTY" else 15 # Back to 50 standard
-                            }
-                            
-                            try:
-                                from gvn_telegram_engine import TelegramAlertManager
-                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                            # Trigger if price is within 1.5 points of a level (Dot-to-Dot)
+                            if lower_lvl and (abs(ltp - lower_lvl) < 1.5):
+                                manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
+                                # 🚀 GVN FIX: 12-Point Stop Loss
+                                manual_sl = ltp - 12.0 
                                 
-                                # Find which level name was triggered
-                                lvl_name = "Manual"
-                                for k, v in levels.items():
-                                    if abs(ltp - v) < 2.0:
-                                        lvl_name = k
-                                        break
-                                
-                                tg.alert_entry({
-                                    "symbol": full_sym, 
-                                    "entry_price": ltp, 
-                                    "target": manual_tgt, 
+                                shared_data.demo_trade = {
+                                    "active": True,
+                                    "symbol": full_sym,
+                                    "entry_price": ltp,
+                                    "target": manual_tgt,
                                     "sl": manual_sl,
-                                    "level": lvl_name.upper()
-                                })
-                            except: pass
+                                    "qty": 50 if symbol == "NIFTY" else 15 # Back to 50 standard
+                                }
+                                
+                                try:
+                                    from gvn_telegram_engine import TelegramAlertManager
+                                    tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                    
+                                    # Find which level name was triggered
+                                    lvl_name = "Manual"
+                                    for k, v in levels.items():
+                                        if abs(ltp - v) < 2.0:
+                                            lvl_name = k
+                                            break
+                                    
+                                    tg.alert_entry({
+                                        "symbol": full_sym, 
+                                        "entry_price": ltp, 
+                                        "target": manual_tgt, 
+                                        "sl": manual_sl,
+                                        "level": lvl_name.upper()
+                                    })
+                                except: pass
                 
                 # ---- DEFAULT MOMENTUM LOGIC (For Non-Authorized Strikes) ----
                 # Disabled to enforce strict, institutional level-to-level discipline on Authorized Tracks
