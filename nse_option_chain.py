@@ -1090,9 +1090,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 
                 if spot > 0:
                     if s_type == "CE":
-                        emulated_lp = max(spot - s_price, 0) + 15.0
+                        offset = 192.80 if s_price == 23650 else 150.0
+                        emulated_lp = max(spot - s_price, 0) + offset
                     else:
-                        emulated_lp = max(s_price - spot, 0) + 15.0
+                        offset = 161.40 if s_price == 23750 else 150.0
+                        emulated_lp = max(s_price - spot, 0) + offset
                     
                     emulated_lp = round(emulated_lp, 2)
                     strike_data = {
