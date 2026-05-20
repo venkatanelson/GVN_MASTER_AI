@@ -1457,6 +1457,20 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         is_strike_allowed = False
 
                     if is_strike_allowed and not shared_data.demo_trade.get("active"):
+                        # 🚀 GVN WIND DIRECTION ALIGNMENT ENFORCEMENT:
+                        wind_dir = market_pulse.get(symbol, {}).get("wind_direction", "")
+                        is_wind_aligned = False
+                        if opt_type == "CE":
+                            if "UP WIND" in wind_dir or "SHORT COVERING" in wind_dir or "SLOW UP" in wind_dir:
+                                is_wind_aligned = True
+                        elif opt_type == "PE":
+                            if "DOWN WIND" in wind_dir or "LONG UNWINDING" in wind_dir or "SLOW DOWN" in wind_dir:
+                                is_wind_aligned = True
+                        
+                        # If the wind direction does not match the option type (or is sideways), do not enter trade!
+                        if not is_wind_aligned:
+                            continue
+
                         lower_lvl = None
                         upper_lvl = None
                         for i in range(len(sorted_lvls)):
