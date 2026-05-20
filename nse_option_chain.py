@@ -1205,8 +1205,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
             elif strike_name == "23650 CE":
                 # Admin provided High/Low from TradingView screenshot
-                admin_high = 143.00
-                admin_low = 124.00
+                admin_high = 297.50
+                admin_low = 100.40
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 custom_levels = {
                     "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
@@ -1216,8 +1216,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
             elif strike_name == "23750 PE":
                 # Admin provided High/Low from TradingView screenshot
-                admin_high = 435.00
-                admin_low = 346.00
+                admin_high = 440.00
+                admin_low = 390.80
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 custom_levels = {
                     "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 

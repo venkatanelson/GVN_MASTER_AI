@@ -116,8 +116,8 @@ def run_tests():
     print(f"   i0 (Bottom):         {pe_levels['i0']}")
 
     # 23650 CE levels (TradingView screenshot values)
-    ce_23650_levels = calculate_gvn_levels(143.00, 124.00)
-    print(f"\n[23650 CE - SCREENSHOT] High=143.00, Low=124.00:")
+    ce_23650_levels = calculate_gvn_levels(297.50, 100.40)
+    print(f"\n[23650 CE - SCREENSHOT] High=297.50, Low=100.40:")
     print(f"   i1 (Green/Top):      {ce_23650_levels['i1']}")
     print(f"   i3 (T1/Red):         {ce_23650_levels['i3']}")
     print(f"   i5 (Blue/Entry):     {ce_23650_levels['i5']}")
@@ -126,8 +126,8 @@ def run_tests():
     print(f"   i0 (Bottom):         {ce_23650_levels['i0']}")
 
     # 23750 PE levels (TradingView screenshot values)
-    pe_23750_levels = calculate_gvn_levels(435.00, 346.00)
-    print(f"[23750 PE - SCREENSHOT] High=435.00, Low=346.00:")
+    pe_23750_levels = calculate_gvn_levels(440.00, 390.80)
+    print(f"[23750 PE - SCREENSHOT] High=440.00, Low=390.80:")
     print(f"   i1 (Green/Top):      {pe_23750_levels['i1']}")
     print(f"   i3 (T1/Red):         {pe_23750_levels['i3']}")
     print(f"   i5 (Blue/Entry):     {pe_23750_levels['i5']}")

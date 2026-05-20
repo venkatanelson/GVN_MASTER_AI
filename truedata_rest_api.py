@@ -122,12 +122,12 @@ class TrueDataRestAPI:
                     expiry = "14-05-2026" # Validated from Sample Code
                     exchange = "MCX"
                 else:
-                    expiry = "12-05-2026" # User Verified Nifty Expiry
+                    expiry = "26-05-2026" # User Verified Nifty Expiry
                 
         params = {"symbol": symbol, "expiry": expiry, "exchange": exchange, "response": "json"}
         return self._make_request("getoptionchain", params)
 
-    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="12-05-2026"):
+    def get_option_chain_with_greeks(self, symbol="NIFTY", expiry="26-05-2026"):
         """Fetches live option chain with Greek values (Delta, Gamma, etc.)"""
         params = {"symbol": symbol, "expiry": expiry, "response": "json"}
         return self._make_request("getOptionChainwithGreeks", params)
@@ -158,7 +158,7 @@ class TrueDataRestAPI:
         if "CRUDE" in symbol.upper():
             return ["14-05-2026"] 
             
-        return ["19-05-2026"] # User Verified Next Nifty Expiry
+        return ["26-05-2026"] # User Verified Next Nifty Expiry
 
     def get_ltp(self, symbol, strike, series, expiry):
         """Fetches Last Traded Price for specific strike"""
