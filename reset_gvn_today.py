@@ -11,7 +11,7 @@ def reset_today():
         "date": "2026-05-20",
         "NIFTY": {
             "23650 CE": {
-                "high": 297.50,
+                "high": 137.50,
                 "low": 100.40,
                 "timestamp": datetime.now().isoformat()
             },

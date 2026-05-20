@@ -1207,7 +1207,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
             elif strike_name == "23650 CE":
                 # Admin provided High/Low from TradingView screenshot
-                admin_high = 297.50
+                admin_high = 137.50
                 admin_low = 100.40
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 custom_levels = {
