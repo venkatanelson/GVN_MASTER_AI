@@ -9,6 +9,7 @@ import shared_data
 import os
 import logging
 import random
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -97,9 +98,40 @@ def calculate_gvn_levels(high915, low915):
 # --- GVN Real 9:15 Option Candle Recovery ---
 option_915_cache = {
     "NIFTY_23400_CE": (201.40, 135.25),
-    "NIFTY_23650_PE": (300.00, 215.00)
+    "NIFTY_23550_CE": (179.30, 107.00),
+    "NIFTY_23650_PE": (376.90, 322.00)
 }
 logged_915_benchmarks = set()
+
+def load_recorded_915_ohlc():
+    file_path = "gvn_recorded_915_ohlc.json"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("date") == today_str:
+                return data
+            else:
+                logger.info("🗑️ Clearing yesterday's GVN 9:15 candle recordings...")
+                try:
+                    with open("nse_status.log", "a", encoding="utf-8") as lf:
+                        lf.write(f"{datetime.now()}: [CLEANUP] Cleared previous day's GVN 9:15 candle recordings.\n")
+                except: pass
+        except Exception as e:
+            logger.error(f"Error loading recorded 9:15 OHLC: {e}")
+    return {"date": today_str, "NIFTY": {}}
+
+def save_recorded_915_ohlc(strike_name, high, low):
+    file_path = "gvn_recorded_915_ohlc.json"
+    data = load_recorded_915_ohlc()
+    data["NIFTY"][strike_name] = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        logger.info(f"💾 Recorded 9:15 candle for {strike_name}: High={high}, Low={low}")
+    except Exception as e:
+        logger.error(f"Error saving recorded 9:15 OHLC: {e}")
 
 def get_truedata_option_symbol(symbol, strike, opt_type, expiry_str=None):
     if not expiry_str:
@@ -122,21 +154,30 @@ def get_truedata_option_symbol(symbol, strike, opt_type, expiry_str=None):
     return f"{symbol}{formatted_expiry}{int(strike)}{opt_type}"
 
 def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
+    strike_key = f"{int(strike)} {opt_type}"
+    
+    # 1. Try to load from today's recorded JSON file (Retrieval Program)
+    recorded_data = load_recorded_915_ohlc()
+    if strike_key in recorded_data.get("NIFTY", {}):
+        rec = recorded_data["NIFTY"][strike_key]
+        logger.info(f"🎯 [RETRIEVED RECORDING] Found GVN 9:15 AM OHLC for {strike_key}: High={rec['high']}, Low={rec['low']}")
+        return rec["high"], rec["low"]
+
+    # 2. Try hardcoded cache fallback
     cache_key = f"{symbol}_{int(strike)}_{opt_type}"
     if cache_key in option_915_cache:
-        return option_915_cache[cache_key]
+        val = option_915_cache[cache_key]
+        save_recorded_915_ohlc(strike_key, val[0], val[1])
+        return val
         
+    # 3. Try to fetch live from TrueData REST API
     td_opt_symbol = get_truedata_option_symbol(symbol, strike, opt_type, expiry_str)
-    
-    # 9:15 candle time frame (YYYYMMDDHHMMSS) - Fetch full 5-minute window (9:15 to 9:20)
     today_str = datetime.now().strftime("%Y%m%d")
     from_dt = f"{today_str}091500"
     to_dt = f"{today_str}092000"
     
     try:
         hist = td_api.get_historical_data(td_opt_symbol, from_dt, to_dt)
-        
-        # 🚀 GVN SMART PARSER: Handle multiple TrueData History formats
         candles = []
         if isinstance(hist, list):
             candles = hist
@@ -144,22 +185,34 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
             candles = hist.get('candles') or hist.get('records') or hist.get('data') or hist.get('Records') or []
             
         if candles and len(candles) > 0:
-            # TrueData format usually: [time, open, high, low, close, volume]
-            # High is index 2, Low is index 3
             highs = [float(c[2]) for c in candles if len(c) > 3]
             lows = [float(c[3]) for c in candles if len(c) > 3]
             
             if highs and lows:
                 high = max(highs)
                 low = min(lows)
+                save_recorded_915_ohlc(strike_key, high, low)
                 option_915_cache[cache_key] = (high, low)
-                logger.info(f"🎯 [TRUE-DATA] Retrieved REAL 9:15 AM 5-Min OHLC for {td_opt_symbol}: High={high}, Low={low} (Aggregated from {len(candles)} candles)")
+                logger.info(f"🎯 [TRUE-DATA] Retrieved & Recorded REAL 9:15 AM 5-Min OHLC for {td_opt_symbol}: High={high}, Low={low}")
                 return high, low
-                
     except Exception as e:
-        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {td_opt_symbol}: {e}")
+        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {td_opt_symbol} from TrueData: {e}")
+        
+    # 4. Try to fetch from Angel One (Bypass/Fallback)
+    try:
+        angel_candle = get_915_candle_angel(symbol, strike, opt_type)
+        if angel_candle and angel_candle.get("high") and angel_candle.get("low"):
+            high = angel_candle["high"]
+            low = angel_candle["low"]
+            save_recorded_915_ohlc(strike_key, high, low)
+            option_915_cache[cache_key] = (high, low)
+            logger.info(f"🎯 [ANGEL ONE] Retrieved & Recorded REAL 9:15 AM OHLC for {strike_key}: High={high}, Low={low}")
+            return high, low
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {strike_key} from Angel: {e}")
         
     return None
+
 
 # --- Black-Scholes Delta Calculation ---
 def norm_cdf(x):
@@ -965,7 +1018,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     if symbol == "NIFTY":
         # Force specific strikes based on user request
         # Force specific strikes based on user request (Authorized Tracks)
-        forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE"]
+        forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE", "23650 PE"]
         
         # Also include the locked morning strikes if any
         if symbol in shared_data.daily_authorized_strikes:
@@ -1067,8 +1120,21 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
             elif strike_name == "23550 CE":
                 # Admin provided High/Low
-                admin_high = 316.4
-                admin_low = 253.15
+                admin_high = 179.30
+                admin_low = 107.00
+                calc_levels = calculate_gvn_levels(admin_high, admin_low)
+                
+                custom_levels = {
+                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
+                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
+                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
+                }
+                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
+                
+            elif strike_name == "23650 PE":
+                # Admin provided High/Low
+                admin_high = 376.90
+                admin_low = 322.00
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 
                 custom_levels = {
@@ -1273,10 +1339,37 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
                         tgt = shared_data.demo_trade["target"]
                         sl = shared_data.demo_trade["sl"]
+                        entry_price = shared_data.demo_trade.get("entry_price", ltp)
+                        
                         if ltp >= tgt:
                             shared_data.demo_trade["active"] = False
+                            pnl = ltp - entry_price
+                            try:
+                                from gvn_telegram_engine import TelegramAlertManager
+                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                tg.alert_exit({
+                                    "symbol": full_sym,
+                                    "exit_reason": "Target Hit ✅",
+                                    "exit_price": ltp,
+                                    "pnl": pnl
+                                })
+                            except Exception as e:
+                                logger.error(f"Error sending exit alert: {e}")
+                                
                         elif ltp <= sl:
                             shared_data.demo_trade["active"] = False
+                            pnl = ltp - entry_price
+                            try:
+                                from gvn_telegram_engine import TelegramAlertManager
+                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                tg.alert_exit({
+                                    "symbol": full_sym,
+                                    "exit_reason": "Stop Loss Hit ⛔",
+                                    "exit_price": ltp,
+                                    "pnl": pnl
+                                })
+                            except Exception as e:
+                                logger.error(f"Error sending exit alert: {e}")
 
                     # 2. Level-to-Level Signal Trigger
                     # 🔒 PERSISTENT MORNING LOCK: Only trigger trades on locked morning strike
