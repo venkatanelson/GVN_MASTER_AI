@@ -1864,7 +1864,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 found_target = True
                 lv = item["levels"]
                 with open("nse_status.log", "a") as f:
-                    f.write(f"{datetime.now()}: [TRACK] 24100 PE Levels -> i7:{lv['Level_7']} i5:{lv['Level_5']} i1:{lv['Level_1']} | LTP: {item['ltp']}\n")
+                    f.write(f"{datetime.now()}: [TRACK] 24100 PE Levels -> i7:{lv.get('i7')} i5:{lv.get('i5')} i1:{lv.get('i1')} | LTP: {item['ltp']}\n")
         
         if not found_target and symbol == "NIFTY":
             # If not in scanner due to other filters, look for it in raw data
@@ -1875,7 +1875,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     ltp = opt.get("lastPrice", 0)
                     lv = calculate_gvn_levels(ltp * 1.05, ltp * 0.95) # Mock for now if 9:15 not stored
                     with open("nse_status.log", "a") as f:
-                        f.write(f"{datetime.now()}: [FORCE TRACK] 24100 PE -> LTP: {ltp} | i7:{lv['Level_7']}\n")
+                        f.write(f"{datetime.now()}: [FORCE TRACK] 24100 PE -> LTP: {ltp} | i7:{lv.get('i7')}\n")
     except Exception as e:
         with open("nse_status.log", "a") as f:
             f.write(f"{datetime.now()}: [SYNC ERROR] {str(e)}\n")
