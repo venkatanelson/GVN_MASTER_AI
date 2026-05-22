@@ -855,28 +855,86 @@ def get_oc_data():
     # 🛢️ LIVE MCX CRUDE OIL Support
     exchange = "MCX" if "CRUDE" in symbol.upper() or "MCX" in symbol.upper() else "NSE"
     
-    # Try 1: TrueData WebSocket (Ultra-Fast)
-    ws_chain = shared_data.truedata_option_chains.get(symbol)
-    if ws_chain:
-        return jsonify({
-            "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "spot_price": shared_data.market_data.get(symbol, 0), "chain": ws_chain[:20]
-        })
-
-    # Try 2: TrueData REST (Fallback)
-    try:
-        from truedata_rest_api import TrueDataRestAPI
-        if not hasattr(shared_data, 'td_api') or shared_data.td_api is None:
-            shared_data.td_api = TrueDataRestAPI(os.getenv("TRUEDATA_USERNAME"), os.getenv("TRUEDATA_PASSWORD"))
-        
-        chain = shared_data.td_api.get_option_chain(symbol, exchange=exchange)
-        if chain:
+    TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
+    
+    if TRUEDATA_ENABLED:
+        # Try 1: TrueData WebSocket (Ultra-Fast)
+        ws_chain = shared_data.truedata_option_chains.get(symbol)
+        if ws_chain:
             return jsonify({
                 "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "spot_price": shared_data.market_data.get(symbol, 0), "chain": chain[:20]
+                "spot_price": shared_data.market_data.get(symbol, 0), "chain": ws_chain[:20]
+            })
+
+        # Try 2: TrueData REST (Fallback)
+        try:
+            from truedata_rest_api import TrueDataRestAPI
+            if not hasattr(shared_data, 'td_api') or shared_data.td_api is None:
+                shared_data.td_api = TrueDataRestAPI(os.getenv("TRUEDATA_USERNAME"), os.getenv("TRUEDATA_PASSWORD"))
+            
+            chain = shared_data.td_api.get_option_chain(symbol, exchange=exchange)
+            if chain:
+                return jsonify({
+                    "status": "success", "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "spot_price": shared_data.market_data.get(symbol, 0), "chain": chain[:20]
+                })
+        except Exception as e:
+            shared_data.td_api = None
+
+    # Try 3: Local Option Chain Engine (Angel One + NSE Direct + Emulator)
+    try:
+        from nse_option_chain import fetch_nse_option_chain
+        nse_chain = fetch_nse_option_chain(symbol, exchange=exchange)
+        if nse_chain:
+            flat_chain = []
+            records = nse_chain.get("records", {})
+            underlying_val = records.get("underlyingValue", 0)
+            if underlying_val <= 0:
+                underlying_val = shared_data.market_data.get(symbol, 0)
+            data_rows = records.get("data", [])
+            
+            for row in data_rows:
+                strike = float(row.get("strikePrice") or row.get("strike", 0))
+                if strike <= 0:
+                    continue
+                ce = row.get("CE") or {}
+                pe = row.get("PE") or {}
+                flat_chain.append({
+                    "strike": strike,
+                    "ce_ltp": float(ce.get("lastPrice") or ce.get("lastTradedPrice", 0)),
+                    "pe_ltp": float(pe.get("lastPrice") or pe.get("lastTradedPrice", 0)),
+                    "ce_oi": int(ce.get("openInterest", 0)),
+                    "pe_oi": int(pe.get("openInterest", 0)),
+                    "ce_vol": int(ce.get("totalTradedVolume", 0)),
+                    "pe_vol": int(pe.get("totalTradedVolume", 0)),
+                    "ce_iv": float(ce.get("impliedVolatility", 0)),
+                    "pe_iv": float(pe.get("impliedVolatility", 0)),
+                    "ce_delta": float(ce.get("delta", 0)),
+                    "pe_delta": float(pe.get("delta", 0)),
+                    "ce_gamma": float(ce.get("gamma", 0)),
+                    "pe_gamma": float(pe.get("gamma", 0)),
+                    "ce_theta": float(ce.get("theta", 0)),
+                    "pe_theta": float(pe.get("theta", 0)),
+                    "ce_vega": float(ce.get("vega", 0)),
+                    "pe_vega": float(pe.get("vega", 0)),
+                    "is_atm": False
+                })
+            
+            flat_chain.sort(key=lambda x: x["strike"])
+            
+            # Dynamically mark ATM strike
+            if underlying_val > 0 and len(flat_chain) > 0:
+                closest_row = min(flat_chain, key=lambda x: abs(x["strike"] - underlying_val))
+                closest_row["is_atm"] = True
+                
+            return jsonify({
+                "status": "success",
+                "timestamp": datetime.now().strftime("%H:%M:%S") + f" ({nse_chain.get('source', 'BYPASS')})",
+                "spot_price": round(underlying_val, 2),
+                "chain": flat_chain[:20]
             })
     except Exception as e:
-        shared_data.td_api = None
+        print(f"❌ Error in get_oc_data Local Fallback: {e}")
 
     try:
         import dhan_live_feed

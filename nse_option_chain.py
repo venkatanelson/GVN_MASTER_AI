@@ -3,7 +3,6 @@ import math
 import time
 from datetime import datetime, timedelta
 import threading
-from truedata_rest_api import TrueDataRestAPI
 import shared_data
 
 import os
@@ -15,7 +14,14 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NSE_OptionChain")
 
-td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
+TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
+td_api = None
+if TRUEDATA_ENABLED:
+    try:
+        from truedata_rest_api import TrueDataRestAPI
+        td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
+    except Exception as e:
+        logger.warning(f"⚠️ TrueData REST API failed to initialize: {e}")
 
 # 🌪️ GVN WIND ENGINE INTEGRATION
 from gvn_ai_wind_engine import GVNAiWindEngine
@@ -96,11 +102,7 @@ def calculate_gvn_levels(high915, low915):
     return levels
 
 # --- GVN Real 9:15 Option Candle Recovery ---
-option_915_cache = {
-    "NIFTY_23400_CE": (201.40, 135.25),
-    "NIFTY_23550_CE": (179.30, 107.00),
-    "NIFTY_23650_PE": (376.90, 322.00)
-}
+option_915_cache = {}
 logged_915_benchmarks = set()
 
 def load_recorded_915_ohlc():
@@ -124,13 +126,129 @@ def load_recorded_915_ohlc():
             logger.error(f"Error loading recorded 9:15 OHLC: {e}")
     return {"date": today_str, "NIFTY": {}}
 
+def get_option_details_from_scrip_master(symbol, strike, opt_type):
+    """
+    Looks up the scrip master to find the matched option symbol and its expiry.
+    Returns (option_symbol, expiry_date) as strings, or (None, None) if not found.
+    """
+    global _angel_scrip_master_cache
+    scrip_path = "angel_scrip_master.json"
+    
+    if not os.path.exists(scrip_path):
+        return None, None
+        
+    if _angel_scrip_master_cache is None:
+        try:
+            with open(scrip_path, "r", encoding="utf-8") as f:
+                _angel_scrip_master_cache = json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading scrip master in get_option_details: {e}")
+            return None, None
+            
+    master_data = _angel_scrip_master_cache
+    symbol_upper = symbol.upper()
+    
+    expiry_dt = None
+    today_date = datetime.now().date()
+    
+    # 1. Try to find the closest expiry in the future or today from the scrip master
+    try:
+        exp_dates = []
+        for item in master_data:
+            if item.get('name') == symbol_upper and item.get('expiry') and item.get('exch_seg') in ['NFO', 'BFO']:
+                try:
+                    exp_dt_obj = datetime.strptime(item.get('expiry'), "%d%b%Y")
+                    if exp_dt_obj.date() >= today_date:
+                        exp_dates.append(exp_dt_obj)
+                except:
+                    pass
+        if exp_dates:
+            expiry_dt = min(exp_dates)
+    except Exception as ex:
+        logger.warning(f"Error resolving expiry from scrip master: {ex}")
+        
+    # 2. Hardcoded fallback if scrip master lookup failed
+    if not expiry_dt:
+        today = datetime.now()
+        target_day = 4 if "SENSEX" in symbol_upper else 3
+        days_ahead = target_day - today.weekday()
+        if days_ahead < 0 or (days_ahead == 0 and today.time() >= datetime.strptime("15:30:00", "%H:%M:%S").time()):
+            days_ahead += 7
+        expiry_dt = today + timedelta(days=days_ahead)
+    
+    yy = expiry_dt.strftime("%y")
+    dd = expiry_dt.strftime("%d")
+    mmm_upper = expiry_dt.strftime("%b").upper()
+    
+    m_char = ""
+    month = expiry_dt.month
+    if month <= 9:
+        m_char = str(month)
+    elif month == 10:
+        m_char = "O"
+    elif month == 11:
+        m_char = "N"
+    elif month == 12:
+        m_char = "D"
+        
+    strike_int = int(strike)
+    c_p_char = "C" if opt_type == "CE" else "P"
+    mm = expiry_dt.strftime("%m")
+    
+    candidates = []
+    candidates.append(f"{symbol_upper}{dd}{mmm_upper}{yy}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{mmm_upper}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{m_char}{dd}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{m_char}{dd}{c_p_char}{strike_int}")
+    candidates.append(f"{symbol_upper}{yy}{mm}{dd}{c_p_char}{strike_int}")
+    
+    for item in master_data:
+        item_sym = item.get('symbol')
+        item_exch = item.get('exch_seg')
+        if item_sym in candidates and item_exch in ['NFO', 'BFO']:
+            raw_expiry = item.get('expiry')
+            formatted_expiry = raw_expiry
+            try:
+                dt_obj = datetime.strptime(raw_expiry, "%d%b%Y")
+                formatted_expiry = dt_obj.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+            return item_sym, formatted_expiry
+            
+    return None, None
+
 def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None):
     file_path = "gvn_recorded_915_ohlc.json"
     data = load_recorded_915_ohlc()
     sym_key = symbol.upper() if symbol else "NIFTY"
     if sym_key not in data:
         data[sym_key] = {}
-    data[sym_key][strike_name] = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
+        
+    entry_data = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
+    
+    opt_symbol = None
+    expiry_date = None
+    opt_type = None
+    if " " in strike_name:
+        parts = strike_name.split()
+        if len(parts) == 2:
+            try:
+                strike_val = int(parts[0])
+                opt_type_val = parts[1].upper()
+                if opt_type_val in ["CE", "PE"]:
+                    opt_type = opt_type_val
+                    opt_symbol, expiry_date = get_option_details_from_scrip_master(sym_key, strike_val, opt_type)
+            except ValueError:
+                pass
+                
+    if opt_symbol:
+        entry_data["option_symbol"] = opt_symbol
+    if expiry_date:
+        entry_data["expiry_date"] = expiry_date
+    if opt_type:
+        entry_data["opt_type"] = opt_type
+        
+    data[sym_key][strike_name] = entry_data
     if timeframe:
         data["timeframe"] = timeframe
     try:
@@ -505,22 +623,23 @@ def fetch_nse_option_chain(symbol="NIFTY", exchange="NSE"):
         return None
 
     # --- Step 1: Try TrueData Professional REST Feed ---
-    try:
-        # 🌟 GVN SPECIAL: Map MCX key to actual TrueData symbol
-        td_symbol = "CRUDEOIL" if symbol == "MCX" else symbol
-        
-        td_data = td_api.get_option_chain(td_symbol, exchange=exchange)
-        if td_data and "records" in td_data:
-            return {
-                "records": td_data["records"],
-                "source": "TRUEDATA_PRO"
-            }
-        elif td_data and "Message" in str(td_data):
+    if td_api is not None:
+        try:
+            # 🌟 GVN SPECIAL: Map MCX key to actual TrueData symbol
+            td_symbol = "CRUDEOIL" if symbol == "MCX" else symbol
+            
+            td_data = td_api.get_option_chain(td_symbol, exchange=exchange)
+            if td_data and "records" in td_data:
+                return {
+                    "records": td_data["records"],
+                    "source": "TRUEDATA_PRO"
+                }
+            elif td_data and "Message" in str(td_data):
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [TRUEDATA AUTH ERROR] Invalid Token. Falling back...\n")
+        except Exception as e:
             with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [TRUEDATA AUTH ERROR] Invalid Token. Falling back...\n")
-    except Exception as e:
-        with open("nse_status.log", "a") as f:
-            f.write(f"{datetime.now()}: [TRUEDATA ERROR] {str(e)}\n")
+                f.write(f"{datetime.now()}: [TRUEDATA ERROR] {str(e)}\n")
 
     # --- Step 0.1: GVN MOCK DATA (Emergency Fallback for Demo/Closed Markets) ---
     if symbol == "MCX":
@@ -725,6 +844,24 @@ def find_angel_token_and_segment(symbol, strike, opt_type, expiry_dt=None):
         except Exception as ex:
             logger.warning(f"Could not get expiry list for {symbol} lookup: {ex}")
             
+    if not expiry_dt:
+        # Fallback using scrip master expiries first
+        try:
+            exp_dates = []
+            for item in master_data:
+                if item.get('name') == symbol.upper() and item.get('expiry') and item.get('exch_seg') in ['NFO', 'BFO']:
+                    try:
+                        exp_dt_obj = datetime.strptime(item.get('expiry'), "%d%b%Y")
+                        if exp_dt_obj.date() >= today_date:
+                            exp_dates.append(exp_dt_obj)
+                    except:
+                        pass
+            if exp_dates:
+                expiry_dt = min(exp_dates)
+                logger.info(f"Resolved closest future expiry date for {symbol} from scrip master: {expiry_dt.strftime('%Y-%m-%d')}")
+        except Exception as ex:
+            logger.warning(f"Error resolving expiry from scrip master: {ex}")
+
     if not expiry_dt:
         today = datetime.now()
         target_day = 4 if "SENSEX" in symbol.upper() else 3
@@ -1046,29 +1183,83 @@ def retrieve_and_record_915_levels(timeframe="5MIN"):
                     "timeframe": "5MIN_ATTEMPTED"
                 }
             
-    # 2. Fetch and record ATM option strikes for Nifty
-    nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY")
-    if nifty_bench and nifty_bench.get("high", 0) > 0:
-        spot = (nifty_bench["high"] + nifty_bench["low"]) / 2.0
-        atm = round(spot / 50.0) * 50
-        
-        # Select strikes around ATM
-        strikes = [atm - 100, atm - 50, atm, atm + 50, atm + 100]
-        logger.info(f"🔄 [RETRIEVER] Fetching ATM option strike candles around ATM={atm}...")
-        for strike in strikes:
-            for opt_type in ["CE", "PE"]:
-                strike_key = f"{strike} {opt_type}"
-                try:
-                    candle = get_915_candle_angel_v2("NIFTY", strike, opt_type, timeframe=timeframe)
-                    if candle and candle.get("high") and candle.get("low"):
-                        high = float(candle["high"])
-                        low = float(candle["low"])
-                        actual_tf = candle.get("timeframe", timeframe)
-                        
-                        save_recorded_915_ohlc(strike_key, high, low, symbol="NIFTY", timeframe=actual_tf)
-                        logger.info(f"✅ [RETRIEVER] Recorded options {strike_key}: High={high}, Low={low} ({actual_tf})")
-                except Exception as e:
-                    logger.error(f"❌ [RETRIEVER] Error fetching option {strike_key}: {e}")
+    # 2. Fetch and record dynamic option strikes for all indices
+    for symbol in indices:
+        nifty_bench = shared_data.gvn_915_benchmark.get(symbol)
+        if nifty_bench and nifty_bench.get("high", 0) > 0:
+            spot = (nifty_bench["high"] + nifty_bench["low"]) / 2.0
+            
+            # Find step size for this symbol
+            step = 50
+            sym_upper = symbol.upper()
+            if "SENSEX" in sym_upper or "BANKNIFTY" in sym_upper or "BANK" in sym_upper:
+                step = 100
+            elif "MIDCAP" in sym_upper:
+                step = 25
+                
+            atm = round(spot / step) * step
+            
+            if symbol.upper() in ["NIFTY", "SENSEX"]:
+                # Call (CE) Strikes: 4 ITM + 1 ATM + 2 OTM (Total 7 strikes)
+                ce_strikes = [
+                    int(atm - 4*step),
+                    int(atm - 3*step),
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step)
+                ]
+                # Put (PE) Strikes: 4 ITM + 1 ATM + 2 OTM (Total 7 strikes)
+                pe_strikes = [
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step),
+                    int(atm + 3*step),
+                    int(atm + 4*step)
+                ]
+            else:
+                # Other indices (BANKNIFTY, FINNIFTY, MIDCPNIFTY, etc.) keep original 3 ITM + 1 ATM + 2 OTM
+                ce_strikes = [
+                    int(atm - 3*step),
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step)
+                ]
+                pe_strikes = [
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step),
+                    int(atm + 3*step)
+                ]
+            
+            strikes_to_fetch = sorted(list(set(ce_strikes + pe_strikes)))
+            logger.info(f"🔄 [RETRIEVER] Fetching option strike candles for {symbol} around ATM={atm}...")
+            
+            for strike in strikes_to_fetch:
+                opt_types = []
+                if strike in ce_strikes: opt_types.append("CE")
+                if strike in pe_strikes: opt_types.append("PE")
+                
+                for opt_type in opt_types:
+                    strike_key = f"{int(strike)} {opt_type}"
+                    try:
+                        candle = get_915_candle_angel_v2(symbol, int(strike), opt_type, timeframe=timeframe)
+                        if candle and candle.get("high") and candle.get("low"):
+                            high = float(candle["high"])
+                            low = float(candle["low"])
+                            actual_tf = candle.get("timeframe", timeframe)
+                            
+                            save_recorded_915_ohlc(strike_key, high, low, symbol=symbol, timeframe=actual_tf)
+                            logger.info(f"✅ [RETRIEVER] Recorded options {symbol} {strike_key}: High={high}, Low={low} ({actual_tf})")
+                    except Exception as e:
+                        logger.error(f"❌ [RETRIEVER] Error fetching option {symbol} {strike_key}: {e}")
 
 def fetch_from_nse_direct(symbol):
     """Bypass NSE Blocks using Cookie Session with improved headers"""
@@ -1297,12 +1488,100 @@ def fetch_from_dhan_fallback(symbol):
             f.write(f"{datetime.now()}: [DHAN FALLBACK ERROR] {str(e)}\n")
     return None
 
+def execute_live_trade_for_active_users(full_symbol, side, price, reason):
+    """
+    Executes live market orders via Angel One SmartAPI for all approved users with algo_status == 'ON'.
+    Also logs the trade (AlgoTrade) to the database dashboard.
+    """
+    try:
+        from app import app, db, User, UserBrokerConfig, AlgoTrade
+        
+        with app.app_context():
+            active_users = User.query.filter_by(algo_status='ON', is_blocked=False).all()
+            logger.info(f"🛰️ [NSE DIRECT ROUTING] Found {len(active_users)} active users with Algo ON for {side} order.")
+            
+            for u in active_users:
+                try:
+                    user_lots = u.trade_lots or 1
+                    qty = user_lots * (50 if "NIFTY" in full_symbol.upper() else 15)
+                    
+                    is_live_allowed = False
+                    if u.user_type == 'LIVE' and u.is_approved:
+                        if u.expiry_date and u.expiry_date > datetime.utcnow():
+                            is_live_allowed = True
+                            
+                    # Add/Update trade to dashboard database
+                    if side == 'SELL':
+                        open_trade = AlgoTrade.query.filter_by(user_id=u.id, symbol=full_symbol, status='Open').order_by(AlgoTrade.id.desc()).first()
+                        if open_trade:
+                            open_trade.exit_price = float(price)
+                            open_trade.status = 'Closed'
+                            pnl_val = (float(price) - open_trade.entry_price) * qty
+                            open_trade.pnl = pnl_val
+                            db.session.commit()
+                            logger.info(f"💾 Updated Open Trade ID {open_trade.id} to Closed for user {u.username}")
+                        else:
+                            new_trade = AlgoTrade(
+                                user_id=u.id,
+                                symbol=full_symbol,
+                                entry_price=0.0,
+                                exit_price=float(price),
+                                quantity=qty,
+                                trade_type='SELL',
+                                status='Closed',
+                                delta=0.60,
+                                sentiment=reason
+                            )
+                            db.session.add(new_trade)
+                            db.session.commit()
+                    else: # BUY
+                        new_trade = AlgoTrade(
+                            user_id=u.id,
+                            symbol=full_symbol,
+                            entry_price=float(price),
+                            exit_price=0.0,
+                            quantity=qty,
+                            trade_type='BUY',
+                            status='Open',
+                            delta=0.60,
+                            sentiment=reason
+                        )
+                        db.session.add(new_trade)
+                        db.session.commit()
+                        logger.info(f"💾 Created Open Trade for user {u.username}")
+                        
+                    # Route to broker
+                    config = UserBrokerConfig.query.filter_by(user_id=u.id).first()
+                    if is_live_allowed and config and config.client_id:
+                        creds = config.get_credentials()
+                        cfg = {
+                            "broker_name": config.broker_name or "Shoonya",
+                            "client_id": config.client_id,
+                            "password": creds.get('password'),
+                            "api_key": creds.get('api_key'),
+                            "api_secret": creds.get('api_secret'),
+                            "totp_key": creds.get('totp_key'),
+                            "webhook_url": config.webhook_url,
+                            "tv_secret": config.tv_secret
+                        }
+                        
+                        from broker_api import execute_broker_order_async
+                        execute_broker_order_async(cfg, full_symbol, side, qty, u.username)
+                        logger.info(f"💼 [LIVE ROUTED] Direct trade {side} submitted for {u.username} via {config.broker_name}")
+                    else:
+                        logger.info(f"📊 [PAPER RECORDED] Demo {side} trade saved to dashboard for {u.username}")
+                except Exception as ex:
+                    logger.error(f"❌ Failed direct trade routing for user {u.username}: {ex}")
+    except Exception as e:
+        logger.error(f"❌ Direct trade routing critical error: {e}")
+
 def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     """
     Analyzes the option chain and updates the shared memory scanner.
     Now supports mock_external_data for Playback Simulation.
     """
     global current_delta_60_strikes, gvn_scanner_data
+    any_near_level = False
     
     # Ensure symbol exists in memory to avoid KeyErrors
     if symbol not in gvn_scanner_data: gvn_scanner_data[symbol] = []
@@ -1328,7 +1607,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         except:
             pass
     else:
-        exch = "MCX" if symbol == "MCX" else "NSE"
+        exch = "BSE" if symbol == "SENSEX" else ("MCX" if symbol == "MCX" else "NSE")
         data = fetch_nse_option_chain(symbol, exchange=exch)
 
         # 🕒 GVN SPECIAL: Capture 9:15 AM Benchmark during LIVE Trading
@@ -1417,12 +1696,99 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     if not hasattr(shared_data, 'daily_authorized_strikes'):
         shared_data.daily_authorized_strikes = {}
 
-    # 🌟 GVN MANUAL STRIKE INJECTION (Authorized for Today)
-    if symbol == "NIFTY":
-        # Force specific strikes based on user request
-        # Force specific strikes based on user request (Authorized Tracks)
-        forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE", "23650 PE", "23750 PE"]
+    # 🌟 GVN DYNAMIC STRIKE INJECTION (Symmetrical 4 ITM/ATM + 2 OTM Tracks)
+    if symbol in ["NIFTY", "SENSEX", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
+        forced_strikes = []
         
+        fallback_step = 50
+        sym_upper = symbol.upper()
+        if "SENSEX" in sym_upper or "BANKNIFTY" in sym_upper or "BANK" in sym_upper or "MCX" in sym_upper:
+            fallback_step = 100
+        elif "MIDCAP" in sym_upper:
+            fallback_step = 25
+        elif "NIFTY" in sym_upper or "FINNIFTY" in sym_upper:
+            fallback_step = 50
+
+        # Extract unique strikes from the option chain dataset to find closest ATM and step size
+        strikes = []
+        for item in records.get("data", []):
+            strike_val = item.get("strikePrice") or item.get("strike")
+            if strike_val:
+                strikes.append(float(strike_val))
+        strikes = sorted(list(set(strikes)))
+
+        step = fallback_step
+        if len(strikes) > 1:
+            diffs = [strikes[i+1] - strikes[i] for i in range(len(strikes)-1)]
+            min_diff = min(diffs)
+            if min_diff > 0:
+                step = int(min_diff)
+
+        spot = underlying_value
+        if spot <= 0:
+            spot = shared_data.market_data.get(symbol, 0)
+        if spot <= 0:
+            spot = shared_data.market_data.get("NIFTY", 0)
+
+        if spot > 0:
+            if strikes:
+                atm = min(strikes, key=lambda x: abs(x - spot))
+            else:
+                atm = round(spot / step) * step
+            
+            if symbol.upper() in ["NIFTY", "SENSEX"]:
+                # Call (CE) Strikes: 4 ITM + 1 ATM + 2 OTM (Total 7 strikes)
+                ce_strikes = [
+                    int(atm - 4*step),
+                    int(atm - 3*step),
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step)
+                ]
+                # Put (PE) Strikes: 4 ITM + 1 ATM + 2 OTM (Total 7 strikes)
+                pe_strikes = [
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step),
+                    int(atm + 3*step),
+                    int(atm + 4*step)
+                ]
+            else:
+                # Other indices (BANKNIFTY, FINNIFTY, MIDCPNIFTY, etc.) keep original 3 ITM + 1 ATM + 2 OTM
+                ce_strikes = [
+                    int(atm - 3*step),
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step)
+                ]
+                pe_strikes = [
+                    int(atm - 2*step),
+                    int(atm - step),
+                    int(atm),
+                    int(atm + step),
+                    int(atm + 2*step),
+                    int(atm + 3*step)
+                ]
+            
+            for s in ce_strikes:
+                forced_strikes.append(f"{s} CE")
+            for s in pe_strikes:
+                forced_strikes.append(f"{s} PE")
+            
+            logger.info(f"🎯 [DYNAMIC STRIKE SELECTION] {symbol} (Spot={spot}, ATM={atm}, Step={step}): Selected CE={ce_strikes}, PE={pe_strikes}")
+        else:
+            if symbol == "NIFTY":
+                forced_strikes = ["23350 CE", "23400 CE", "23450 CE", "23500 PE", "23550 PE", "23550 CE", "23800 PE", "23600 CE", "23650 CE", "23700 CE", "23650 PE", "23750 PE"]
+                logger.warning(f"⚠️ [DYNAMIC STRIKE SELECTION] Spot price not found for NIFTY, using fallback hardcoded strikes")
+            else:
+                logger.warning(f"⚠️ [DYNAMIC STRIKE SELECTION] Spot price not found for {symbol}, no dynamic strikes generated")
+
         # Also include the locked morning strikes if any
         if symbol in shared_data.daily_authorized_strikes:
             ls = shared_data.daily_authorized_strikes[symbol]
@@ -1431,6 +1797,41 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             
         forced_strikes = list(set(forced_strikes)) # Remove duplicates
         
+        # ⚡ Fetch live Angel One Quote API quotes in batch for all forced strikes (LTP Sync)
+        angel_live_ltps = {}
+        try:
+            token = get_angel_token()
+            if token:
+                angel_cfg = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel", {})
+                if dhan_master_config.get("broker_name") == "angel":
+                    angel_cfg = dhan_master_config
+                
+                token_ids = []
+                angel_token_to_strike = {}
+                for strike_name in forced_strikes:
+                    try:
+                        s_price = int(strike_name.split()[0])
+                        s_type = strike_name.split()[1].upper()
+                        t_id, seg = find_angel_token_and_segment(symbol, s_price, s_type)
+                        if t_id:
+                            token_ids.append(str(t_id))
+                            angel_token_to_strike[str(t_id)] = strike_name
+                    except Exception as mapping_err:
+                        logger.error(f"Error mapping token for {strike_name}: {mapping_err}")
+                
+                if token_ids:
+                    from broker_api import get_angel_option_ltps
+                    ltp_map = get_angel_option_ltps(angel_cfg, token, token_ids)
+                    for t_id, ltp_val in ltp_map.items():
+                        s_name = angel_token_to_strike.get(t_id)
+                        if s_name and ltp_val is not None:
+                            angel_live_ltps[s_name] = ltp_val
+                            shared_data.update_market_data(s_name, ltp_val)
+                            shared_data.market_data[s_name] = ltp_val
+                            shared_data.forced_strike_data[s_name] = ltp_val
+        except Exception as quote_err:
+            logger.error(f"Error fetching Angel Option Quote batch: {quote_err}")
+
         # Determine current chain for searching
         all_options = []
         for item in records.get("data", []):
@@ -1448,14 +1849,21 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             s_type = strike_name.split()[1].upper()
             
             strike_data = None
-            # Search in already flattened all_options for best match
-            for opt in all_options:
-                opt_strike = opt.get("strikePrice") or opt.get("strike")
-                opt_type = str(opt.get("type", "")).upper() or str(opt.get("optionType", "")).upper()
-                
-                if opt_strike == s_price and s_type in opt_type:
-                    strike_data = opt
-                    break
+            if strike_name in angel_live_ltps:
+                lp = angel_live_ltps[strike_name]
+                strike_data = {
+                    "strikePrice": s_price, "strike": s_price, "type": s_type,
+                    "lastPrice": lp, "changeinOpenInterest": 0, "totalTradedVolume": 0
+                }
+            else:
+                # Search in already flattened all_options for best match
+                for opt in all_options:
+                    opt_strike = opt.get("strikePrice") or opt.get("strike")
+                    opt_type = str(opt.get("type", "")).upper() or str(opt.get("optionType", "")).upper()
+                    
+                    if opt_strike == s_price and s_type in opt_type:
+                        strike_data = opt
+                        break
             
             # 🚀 GVN DIRECT API FETCH FALLBACK:
             if not strike_data or float(strike_data.get("lastPrice") or 0) == 0:
@@ -1519,10 +1927,10 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             custom_levels = {}
             ai_msg = "🎯 SCANNING"
             
-            # 🚀 GVN ADMIN OVERRIDE: Dynamically calculate Pine Script levels from given High/Low
-            if strike_name == "23350 CE":
-                admin_high = 281.40
-                admin_low = 162.55
+            # 🚀 GVN DYNAMIC LEVEL CALCULATION: Dynamically calculate Pine Script levels from 9:15 AM High/Low
+            ohlc_915 = get_real_option_915_ohlc(symbol, s_price, s_type)
+            if ohlc_915:
+                admin_high, admin_low = ohlc_915
                 calc_levels = calculate_gvn_levels(admin_high, admin_low)
                 custom_levels = {
                     "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
@@ -1530,106 +1938,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     "sl": round(calc_levels["i6"] - 12.0, 2)
                 }
                 ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23400 CE":
-                admin_high = 199.54
-                admin_low = 128.84
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2)
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23450 CE":
-                admin_high = 170.99
-                admin_low = 111.03
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2)
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23500 PE":
-                admin_high = 196.95
-                admin_low = 130.05
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2)
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23550 PE":
-                admin_high = 228.68
-                admin_low = 153.24
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2)
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23550 CE":
-                # Admin provided High/Low
-                admin_high = 179.30
-                admin_low = 107.00
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-                
-            elif strike_name == "23650 PE":
-                # Admin provided High/Low
-                admin_high = 376.90
-                admin_low = 322.00
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-                
-            elif strike_name == "23800 PE":
-                # Admin provided High/Low
-                admin_high = 240.0
-                admin_low = 152.6
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23650 CE":
-                # Admin provided High/Low from TradingView screenshot
-                admin_high = 137.50
-                admin_low = 100.40
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
-            elif strike_name == "23750 PE":
-                # Admin provided High/Low from TradingView screenshot
-                admin_high = 440.00
-                admin_low = 390.80
-                calc_levels = calculate_gvn_levels(admin_high, admin_low)
-                custom_levels = {
-                    "i1": calc_levels["i1"], "i2": calc_levels["i2"], "i3": calc_levels["i3"], 
-                    "i5": calc_levels["i5"], "i6": calc_levels["i6"], "i7": calc_levels["i7"], "i0": calc_levels["i0"],
-                    "sl": round(calc_levels["i6"] - 12.0, 2) # Fixed 12-point SL
-                }
-                ai_msg = f"🚀 GVN i-LADDER: {custom_levels['i6']} -> {custom_levels['i5']} -> {custom_levels['i3']}"
+            else:
+                custom_levels = {}
+                ai_msg = "🎯 SCANNING (No 9:15 candle)"
             
             # Check if already added
             if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
@@ -1809,13 +2120,22 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     # 🚀 GVN FIX: Only include true GVN levels starting with 'i' (exclude SL of first entry!)
                     sorted_lvls = sorted([v for k, v in levels.items() if k.startswith("i") and isinstance(v, (int, float))])
                     
-                    # 🚀 GVN INSTANT LEVEL TOUCH NOTIFICATIONS:
+                    # 🚀 GVN INSTANT LEVEL TOUCH NOTIFICATIONS & PRE-ALERTS:
                     if not hasattr(shared_data, 'last_touched_levels'):
                         shared_data.last_touched_levels = {}
+                    if not hasattr(shared_data, 'last_pre_alerts'):
+                        shared_data.last_pre_alerts = {}
                     
                     for lvl_name, lvl_val in levels.items():
                         if lvl_name.startswith("i") and isinstance(lvl_val, (int, float)) and lvl_val > 0:
-                            if abs(ltp - lvl_val) < 1.5:
+                            dist = abs(ltp - lvl_val)
+                            
+                            # Mark any_near_level as True if within 7 points
+                            if dist <= 7.0:
+                                any_near_level = True
+                            
+                            # 1. Level Touch Alert (< 1.5 points)
+                            if dist < 1.5:
                                 touch_key = f"{full_sym}_{lvl_name}_{lvl_val}"
                                 now_time = time.time()
                                 last_alert_time = shared_data.last_touched_levels.get(touch_key, 0)
@@ -1829,6 +2149,22 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                         tg.bot.send_message(msg_text)
                                     except Exception as te:
                                         logger.error(f"Failed to send touch alert to Telegram: {te}")
+                                        
+                            # 2. Pre-Alert Get Ready (1.5 <= dist <= 7.0 points)
+                            elif dist <= 7.0:
+                                pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
+                                now_time = time.time()
+                                last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
+                                if now_time - last_pre_time > 300: # 5 minutes cooldown
+                                    shared_data.last_pre_alerts[pre_key] = now_time
+                                    pre_msg = f"🔔 <b>GVN ENTRY PRE-ALERT (GET READY)</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(pre_msg)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send pre-alert to Telegram: {te}")
                     
                     # 1. P&L Tracker for Active Trade
                     if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
@@ -1839,6 +2175,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         if ltp >= tgt:
                             shared_data.demo_trade["active"] = False
                             pnl = ltp - entry_price
+                            execute_live_trade_for_active_users(full_sym, "SELL", ltp, "Target Hit ✅")
                             try:
                                 from gvn_telegram_engine import TelegramAlertManager
                                 tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -1854,6 +2191,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         elif ltp <= sl:
                             shared_data.demo_trade["active"] = False
                             pnl = ltp - entry_price
+                            execute_live_trade_for_active_users(full_sym, "SELL", ltp, "Stop Loss Hit ⛔")
                             try:
                                 from gvn_telegram_engine import TelegramAlertManager
                                 tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -1919,16 +2257,18 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     "qty": 50 if symbol == "NIFTY" else 15 # Back to 50 standard
                                 }
                                 
+                                # Find which level name was triggered
+                                lvl_name = "Manual"
+                                for k, v in levels.items():
+                                    if abs(ltp - v) < 2.0:
+                                        lvl_name = k
+                                        break
+                                        
+                                execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"Touch Entry near {lvl_name.upper()}")
+                                
                                 try:
                                     from gvn_telegram_engine import TelegramAlertManager
                                     tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                    
-                                    # Find which level name was triggered
-                                    lvl_name = "Manual"
-                                    for k, v in levels.items():
-                                        if abs(ltp - v) < 2.0:
-                                            lvl_name = k
-                                            break
                                     
                                     tg.alert_entry({
                                         "symbol": full_sym, 
@@ -2318,6 +2658,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # Mark source
     source = data.get("source", "NSE_WEB")
     gvn_scanner_data["last_updated"] = datetime.now().strftime("%H:%M:%S") + f" ({source})"
+    
+    # Update fast polling status globally
+    shared_data.fast_polling_mode = any_near_level
 
 def nse_background_worker():
     print("🚀 [NSE Worker] Thread Started Successfully.")
@@ -2410,15 +2753,19 @@ def nse_background_worker():
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
-            # 🌟 GVN ULTRA-FAST TICK-BY-TICK NIFTY SCANNING
-            # Bypassing other symbols and reducing sleep to achieve sub-second execution!
-            for symbol in ["NIFTY"]:
+            # 🌟 GVN ULTRA-FAST TICK-BY-TICK SCANNING FOR ACTIVE SYMBOLS
+            for symbol in ["NIFTY", "SENSEX", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                 analyze_and_update_gvn_scanner(symbol)
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: SUCCESS: {symbol} Sync Complete\n")
-                time.sleep(0.5)
+                
+                # Check for fast polling mode
+                if getattr(shared_data, "fast_polling_mode", False):
+                    time.sleep(0.05)
+                else:
+                    time.sleep(0.5)
                 
         except Exception as e:
             import traceback
@@ -2431,7 +2778,8 @@ def nse_background_worker():
                 print("[NSE Worker] Failed to write error log (Disk Full). Retrying soon...")
             time.sleep(5)
         
-        time.sleep(1.0)
+        if not getattr(shared_data, "fast_polling_mode", False):
+            time.sleep(1.0)
 
 def start_nse_worker():
     print("\n" + "="*50)

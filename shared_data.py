@@ -74,6 +74,11 @@ PERMANENT_CREDENTIALS_BACKUP = {
 # Scanner Data
 gvn_scanner_data = {}
 
+# ⚡ FAST POLLING & ALERTS STATE
+fast_polling_mode = False
+last_touched_levels = {}
+last_pre_alerts = {}
+
 # ──────────────────────────────────────────────────────────
 # GVN SYSTEM STATE (Added for 25-Point Implementation)
 # ──────────────────────────────────────────────────────────
@@ -142,12 +147,14 @@ system_status = {
 
 # --- Global API Instances ---
 td_api = None
-try:
-    from truedata_rest_api import TrueDataRestAPI
-    import os
-    td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
-except Exception:
-    pass
+TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
+if TRUEDATA_ENABLED:
+    try:
+        from truedata_rest_api import TrueDataRestAPI
+        import os
+        td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
+    except Exception:
+        pass
 
 # Thread-safe setter/getter utilities
 def get_market_data():

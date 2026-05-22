@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 import json
 from typing import Dict, Any, Optional
+import os
 
 # Import all engines
 try:
@@ -150,28 +151,31 @@ class GVNMasterOrchestrator:
         logger.info("🔥 NSE Option Chain Worker started.")
 
         # 🚀 START TRUEDATA HIGH-SPEED WS & REST ENGINES
+        TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
         truedata_active = False
-        try:
-            from truedata_rest_api import TrueDataRestAPI
-            import os
-            logger.info("🔍 Validating TrueData subscription...")
-            test_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
-            if test_api.token:
-                truedata_active = True
-                logger.info("✅ TrueData subscription validated successfully!")
-            else:
-                logger.warning("⚠️ TrueData Subscription Expired or Login Failed. Bypassing TrueData engine start to prevent console spam. NSE Direct fallback will be used.")
-        except Exception as e:
-            logger.warning(f"⚠️ TrueData validation failed: {e}")
-
-        if truedata_active:
+        if TRUEDATA_ENABLED:
             try:
-                start_truedata_ws_engine()
-                logger.info("✅ TrueData High-Speed WS Engine Started")
-                start_truedata_engine()
-                logger.info("✅ TrueData REST Spot Engine Started")
+                from truedata_rest_api import TrueDataRestAPI
+                logger.info("🔍 Validating TrueData subscription...")
+                test_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
+                if test_api.token:
+                    truedata_active = True
+                    logger.info("✅ TrueData subscription validated successfully!")
+                else:
+                    logger.warning("⚠️ TrueData Subscription Expired or Login Failed. Bypassing TrueData engine start to prevent console spam. NSE Direct fallback will be used.")
             except Exception as e:
-                logger.warning(f"⚠️ TrueData Start Failed: {e}")
+                logger.warning(f"⚠️ TrueData validation failed: {e}")
+
+            if truedata_active:
+                try:
+                    start_truedata_ws_engine()
+                    logger.info("✅ TrueData High-Speed WS Engine Started")
+                    start_truedata_engine()
+                    logger.info("✅ TrueData REST Spot Engine Started")
+                except Exception as e:
+                    logger.warning(f"⚠️ TrueData Start Failed: {e}")
+        else:
+            logger.info("⏭️ Skipping TrueData validation & engines (TrueData is disabled).")
 
         self.system_initialized = True
         shared_data.system_status["initialized"] = True

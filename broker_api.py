@@ -242,21 +242,48 @@ def _place_angel_order(cfg, token, symbol, txn_type, qty):
     try:
         # 🌟 GVN ROBOT DYNAMIC SYMBOL TOKEN LOOKUP FOR ANGEL ONE
         token_id = "26000" if "NIFTY" in symbol.upper() else "99926000"
-        try:
-            import shared_data
-            for idx_key in ["NIFTY", "SENSEX"]:
-                chain = shared_data.truedata_option_chains.get(idx_key, [])
-                for opt in chain:
-                    ce_sym = opt.get("ce_symbol") or opt.get("CE", {}).get("symbol")
-                    pe_sym = opt.get("pe_symbol") or opt.get("PE", {}).get("symbol")
-                    if ce_sym == symbol:
-                        token_id = str(opt.get("ce_token") or opt.get("CE", {}).get("token") or "26000")
-                        break
-                    if pe_sym == symbol:
-                        token_id = str(opt.get("pe_token") or opt.get("PE", {}).get("token") or "26000")
-                        break
-        except Exception as token_err:
-            logger.error(f"⚠️ Angel Token Lookup Error: {token_err}")
+        tradingsymbol = symbol
+        exchange = "NFO"
+        
+        # Support NIFTY_23550_CE format and retrieve exact symbol/token from scrip master
+        if "_" in symbol:
+            try:
+                parts = symbol.split("_")
+                idx = parts[0]
+                strike = parts[1]
+                opt_type = parts[2]
+                
+                from nse_option_chain import find_angel_token_and_segment, _angel_scrip_master_cache
+                t_id, seg = find_angel_token_and_segment(idx, strike, opt_type)
+                if t_id:
+                    token_id = str(t_id)
+                    exchange = str(seg or "NFO").upper()
+                    
+                    if _angel_scrip_master_cache:
+                        for item in _angel_scrip_master_cache:
+                            if item.get('token') == token_id and item.get('exch_seg') == exchange:
+                                tradingsymbol = item.get('symbol')
+                                break
+                    logger.info(f"🎯 [RESOLVED ANGEL SYMBOL] {symbol} -> {tradingsymbol} (Token: {token_id}, Exchange: {exchange})")
+            except Exception as parse_err:
+                logger.error(f"⚠️ Error parsing symbol {symbol} for Angel Order: {parse_err}")
+        else:
+            # Fallback lookup in TrueData option chains
+            try:
+                import shared_data
+                for idx_key in ["NIFTY", "SENSEX"]:
+                    chain = shared_data.truedata_option_chains.get(idx_key, [])
+                    for opt in chain:
+                        ce_sym = opt.get("ce_symbol") or opt.get("CE", {}).get("symbol")
+                        pe_sym = opt.get("pe_symbol") or opt.get("PE", {}).get("symbol")
+                        if ce_sym == symbol:
+                            token_id = str(opt.get("ce_token") or opt.get("CE", {}).get("token") or "26000")
+                            break
+                        if pe_sym == symbol:
+                            token_id = str(opt.get("pe_token") or opt.get("PE", {}).get("token") or "26000")
+                            break
+            except Exception as token_err:
+                logger.error(f"⚠️ Angel Token Lookup Error: {token_err}")
         
         url = "https://apiconnect.angelbroking.com/rest/auth/angelbroking/order/v1/placeOrder"
         headers = {
@@ -269,10 +296,10 @@ def _place_angel_order(cfg, token, symbol, txn_type, qty):
         
         payload = {
             "variety": "NORMAL",
-            "tradingsymbol": symbol,
+            "tradingsymbol": tradingsymbol,
             "symboltoken": token_id, 
             "transactiontype": txn_type.upper(),
-            "exchange": "NFO",
+            "exchange": exchange,
             "ordertype": "MARKET",
             "producttype": "CARRYFORWARD",
             "duration": "DAY",
@@ -292,6 +319,63 @@ def _place_angel_order(cfg, token, symbol, txn_type, qty):
     except Exception as e:
         logger.error(f"Angel order exception: {e}")
         return None
+
+def get_angel_option_ltps(cfg, token, token_ids):
+    """
+    Fetch live LTPs for a list of NFO option token IDs from Angel One Quote API.
+    Returns a dictionary mapping token_id string to float price.
+    """
+    if not token_ids:
+        return {}
+    
+    api_key = cfg.get("access_token") or cfg.get("api_key")
+    url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-UserType": "USER",
+        "X-SourceID": "WEB",
+        "X-ClientLocalIP": "127.0.0.1",
+        "X-ClientPublicIP": "127.0.0.1",
+        "X-MACAddress": "00:00:00:00:00:00",
+        "X-PrivateKey": api_key,
+        "Authorization": f"Bearer {token}"
+    }
+    
+    # Clean and split into unique string lists
+    unique_tokens = list(set([str(t) for t in token_ids if t]))
+    
+    results = {}
+    
+    # Process in chunks of 50
+    for i in range(0, len(unique_tokens), 50):
+        chunk = unique_tokens[i:i+50]
+        payload = {
+            "mode": "LTP",
+            "exchangeTokens": {
+                "NFO": chunk
+            }
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                rj = resp.json()
+                if rj.get('status') == True and rj.get('data'):
+                    fetched = rj['data'].get('fetched', [])
+                    for item in fetched:
+                        tok = item.get('symbolToken')
+                        ltp = item.get('ltp')
+                        if tok and ltp is not None:
+                            results[str(tok)] = float(ltp)
+                else:
+                    logger.error(f"❌ Angel Quote API Error: {rj.get('message')}")
+            else:
+                logger.error(f"❌ Angel Quote HTTP Error {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.error(f"❌ Angel Quote API Exception: {e}")
+            
+    return results
 
 def _place_shoonya_order(cfg, token, symbol, txn_type, qty):
     """

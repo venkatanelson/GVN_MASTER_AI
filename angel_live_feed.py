@@ -71,39 +71,73 @@ class AngelLiveFeed:
             # The correct Angel One SmartAPI endpoint for Market Data
             url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/"
             
-            # Use Token 26000 (Nifty 50) and mode LTP
-            ltp_payload = {"mode": "LTP", "exchangeTokens": {"NSE": ["26000"]}}
-            logger.info(f"📡 Requesting Angel MarketData (Corrected URL): {ltp_payload}")
+            # 🚀 GVN IMPROVEMENT: Query all major indices (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY)
+            ltp_payload = {
+                "mode": "LTP", 
+                "exchangeTokens": {
+                    "NSE": ["99926000", "26000", "99926009", "26009", "99926037", "26017", "99926074"]
+                }
+            }
             
+            logger.info(f"📡 Requesting Angel MarketData for NSE Indices...")
             resp = requests.post(url, json=ltp_payload, headers=headers, timeout=10)
-            
-            # 🔄 Fallback 2: Sometimes Nifty is 99926000 or OHLC mode works better
-            if resp.status_code != 200 or "Rejected" in resp.text:
-                logger.info("🔄 Trying alternative Token and OHLC Mode...")
-                ltp_payload = {"mode": "OHLC", "exchangeTokens": {"NSE": ["99926000", "26000"]}}
-                resp = requests.post(url, json=ltp_payload, headers=headers, timeout=10)
             
             if resp.status_code == 200 and resp.text.strip().startswith('{'):
                 rj = resp.json()
                 data_list = rj.get('data', {}).get('fetched', [])
-                if data_list:
-                    lp = data_list[0].get('ltp') or data_list[0].get('lastPrice', 0)
+                for item in data_list:
+                    token = item.get("symbolToken")
+                    lp = item.get("ltp") or item.get("lastPrice", 0)
                     if lp > 0:
-                        shared_data.market_data["NIFTY"] = float(lp)
-                        logger.info(f"🔥 [ANGEL LIVE] NIFTY SPOT: {lp}")
-                        return
-                else:
-                    logger.warning(f"⚠️ Angel Data List Empty: {rj}")
+                        if token in ["99926000", "26000"]:
+                            shared_data.market_data["NIFTY"] = float(lp)
+                            shared_data.market_data["NIFTY 50"] = float(lp)
+                            logger.info(f"🔥 [ANGEL LIVE] NIFTY SPOT: {lp}")
+                        elif token in ["99926009", "26009"]:
+                            shared_data.market_data["BANKNIFTY"] = float(lp)
+                            shared_data.market_data["NIFTY BANK"] = float(lp)
+                            logger.info(f"🔥 [ANGEL LIVE] BANKNIFTY SPOT: {lp}")
+                        elif token in ["99926037", "26017"]:
+                            shared_data.market_data["FINNIFTY"] = float(lp)
+                            shared_data.market_data["NIFTY FIN SERVICE"] = float(lp)
+                            logger.info(f"🔥 [ANGEL LIVE] FINNIFTY SPOT: {lp}")
+                        elif token in ["99926074"]:
+                            shared_data.market_data["MIDCPNIFTY"] = float(lp)
+                            shared_data.market_data["NIFTY MID SELECT"] = float(lp)
+                            logger.info(f"🔥 [ANGEL LIVE] MIDCPNIFTY SPOT: {lp}")
             else:
-                logger.warning(f"⚠️ Angel MarketData Error {resp.status_code}: {resp.text[:100]}")
+                logger.warning(f"⚠️ Angel NSE Indices Error {resp.status_code}: {resp.text[:100]}")
 
-            # If all Angel attempts fail, try public fallback
-            self._fetch_public_nifty()
+            # Fetch BSE Indices (SENSEX)
+            bse_payload = {
+                "mode": "LTP",
+                "exchangeTokens": {
+                    "BSE": ["99919000", "19000"]
+                }
+            }
+            resp_bse = requests.post(url, json=bse_payload, headers=headers, timeout=10)
+            if resp_bse.status_code == 200 and resp_bse.text.strip().startswith('{'):
+                rj_bse = resp_bse.json()
+                data_list_bse = rj_bse.get('data', {}).get('fetched', [])
+                for item in data_list_bse:
+                    token = item.get("symbolToken")
+                    lp = item.get("ltp") or item.get("lastPrice", 0)
+                    if lp > 0:
+                        if token in ["99919000", "19000"]:
+                            shared_data.market_data["SENSEX"] = float(lp)
+                            shared_data.market_data["BSE SENSEX"] = float(lp)
+                            logger.info(f"🔥 [ANGEL LIVE] SENSEX SPOT: {lp}")
+            else:
+                logger.warning(f"⚠️ Angel BSE Indices Error {resp_bse.status_code}: {resp_bse.text[:100]}")
+
         except Exception as e:
             logger.error(f"❌ Angel Feed Critical Error: {e}")
+            
+        # Fallback to public if Nifty is still 0
+        if shared_data.market_data.get("NIFTY", 0) == 0:
             self._fetch_public_nifty()
-        finally:
-            shared_data.broker_connection_status["AngelOne"] = (shared_data.market_data.get("NIFTY", 0) > 0)
+            
+        shared_data.broker_connection_status["AngelOne"] = (shared_data.market_data.get("NIFTY", 0) > 0)
 
     def _fetch_public_nifty(self):
         """🌟 EMERGENCY FALLBACK: Fetch Nifty from public sources if broker fails."""

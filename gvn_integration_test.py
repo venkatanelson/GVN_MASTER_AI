@@ -144,36 +144,23 @@ def test_shared_data():
         
         # Test thread-safe operations
         shared_data.update_market_data("NIFTY", 23500.0)
-        data = shared_data.get_market_data("NIFTY")
+        data = shared_data.get_market_data()
         
-        if data['spot'] == 23500.0:
+        if data.get('NIFTY') == 23500.0:
             logger.info("✓ Market data update works")
         
-        # Test pulse update
-        pulse_data = {
-            "trend": "UPTREND",
-            "trend_strength": 75,
-            "momentum": "STRONG"
-        }
-        shared_data.update_market_pulse("NIFTY", pulse_data)
-        pulse = shared_data.get_market_pulse("NIFTY")
-        
-        logger.info(f"✓ Market pulse: {pulse['trend']} ({pulse['trend_strength']})")
-        
-        # Test trade history
-        test_trade = {
-            "symbol": "NIFTY24100CE",
-            "entry": 100.0,
-            "exit": 110.0,
-            "pnl": 10.0
-        }
-        shared_data.add_trade_to_history(test_trade)
-        stats = shared_data.get_trade_stats()
-        
-        logger.info(f"✓ Trade history: {stats['total_trades']} trades, PnL: {stats['total_pnl']}")
+        # Test system status
+        shared_data.add_system_error("Test Error")
+        status = shared_data.get_system_status()
+        if "Test Error" in status.get("errors", []):
+            logger.info("✓ System status and errors work")
         
         logger.info("✅ Shared data structures working\n")
         return True
+    
+    except Exception as e:
+        logger.error(f"❌ Shared data test failed: {e}\n")
+        return False
     
     except Exception as e:
         logger.error(f"❌ Shared data test failed: {e}\n")
