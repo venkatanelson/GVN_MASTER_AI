@@ -11,12 +11,32 @@ from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import shared_data
 
+# Reconfigure standard output streams to use UTF-8 if supported to prevent UnicodeEncodeErrors on Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except:
+        pass
+
 class UILogger:
     def __init__(self, original):
         self.original = original
 
     def write(self, message):
-        self.original.write(message)
+        try:
+            self.original.write(message)
+        except UnicodeEncodeError:
+            try:
+                enc = getattr(self.original, 'encoding', 'utf-8') or 'utf-8'
+                self.original.write(message.encode(enc, errors='replace').decode(enc))
+            except:
+                pass
+        
         clean_msg = message.strip()
         if clean_msg and "HTTP/1.1" not in clean_msg and "GET /" not in clean_msg and "POST /" not in clean_msg and "werkzeug" not in clean_msg:
             try:
@@ -31,7 +51,10 @@ class UILogger:
                 pass
 
     def flush(self):
-        self.original.flush()
+        try:
+            self.original.flush()
+        except:
+            pass
 
 sys.stdout = UILogger(sys.stdout)
 sys.stderr = UILogger(sys.stderr)
@@ -671,18 +694,104 @@ def receive_tv_levels():
         if secret != "ANWZ22747T": # Using gvn_secret from Pine script
             return jsonify({"status": "unauthorized"}), 401
 
+        symbol = data.get("symbol")
+        high = data.get("high")
+        low = data.get("low")
+
+        # Parse strike and option type
+        import re
+        strike, opt_type = None, None
+        if symbol:
+            symbol_str = symbol.upper()
+            
+            # Determine option type first
+            if "CE" in symbol_str or "CALL" in symbol_str:
+                opt_type = "CE"
+            elif "PE" in symbol_str or "PUT" in symbol_str:
+                opt_type = "PE"
+            else:
+                # check for C or P right before/after digits
+                c_match = re.search(r'C\s*\d{4,5}', symbol_str) or re.search(r'\d{4,5}\s*C', symbol_str)
+                p_match = re.search(r'P\s*\d{4,5}', symbol_str) or re.search(r'\d{4,5}\s*P', symbol_str)
+                if c_match:
+                    opt_type = "CE"
+                elif p_match:
+                    opt_type = "PE"
+                    
+            # Extract strike price: look for digits near option type indicators
+            # Match 1: C/P/CE/PE followed by digits
+            match1 = re.search(r'(?:C|P|CE|PE)\s*(\d{4,5})', symbol_str)
+            if match1:
+                strike = int(match1.group(1))
+            else:
+                # Match 2: digits followed by C/P/CE/PE
+                match2 = re.search(r'(\d{4,5})\s*(?:C|P|CE|PE)', symbol_str)
+                if match2:
+                    strike = int(match2.group(1))
+                else:
+                    # Fallback to last 4-5 digit number in the string
+                    all_nums = re.findall(r'\d{4,5}', symbol_str)
+                    if all_nums:
+                        strike = int(all_nums[-1])
+
+        # Determine the base index symbol (e.g. BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX, NIFTY)
+        base_index = "NIFTY"  # Default fallback
+        if symbol:
+            symbol_upper = symbol.upper()
+            if "BANKNIFTY" in symbol_upper or "BANK NIFTY" in symbol_upper:
+                base_index = "BANKNIFTY"
+            elif "FINNIFTY" in symbol_upper or "FIN NIFTY" in symbol_upper:
+                base_index = "FINNIFTY"
+            elif "MIDCPNIFTY" in symbol_upper or "MID CAP NIFTY" in symbol_upper or "MIDCP NIFTY" in symbol_upper:
+                base_index = "MIDCPNIFTY"
+            elif "SENSEX" in symbol_upper:
+                base_index = "SENSEX"
+            elif "NIFTY" in symbol_upper:
+                base_index = "NIFTY"
+
+        if strike and opt_type and high is not None and low is not None:
+            # 1. Update today's recorded JSON file
+            from nse_option_chain import save_recorded_915_ohlc
+            strike_key = f"{strike} {opt_type}"
+            save_recorded_915_ohlc(strike_key, float(high), float(low), symbol=base_index)
+
+            # 2. Update database benchmarks
+            from gvn_levels_engine import calculate_gvn_levels
+            levels = calculate_gvn_levels(float(high), float(low))
+            if levels:
+                import gvn_data_bank
+                try:
+                    gvn_data_bank.save_option_915_benchmark(
+                        symbol=base_index,
+                        strike=float(strike),
+                        opt_type=opt_type,
+                        high=float(high),
+                        low=float(low),
+                        delta=0.65,
+                        levels=levels
+                    )
+                except Exception as db_err:
+                    print(f"⚠️ [TV WEBHOOK DB ERROR] {db_err}")
+
+            # 3. Update memory caches instantly
+            import nse_option_chain
+            cache_key = f"{base_index}_{strike}_{opt_type}"
+            nse_option_chain.option_915_cache[cache_key] = (float(high), float(low))
+            
+            print(f"✅ [TV WEBHOOK SYNC] Auto-saved 9:15 AM OHLC for {base_index} {strike_key}: High={high}, Low={low}")
+
         # Store the levels in shared memory
         shared_data.gvn_tv_levels = {
-            "symbol": data.get("symbol"),
-            "high": data.get("high"),
-            "low": data.get("low"),
+            "symbol": symbol,
+            "high": high,
+            "low": low,
             "i1": data.get("i1"),
             "i5": data.get("i5"),
             "i7": data.get("i7"),
             "received_at": datetime.now().strftime("%H:%M:%S")
         }
         
-        print(f"✅ [TV WEBHOOK] Received levels for {data.get('symbol')}: i1:{data.get('i1')} i5:{data.get('i5')} i7:{data.get('i7')}")
+        print(f"✅ [TV WEBHOOK] Received levels for {symbol}: i1:{data.get('i1')} i5:{data.get('i5')} i7:{data.get('i7')}")
         return jsonify({"status": "success"}), 200
     except Exception as e:
         print(f"❌ [TV WEBHOOK ERROR] {e}")
@@ -797,6 +906,98 @@ def start_playback():
 @app.route('/api/demo-logs')
 def get_demo_logs():
     return jsonify({"logs": shared_data.demo_logs})
+
+@app.route('/api/bypass-levels', methods=['POST'])
+def bypass_levels():
+    """
+    Endpoint for admin manual override of GVN levels (bypassing the historical candle query).
+    Accepts POST JSON:
+    {
+      "symbol": "NIFTY",  // NIFTY, BANKNIFTY, FINNIFTY, SENSEX, MIDCPNIFTY
+      "strike": 23550,    // Optional for indices, required for option strikes
+      "opt_type": "CE",   // Optional for indices, required for option strikes
+      "high": 179.30,
+      "low": 107.00
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        symbol = data.get("symbol", "").upper()
+        strike = data.get("strike")
+        opt_type = data.get("opt_type", "").upper()
+        high = data.get("high")
+        low = data.get("low")
+        
+        if not symbol or high is None or low is None:
+            return jsonify({"status": "error", "message": "Missing symbol, high, or low"}), 400
+            
+        from nse_option_chain import save_recorded_915_ohlc, option_915_cache, calculate_gvn_levels
+        
+        high = float(high)
+        low = float(low)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        if strike and opt_type:
+            # 1. Option Strike level bypass
+            strike_val = int(float(strike))
+            strike_key = f"{strike_val} {opt_type}"
+            
+            # Save to JSON
+            save_recorded_915_ohlc(strike_key, high, low, symbol=symbol)
+            
+            # Save to in-memory cache
+            cache_key = f"{symbol}_{strike_val}_{opt_type}"
+            option_915_cache[cache_key] = (high, low)
+            
+            # Save to SQLite option_915_benchmarks
+            try:
+                import gvn_data_bank
+                levels = calculate_gvn_levels(high, low)
+                gvn_data_bank.save_option_915_benchmark(
+                    symbol=symbol,
+                    strike=strike_val,
+                    opt_type=opt_type,
+                    high=high,
+                    low=low,
+                    delta=0.5, # default
+                    levels=levels
+                )
+            except Exception as db_err:
+                print(f"❌ Failed to log manual override 9:15 option benchmark: {db_err}")
+                
+            print(f"🎯 [BYPASS] Manually set option levels for {symbol} {strike_key}: High={high}, Low={low}")
+            return jsonify({
+                "status": "success",
+                "message": f"Successfully bypassed option levels for {symbol} {strike_key}: High={high}, Low={low}"
+            })
+        else:
+            # 2. Index Spot level bypass
+            # Save to JSON
+            save_recorded_915_ohlc(f"{symbol}_SPOT", high, low, symbol=symbol)
+            
+            # Update in-memory benchmark
+            shared_data.gvn_915_benchmark[symbol] = {
+                "high": high,
+                "low": low,
+                "captured": True,
+                "date": today_str,
+                "timeframe": "BYPASS"
+            }
+            
+            # If Nifty spot was bypassed, let's also update NIFTY_SPOT in JSON
+            if symbol == "NIFTY":
+                save_recorded_915_ohlc("NIFTY_SPOT", high, low, symbol="NIFTY")
+                
+            print(f"🎯 [BYPASS] Manually set index spot levels for {symbol}: High={high}, Low={low}")
+            return jsonify({
+                "status": "success",
+                "message": f"Successfully bypassed index spot levels for {symbol}: High={high}, Low={low}"
+            })
+            
+    except Exception as e:
+        import traceback
+        print(f"❌ Error in bypass-levels endpoint: {e}\n{traceback.format_exc()}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/gvn-scanner')
 def get_gvn_scanner():

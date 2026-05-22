@@ -155,8 +155,19 @@ class TrueDataRestAPI:
             return res
         
         # Final fallback to avoid crash
-        if "CRUDE" in symbol.upper():
+        symbol_upper = symbol.upper()
+        if "CRUDE" in symbol_upper:
             return ["14-05-2026"] 
+        elif "SENSEX" in symbol_upper:
+            # Dynamically calculate the next Friday (or today if it's Friday and before 15:30)
+            from datetime import datetime, timedelta
+            today = datetime.now()
+            days_ahead = 4 - today.weekday()
+            # If past Friday or it is Friday after 15:30, roll over to the next Friday
+            if days_ahead < 0 or (days_ahead == 0 and today.time() >= datetime.strptime("15:30:00", "%H:%M:%S").time()):
+                days_ahead += 7
+            next_friday = today + timedelta(days=days_ahead)
+            return [next_friday.strftime("%d-%m-%Y")]
             
         return ["26-05-2026"] # User Verified Next Nifty Expiry
 

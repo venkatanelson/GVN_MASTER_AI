@@ -111,6 +111,8 @@ def load_recorded_915_ohlc():
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("date") == today_str:
+                if "NIFTY" not in data:
+                    data["NIFTY"] = {}
                 return data
             else:
                 logger.info("🗑️ Clearing yesterday's GVN 9:15 candle recordings...")
@@ -122,14 +124,19 @@ def load_recorded_915_ohlc():
             logger.error(f"Error loading recorded 9:15 OHLC: {e}")
     return {"date": today_str, "NIFTY": {}}
 
-def save_recorded_915_ohlc(strike_name, high, low):
+def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None):
     file_path = "gvn_recorded_915_ohlc.json"
     data = load_recorded_915_ohlc()
-    data["NIFTY"][strike_name] = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
+    sym_key = symbol.upper() if symbol else "NIFTY"
+    if sym_key not in data:
+        data[sym_key] = {}
+    data[sym_key][strike_name] = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
+    if timeframe:
+        data["timeframe"] = timeframe
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-        logger.info(f"💾 Recorded 9:15 candle for {strike_name}: High={high}, Low={low}")
+        logger.info(f"💾 Recorded 9:15 candle for {sym_key} {strike_name}: High={high}, Low={low} (timeframe={timeframe})")
     except Exception as e:
         logger.error(f"Error saving recorded 9:15 OHLC: {e}")
 
@@ -155,62 +162,56 @@ def get_truedata_option_symbol(symbol, strike, opt_type, expiry_str=None):
 
 def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
     strike_key = f"{int(strike)} {opt_type}"
+    symbol_upper = symbol.upper()
     
-    # 1. Try to load from today's recorded JSON file (Retrieval Program)
+    # 1. Try to load from today's recorded JSON file (Retrieval Program / Bypass)
     recorded_data = load_recorded_915_ohlc()
-    if strike_key in recorded_data.get("NIFTY", {}):
-        rec = recorded_data["NIFTY"][strike_key]
-        logger.info(f"🎯 [RETRIEVED RECORDING] Found GVN 9:15 AM OHLC for {strike_key}: High={rec['high']}, Low={rec['low']}")
+    rec = recorded_data.get(symbol_upper, {}).get(strike_key) or recorded_data.get("NIFTY", {}).get(strike_key)
+    if rec:
+        logger.info(f"🎯 [RETRIEVED RECORDING] Found GVN 9:15 AM OHLC for {symbol_upper} {strike_key}: High={rec['high']}, Low={rec['low']}")
         return rec["high"], rec["low"]
 
     # 2. Try hardcoded cache fallback
     cache_key = f"{symbol}_{int(strike)}_{opt_type}"
     if cache_key in option_915_cache:
         val = option_915_cache[cache_key]
-        save_recorded_915_ohlc(strike_key, val[0], val[1])
+        save_recorded_915_ohlc(strike_key, val[0], val[1], symbol=symbol_upper)
         return val
         
-    # 3. Try to fetch live from TrueData REST API
-    td_opt_symbol = get_truedata_option_symbol(symbol, strike, opt_type, expiry_str)
-    today_str = datetime.now().strftime("%y%m%d")
-    from_dt = f"{today_str}091500"
-    to_dt = f"{today_str}092000"
+    # Calculate timeframe dynamically based on current time
+    now = datetime.now()
+    cutoff_time = now.replace(hour=9, minute=20, second=15, microsecond=0)
+    timeframe = "1MIN" if now < cutoff_time else "5MIN"
     
+    # 3. Try to fetch using get_915_candle_angel_v2
     try:
-        hist = td_api.get_historical_data(td_opt_symbol, from_dt, to_dt)
-        candles = []
-        if isinstance(hist, list):
-            candles = hist
-        elif isinstance(hist, dict):
-            candles = hist.get('candles') or hist.get('records') or hist.get('data') or hist.get('Records') or []
-            
-        if candles and len(candles) > 0:
-            highs = [float(c[2]) for c in candles if len(c) > 3]
-            lows = [float(c[3]) for c in candles if len(c) > 3]
-            
-            if highs and lows:
-                high = max(highs)
-                low = min(lows)
-                save_recorded_915_ohlc(strike_key, high, low)
-                option_915_cache[cache_key] = (high, low)
-                logger.info(f"🎯 [TRUE-DATA] Retrieved & Recorded REAL 9:15 AM 5-Min OHLC for {td_opt_symbol}: High={high}, Low={low}")
-                return high, low
-    except Exception as e:
-        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {td_opt_symbol} from TrueData: {e}")
-        
-    # 4. Try to fetch from Angel One (Bypass/Fallback)
-    try:
-        angel_candle = get_915_candle_angel(symbol, strike, opt_type)
-        if angel_candle and angel_candle.get("high") and angel_candle.get("low"):
-            high = angel_candle["high"]
-            low = angel_candle["low"]
-            save_recorded_915_ohlc(strike_key, high, low)
+        candle = get_915_candle_angel_v2(symbol, strike, opt_type, timeframe=timeframe)
+        if candle and candle.get("high") and candle.get("low"):
+            high = float(candle["high"])
+            low = float(candle["low"])
+            actual_tf = candle.get("timeframe", timeframe)
+            save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe=actual_tf)
             option_915_cache[cache_key] = (high, low)
-            logger.info(f"🎯 [ANGEL ONE] Retrieved & Recorded REAL 9:15 AM OHLC for {strike_key}: High={high}, Low={low}")
+            logger.info(f"🎯 [V2 RETRIEVER] Retrieved & Recorded REAL 9:15 AM {actual_tf} OHLC for {symbol_upper} {strike_key}: High={high}, Low={low}")
             return high, low
     except Exception as e:
-        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {strike_key} from Angel: {e}")
+        logger.error(f"❌ Failed to fetch real 9:15 OHLC for {symbol_upper} {strike_key} via get_915_candle_angel_v2: {e}")
         
+    # Fallback to the other timeframe if timeframe was 5MIN and it failed
+    if timeframe == "5MIN":
+        try:
+            logger.info(f"🔄 [FALLBACK] Trying 1MIN timeframe for {symbol_upper} {strike_key}...")
+            candle = get_915_candle_angel_v2(symbol, strike, opt_type, timeframe="1MIN")
+            if candle and candle.get("high") and candle.get("low"):
+                high = float(candle["high"])
+                low = float(candle["low"])
+                save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe="1MIN")
+                option_915_cache[cache_key] = (high, low)
+                logger.info(f"🎯 [V2 RETRIEVER FALLBACK] Retrieved & Recorded REAL 9:15 AM 1MIN OHLC for {symbol_upper} {strike_key}: High={high}, Low={low}")
+                return high, low
+        except Exception as e:
+            logger.error(f"❌ Failed 1MIN fallback for {symbol_upper} {strike_key}: {e}")
+            
     return None
 
 
@@ -638,25 +639,436 @@ def fetch_from_angel(symbol):
     except Exception as e:
         return None
 
+_angel_scrip_master_cache = None
+
+def get_angel_token():
+    # 1. Check if dhan_master_config has an active angel token
+    from nse_option_chain import dhan_master_config
+    if dhan_master_config.get("broker_name") == "angel" and dhan_master_config.get("access_token"):
+        return dhan_master_config.get("access_token")
+        
+    # 2. Try to perform direct HTTP login using permanent credentials
+    try:
+        from broker_api import angel_http_login
+        import shared_data
+        angel_cfg = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel")
+        if angel_cfg:
+            token = angel_http_login(angel_cfg)
+            if token:
+                # Update config so next calls reuse it
+                dhan_master_config.update({
+                    "broker_name": "angel",
+                    "client_id": angel_cfg.get("client_id"),
+                    "access_token": token,
+                    "active": True,
+                    "api_key": angel_cfg.get("api_key")
+                })
+                return token
+    except Exception as e:
+        logger.error(f"Error performing fallback Angel login: {e}")
+    return None
+
+def find_angel_token_and_segment(symbol, strike, opt_type, expiry_dt=None):
+    """
+    Finds the token and exchange segment from angel_scrip_master.json.
+    Tries different symbol candidate formats (weekly vs monthly) for NIFTY/BANKNIFTY and SENSEX.
+    """
+    global _angel_scrip_master_cache
+    scrip_path = "angel_scrip_master.json"
+    
+    today_date = datetime.now().date()
+    needs_download = True
+    if os.path.exists(scrip_path):
+        try:
+            mtime = datetime.fromtimestamp(os.path.getmtime(scrip_path)).date()
+            if mtime == today_date:
+                needs_download = False
+        except:
+            pass
+            
+    if needs_download:
+        logger.info("📥 Downloading fresh Angel One Scrip Master...")
+        try:
+            r = requests.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", timeout=30)
+            if r.status_code == 200:
+                with open(scrip_path, "w", encoding="utf-8") as f:
+                    f.write(r.text)
+                logger.info("✅ Angel One Scrip Master updated successfully.")
+                _angel_scrip_master_cache = None
+            else:
+                logger.error(f"❌ Failed to download Angel Scrip Master: HTTP {r.status_code}")
+        except Exception as e:
+            logger.error(f"❌ Error downloading Angel Scrip Master: {e}")
+
+    if not os.path.exists(scrip_path):
+        logger.error("❌ Scrip master file does not exist, cannot lookup token.")
+        return None, None
+
+    if _angel_scrip_master_cache is None:
+        try:
+            logger.info("Parsing Angel Scrip Master into cache...")
+            with open(scrip_path, "r", encoding="utf-8") as f:
+                _angel_scrip_master_cache = json.load(f)
+            logger.info(f"Loaded {len(_angel_scrip_master_cache)} scripts into memory.")
+        except Exception as e:
+            logger.error(f"Error loading scrip master JSON: {e}")
+            return None, None
+            
+    master_data = _angel_scrip_master_cache
+    
+    if not expiry_dt:
+        try:
+            expiries = td_api.get_expiry_list(symbol)
+            expiry_str = expiries[0] if expiries else None
+            if expiry_str:
+                expiry_dt = datetime.strptime(expiry_str, "%d-%m-%Y")
+        except Exception as ex:
+            logger.warning(f"Could not get expiry list for {symbol} lookup: {ex}")
+            
+    if not expiry_dt:
+        today = datetime.now()
+        target_day = 4 if "SENSEX" in symbol.upper() else 3
+        days_ahead = target_day - today.weekday()
+        if days_ahead < 0 or (days_ahead == 0 and today.time() >= datetime.strptime("15:30:00", "%H:%M:%S").time()):
+            days_ahead += 7
+        expiry_dt = today + timedelta(days=days_ahead)
+            
+    yy = expiry_dt.strftime("%y")
+    dd = expiry_dt.strftime("%d")
+    mmm_upper = expiry_dt.strftime("%b").upper()
+    
+    m_char = ""
+    month = expiry_dt.month
+    if month <= 9:
+        m_char = str(month)
+    elif month == 10:
+        m_char = "O"
+    elif month == 11:
+        m_char = "N"
+    elif month == 12:
+        m_char = "D"
+        
+    strike_int = int(strike)
+    symbol_upper = symbol.upper()
+    c_p_char = "C" if opt_type == "CE" else "P"
+    mm = expiry_dt.strftime("%m")
+    
+    candidates = []
+    candidates.append(f"{symbol_upper}{dd}{mmm_upper}{yy}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{mmm_upper}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{m_char}{dd}{strike_int}{opt_type}")
+    candidates.append(f"{symbol_upper}{yy}{m_char}{dd}{c_p_char}{strike_int}")
+    candidates.append(f"{symbol_upper}{yy}{mm}{dd}{c_p_char}{strike_int}")
+    
+    logger.info(f"Looking up candidates for {symbol_upper} {strike} {opt_type}: {candidates}")
+    
+    for item in master_data:
+        item_sym = item.get('symbol')
+        item_exch = item.get('exch_seg')
+        
+        if item_sym in candidates and item_exch in ['NFO', 'BFO']:
+            logger.info(f"🎯 Matched Angel Symbol: {item_sym} | Token: {item.get('token')} | Segment: {item_exch}")
+            return item.get('token'), item_exch
+            
+    return None, None
+
+def find_angel_index_token(symbol):
+    sym = symbol.upper()
+    if sym == "NIFTY" or sym == "NIFTY 50":
+        return "99926000", "NSE"
+    elif sym == "BANKNIFTY" or sym == "NIFTY BANK":
+        return "99926009", "NSE"
+    elif sym == "FINNIFTY" or sym == "NIFTY FIN SERVICE":
+        return "99926037", "NSE"
+    elif sym == "SENSEX" or sym == "BSE SENSEX":
+        return "99919000", "BSE"
+    elif sym == "MIDCPNIFTY" or sym == "NIFTY MID SELECT":
+        return "99926074", "NSE"
+    return None, None
+
+def process_candles_for_timeframe(candles, timeframe, source="AngelOne"):
+    if not candles:
+        return None
+        
+    valid_candles = []
+    for c in candles:
+        ts = str(c[0])
+        # Extract minute/hour
+        if "09:15" in ts or "09:16" in ts or "09:17" in ts or "09:18" in ts or "09:19" in ts:
+            valid_candles.append(c)
+            
+    if not valid_candles:
+        valid_candles = [candles[0]]
+        
+    if timeframe == "1MIN":
+        # First candle (09:15)
+        c_915 = None
+        for c in valid_candles:
+            if "09:15" in str(c[0]):
+                c_915 = c
+                break
+        if not c_915:
+            c_915 = valid_candles[0]
+            
+        high = float(c_915[2])
+        low = float(c_915[3])
+        close = float(c_915[4])
+        ts_val = c_915[0]
+        logger.info(f"✅ [{source}] Processed 1-Min Candle: High={high}, Low={low}, Close={close}")
+        return {"high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "1MIN"}
+        
+    else: # timeframe == "5MIN"
+        # Aggregate candles from 09:15 to 09:19
+        candles_5min = [c for c in valid_candles if any(x in str(c[0]) for x in ["09:15", "09:16", "09:17", "09:18", "09:19"])]
+        if not candles_5min:
+            return process_candles_for_timeframe(candles, "1MIN", source=source)
+            
+        highs = [float(c[2]) for c in candles_5min]
+        lows = [float(c[3]) for c in candles_5min]
+        
+        if highs and lows:
+            high = max(highs)
+            low = min(lows)
+            close = float(candles_5min[-1][4])
+            ts_val = candles_5min[0][0]
+            logger.info(f"✅ [{source}] Processed 5-Min Candle: High={high}, Low={low}, Close={close}")
+            return {"high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "5MIN"}
+        else:
+            # Fallback to 1-min
+            return process_candles_for_timeframe(candles, "1MIN", source=source)
+
+def get_915_candle_truedata_fallback(symbol, strike=None, opt_type=None, timeframe="5MIN"):
+    logger.info(f"🔄 [FALLBACK] Fetching 9:15 {timeframe} candle from TrueData REST API...")
+    try:
+        if not td_api:
+            logger.error("❌ TrueData API not initialized.")
+            return None
+            
+        if strike and opt_type:
+            td_symbol = get_truedata_option_symbol(symbol, strike, opt_type)
+        else:
+            td_symbol = symbol
+            if symbol == "NIFTY": td_symbol = "NIFTY 50"
+            elif symbol == "BANKNIFTY": td_symbol = "NIFTY BANK"
+            elif symbol == "FINNIFTY": td_symbol = "NIFTY FIN SERVICE"
+            elif symbol == "MIDCPNIFTY": td_symbol = "NIFTY MID SELECT"
+            elif symbol == "SENSEX": td_symbol = "SENSEX"
+            
+        today_str = datetime.now().strftime("%y%m%d")
+        from_dt = f"{today_str}091500"
+        to_dt = f"{today_str}092000"
+        
+        hist = td_api.get_historical_data(td_symbol, from_dt, to_dt)
+        candles = []
+        if isinstance(hist, list):
+            candles = hist
+        elif isinstance(hist, dict):
+            candles = hist.get('candles') or hist.get('records') or hist.get('data') or hist.get('Records') or []
+            
+        if not candles:
+            logger.warning(f"⚠️ TrueData returned no candles for {td_symbol}")
+            return None
+            
+        return process_candles_for_timeframe(candles, timeframe, source="TrueData")
+    except Exception as e:
+        logger.error(f"❌ Error in get_915_candle_truedata_fallback: {e}")
+        return None
+
+def get_915_candle_angel_v2(symbol, strike=None, opt_type=None, timeframe="5MIN"):
+    """
+    Fetches the 9:15 AM candle (1-minute or 5-minute) from Angel One API.
+    Falls back to TrueData REST API if Angel One fails or returns no data.
+    """
+    if strike and opt_type:
+        symbol_token, exch_seg = find_angel_token_and_segment(symbol, strike, opt_type)
+    else:
+        symbol_token, exch_seg = find_angel_index_token(symbol)
+        
+    if not symbol_token:
+        logger.error(f"❌ Could not resolve Angel token for {symbol} (strike={strike}, opt_type={opt_type})")
+        return get_915_candle_truedata_fallback(symbol, strike, opt_type, timeframe)
+        
+    try:
+        token = get_angel_token()
+        if not token:
+            logger.error("❌ Could not get Angel One token.")
+            return get_915_candle_truedata_fallback(symbol, strike, opt_type, timeframe)
+            
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        api_key = dhan_master_config.get("api_key")
+        if not api_key:
+            import shared_data
+            api_key = shared_data.PERMANENT_CREDENTIALS_BACKUP["angel"]["api_key"]
+            
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-UserType": "USER",
+            "X-SourceID": "WEB",
+            "X-ClientLocalIP": "127.0.0.1",
+            "X-ClientPublicIP": "127.0.0.1",
+            "X-MACAddress": "00:00:00:00:00:00",
+            "X-PrivateKey": api_key,
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "Mozilla/5.0"
+        }
+        
+        hist_payload = {
+            "exchange": exch_seg,
+            "symboltoken": symbol_token,
+            "interval": "ONE_MINUTE",
+            "fromdate": f"{today_str} 09:15",
+            "todate": f"{today_str} 09:20"
+        }
+        
+        logger.info(f"Fetching 9:15 {timeframe} candle from Angel One for token {symbol_token}...")
+        url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/historical/v1/getCandleData"
+        resp = requests.post(url, json=hist_payload, headers=headers, timeout=10)
+        
+        if resp.status_code != 200:
+            logger.error(f"❌ Angel getCandleData failed: HTTP {resp.status_code}")
+            return get_915_candle_truedata_fallback(symbol, strike, opt_type, timeframe)
+            
+        rj = resp.json()
+        if not rj.get("status") or not rj.get("data"):
+            logger.warning(f"⚠️ Angel getCandleData returned no data or error: {rj}")
+            return get_915_candle_truedata_fallback(symbol, strike, opt_type, timeframe)
+            
+        candles = rj.get("data")
+        return process_candles_for_timeframe(candles, timeframe, source="AngelOne")
+    except Exception as e:
+        logger.error(f"❌ Error in get_915_candle_angel_v2: {e}")
+        return get_915_candle_truedata_fallback(symbol, strike, opt_type, timeframe)
+
 def get_915_candle_angel(symbol, strike, opt_type, interval="ONE_MINUTE"):
     """
-    Fetches the 9:15 AM candle from Angel One Historical API.
-    Used for Pine Script differentiation logic.
+    Legacy wrapper for backward compatibility.
     """
-    try:
-        from gvn_master_orchestrator import get_orchestrator
-        orch = get_orchestrator()
-        # This would use api.getCandleData(...)
-        # We simulate the 9:15 candle for the engine
-        now = datetime.now()
-        return {
-            "high": 100.0, # Placeholder
-            "low": 90.0,   # Placeholder
-            "close": 95.0,
-            "timestamp": now.replace(hour=9, minute=15).isoformat()
-        }
-    except:
-        return None
+    return get_915_candle_angel_v2(symbol, strike, opt_type, timeframe="1MIN")
+
+def get_recorded_index_915_ohlc(symbol):
+    symbol_upper = symbol.upper()
+    spot_key = f"{symbol_upper}_SPOT"
+    recorded_data = load_recorded_915_ohlc()
+    
+    rec = recorded_data.get(symbol_upper, {}).get(spot_key)
+    if not rec:
+        rec = recorded_data.get(symbol_upper, {}).get("SPOT")
+    if not rec:
+        rec = recorded_data.get("NIFTY", {}).get(spot_key)
+    if not rec:
+        rec = recorded_data.get(spot_key)
+        
+    if rec and "high" in rec and "low" in rec:
+        return float(rec["high"]), float(rec["low"])
+    return None
+
+def load_all_recorded_benchmarks():
+    """
+    Loads all index benchmarks from gvn_recorded_915_ohlc.json into shared_data.gvn_915_benchmark.
+    """
+    logger.info("🔄 [BENCHMARK] Loading recorded benchmarks from JSON file...")
+    indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"]
+    recorded_data = load_recorded_915_ohlc()
+    timeframe = recorded_data.get("timeframe", "1MIN")
+    loaded_count = 0
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    for symbol in indices:
+        ohlc = get_recorded_index_915_ohlc(symbol)
+        if ohlc:
+            high, low = ohlc
+            shared_data.gvn_915_benchmark[symbol] = {
+                "high": high,
+                "low": low,
+                "captured": True,
+                "date": today_str,
+                "timeframe": timeframe
+            }
+            logger.info(f"🎯 [BENCHMARK] Loaded recorded spot benchmark for {symbol}: High={high}, Low={low} ({timeframe})")
+            loaded_count += 1
+            
+    return loaded_count > 0
+
+def retrieve_and_record_915_levels(timeframe="5MIN"):
+    """
+    Runs historical API queries to retrieve 9:15 AM levels for indices and active option strikes,
+    saving them to gvn_recorded_915_ohlc.json and SQLite database.
+    """
+    logger.info(f"🔄 [RETRIEVER] Fetching 9:15 AM levels for timeframe={timeframe}...")
+    indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"]
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # 1. Fetch and record index spot candles
+    for symbol in indices:
+        try:
+            candle = get_915_candle_angel_v2(symbol, timeframe=timeframe)
+            if candle and candle.get("high") and candle.get("low"):
+                high = float(candle["high"])
+                low = float(candle["low"])
+                actual_timeframe = candle.get("timeframe", timeframe)
+                
+                # Update in-memory benchmark
+                shared_data.gvn_915_benchmark[symbol] = {
+                    "high": high,
+                    "low": low,
+                    "captured": True,
+                    "date": today_str,
+                    "timeframe": actual_timeframe
+                }
+                
+                # Save to JSON
+                save_recorded_915_ohlc(f"{symbol}_SPOT", high, low, symbol=symbol, timeframe=actual_timeframe)
+                logger.info(f"✅ [RETRIEVER] Recorded spot for {symbol}: High={high}, Low={low} ({actual_timeframe})")
+            else:
+                logger.warning(f"⚠️ [RETRIEVER] No candle data for {symbol} spot ({timeframe})")
+                if timeframe == "5MIN":
+                    nifty_bench = shared_data.gvn_915_benchmark.get(symbol, {})
+                    if nifty_bench.get("date") == today_str:
+                        shared_data.gvn_915_benchmark[symbol]["timeframe"] = "5MIN_ATTEMPTED"
+                    else:
+                        shared_data.gvn_915_benchmark[symbol] = {
+                            "high": 0.0,
+                            "low": 0.0,
+                            "captured": False,
+                            "date": today_str,
+                            "timeframe": "5MIN_ATTEMPTED"
+                        }
+        except Exception as e:
+            logger.error(f"❌ [RETRIEVER] Error fetching {symbol} spot: {e}")
+            if timeframe == "5MIN":
+                shared_data.gvn_915_benchmark[symbol] = {
+                    "high": 0.0,
+                    "low": 0.0,
+                    "captured": False,
+                    "date": today_str,
+                    "timeframe": "5MIN_ATTEMPTED"
+                }
+            
+    # 2. Fetch and record ATM option strikes for Nifty
+    nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY")
+    if nifty_bench and nifty_bench.get("high", 0) > 0:
+        spot = (nifty_bench["high"] + nifty_bench["low"]) / 2.0
+        atm = round(spot / 50.0) * 50
+        
+        # Select strikes around ATM
+        strikes = [atm - 100, atm - 50, atm, atm + 50, atm + 100]
+        logger.info(f"🔄 [RETRIEVER] Fetching ATM option strike candles around ATM={atm}...")
+        for strike in strikes:
+            for opt_type in ["CE", "PE"]:
+                strike_key = f"{strike} {opt_type}"
+                try:
+                    candle = get_915_candle_angel_v2("NIFTY", strike, opt_type, timeframe=timeframe)
+                    if candle and candle.get("high") and candle.get("low"):
+                        high = float(candle["high"])
+                        low = float(candle["low"])
+                        actual_tf = candle.get("timeframe", timeframe)
+                        
+                        save_recorded_915_ohlc(strike_key, high, low, symbol="NIFTY", timeframe=actual_tf)
+                        logger.info(f"✅ [RETRIEVER] Recorded options {strike_key}: High={high}, Low={low} ({actual_tf})")
+                except Exception as e:
+                    logger.error(f"❌ [RETRIEVER] Error fetching option {strike_key}: {e}")
 
 def fetch_from_nse_direct(symbol):
     """Bypass NSE Blocks using Cookie Session with improved headers"""
@@ -1909,15 +2321,33 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
 
 def nse_background_worker():
     print("🚀 [NSE Worker] Thread Started Successfully.")
-    # 🚀 GVN RECOVERY ENGINE: Fetch 9:15 data if missing
+    
+    # 1. Load recorded benchmarks from JSON first (Admin Bypass/Recovery)
     try:
-        from recover_915_v2 import GVN_915_Recover
-        recoverer = GVN_915_Recover(td_api)
-        if not shared_data.gvn_915_benchmark.get("NIFTY", {}).get("captured"):
-            recoverer.recover_benchmarks()
-            logger.info("✅ 9:15 Benchmarks recovered successfully on startup.")
+        loaded = load_all_recorded_benchmarks()
+        if loaded:
+            logger.info("🎯 GVN Benchmarks loaded from gvn_recorded_915_ohlc.json on startup.")
     except Exception as e:
-        logger.error(f"9:15 Recovery Error: {e}")
+        logger.error(f"Error loading recorded benchmarks on startup: {e}")
+
+    # 2. Startup level recovery if benchmarks are still missing
+    try:
+        nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY", {})
+        if not nifty_bench.get("captured"):
+            now = datetime.now()
+            time_091615 = now.replace(hour=9, minute=16, second=15, microsecond=0)
+            time_092015 = now.replace(hour=9, minute=20, second=15, microsecond=0)
+            
+            if now >= time_092015:
+                logger.info("🕒 Startup recovery: past 09:20:15. Triggering 5-Min level retrieval...")
+                retrieve_and_record_915_levels(timeframe="5MIN")
+            elif now >= time_091615:
+                logger.info("🕒 Startup recovery: past 09:16:15. Triggering 1-Min level retrieval...")
+                retrieve_and_record_915_levels(timeframe="1MIN")
+            else:
+                logger.info("🕒 Startup recovery: market has not reached 09:16:15 yet. Will wait for schedule.")
+    except Exception as e:
+        logger.error(f"Startup GVN Recovery Error: {e}")
 
     while True:
         try:
@@ -1954,6 +2384,28 @@ def nse_background_worker():
                             f.write(f"{datetime.now()}: [AUTO-SYNC] Broker Keys Loaded from DB ({broker_name}).\n")
                     conn.close()
                 except: pass
+
+            # 🕒 SCHEDULED TIME CHECKS FOR GVN LEVELS
+            now = datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            time_091615 = now.replace(hour=9, minute=16, second=15, microsecond=0)
+            time_092015 = now.replace(hour=9, minute=20, second=15, microsecond=0)
+            
+            # Fetch 1-min levels if between 09:16:15 and 09:20:15
+            if time_091615 <= now < time_092015:
+                nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY", {})
+                if not nifty_bench.get("captured") or nifty_bench.get("date") != today_str:
+                    logger.info("🕒 Time is between 09:16:15 and 09:20:15. Triggering 1-Minute GVN Levels Retrieval...")
+                    retrieve_and_record_915_levels(timeframe="1MIN")
+                    
+            # Fetch 5-min levels if past 09:20:15
+            if now >= time_092015:
+                nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY", {})
+                is_captured_today = nifty_bench.get("captured") and nifty_bench.get("date") == today_str
+                is_timeframe_5min = nifty_bench.get("timeframe") in ["5MIN", "5MIN_ATTEMPTED"]
+                if not is_captured_today or not is_timeframe_5min:
+                    logger.info("🕒 Time is past 09:20:15. Triggering 5-Minute GVN Levels Retrieval...")
+                    retrieve_and_record_915_levels(timeframe="5MIN")
 
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")

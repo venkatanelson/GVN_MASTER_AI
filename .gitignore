@@ -26,6 +26,10 @@ Temp/
 *.log
 live_market_history.csv
 live_market_data.json
+gvn_recorded_915_ohlc.json
+morning_locked_strikes.json
+security_audit_log.json
+angel_scrip_master.json
 
 # VS Code settings
 .vscode/

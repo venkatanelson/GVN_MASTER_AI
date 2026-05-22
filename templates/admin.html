@@ -542,6 +542,132 @@
     }
     </script>
 
+    <!-- 🎯 GVN 9:15 AM LEVELS OVERRIDE (ADMIN BYPASS) -->
+    <div class="card" style="border-top: 5px solid #ec4899; background: #fdf2f8;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="color: #ec4899; margin: 0;">🎯 GVN 9:15 AM Levels Override (Admin Bypass)</h2>
+            <span style="font-size: 12px; color: #db2777; font-weight: bold; background: white; padding: 4px 12px; border-radius: 20px; border: 1px solid #fbcfe8;">
+                ⚡ DIRECT JSON & DB INJECTION
+            </span>
+        </div>
+        <p style="font-size: 13px; color: #555; margin-bottom: 15px;">
+            <strong>Admin Bypass Control:</strong> If the TrueData API or broker connection fails to fetch the 9:15 AM opening candle high/low levels, use this form to manually lock in the levels. This injects values directly into SQLite and the JSON cache, bypassing all remote API requests.
+        </p>
+        
+        <form id="bypass-levels-form" onsubmit="submitBypass(event)" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #fbcfe8;">
+            <div>
+                <label><b>Symbol:</b></label><br>
+                <select id="bypass-symbol" style="width: 95%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                    <option value="NIFTY">NIFTY</option>
+                    <option value="BANKNIFTY">BANKNIFTY</option>
+                    <option value="FINNIFTY">FINNIFTY</option>
+                    <option value="SENSEX">SENSEX</option>
+                    <option value="MIDCPNIFTY">MIDCPNIFTY</option>
+                </select>
+            </div>
+            <div>
+                <label><b>Mode / Type:</b></label><br>
+                <select id="bypass-mode" style="width: 95%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" onchange="toggleBypassFields()">
+                    <option value="index">Index Spot</option>
+                    <option value="option">Option Strike</option>
+                </select>
+            </div>
+            <div id="bypass-strike-div" style="display: none;">
+                <label><b>Strike Price:</b></label><br>
+                <input type="number" id="bypass-strike" placeholder="e.g. 23550" style="width: 90%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+            </div>
+            <div id="bypass-opt-type-div" style="display: none;">
+                <label><b>Option Type:</b></label><br>
+                <select id="bypass-opt-type" style="width: 95%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                    <option value="CE">CE</option>
+                    <option value="PE">PE</option>
+                </select>
+            </div>
+            <div>
+                <label><b>9:15 AM High Price:</b></label><br>
+                <input type="number" step="0.01" id="bypass-high" placeholder="e.g. 271.15" style="width: 90%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" required>
+            </div>
+            <div>
+                <label><b>9:15 AM Low Price:</b></label><br>
+                <input type="number" step="0.01" id="bypass-low" placeholder="e.g. 210.00" style="width: 90%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" required>
+            </div>
+            <div style="grid-column: span 3; text-align: center; margin-top: 10px;">
+                <button type="submit" class="btn" style="background: #ec4899; padding: 10px 30px; font-weight: bold; width: auto; font-size: 15px; box-shadow: 0 4px 8px rgba(236,72,153,0.3);">
+                    🎯 APPLY GVN BYPASS LEVEL
+                </button>
+            </div>
+        </form>
+        <div id="bypass-status" style="margin-top: 10px; font-weight: bold; text-align: center; display: none;"></div>
+    </div>
+    
+    <script>
+    function toggleBypassFields() {
+        const mode = document.getElementById('bypass-mode').value;
+        const strikeDiv = document.getElementById('bypass-strike-div');
+        const optTypeDiv = document.getElementById('bypass-opt-type-div');
+        if (mode === 'option') {
+            strikeDiv.style.display = 'block';
+            optTypeDiv.style.display = 'block';
+            document.getElementById('bypass-strike').required = true;
+        } else {
+            strikeDiv.style.display = 'none';
+            optTypeDiv.style.display = 'none';
+            document.getElementById('bypass-strike').required = false;
+        }
+    }
+    
+    async function submitBypass(event) {
+        event.preventDefault();
+        const symbol = document.getElementById('bypass-symbol').value;
+        const mode = document.getElementById('bypass-mode').value;
+        const high = document.getElementById('bypass-high').value;
+        const low = document.getElementById('bypass-low').value;
+        const statusDiv = document.getElementById('bypass-status');
+        
+        const payload = {
+            symbol: symbol,
+            high: parseFloat(high),
+            low: parseFloat(low)
+        };
+        
+        if (mode === 'option') {
+            payload.strike = parseInt(document.getElementById('bypass-strike').value);
+            payload.opt_type = document.getElementById('bypass-opt-type').value;
+        }
+        
+        statusDiv.style.display = 'block';
+        statusDiv.style.color = '#ff9800';
+        statusDiv.innerText = 'Applying bypass...';
+        
+        try {
+            const response = await fetch('/api/bypass-levels', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (response.ok && data.status === 'success') {
+                statusDiv.style.color = '#28a745';
+                statusDiv.innerText = '✅ ' + data.message;
+                // Reset form inputs except symbol/mode
+                document.getElementById('bypass-high').value = '';
+                document.getElementById('bypass-low').value = '';
+                if (document.getElementById('bypass-strike')) {
+                    document.getElementById('bypass-strike').value = '';
+                }
+            } else {
+                statusDiv.style.color = '#dc3545';
+                statusDiv.innerText = '❌ Error: ' + (data.message || 'Failed to apply bypass.');
+            }
+        } catch (e) {
+            statusDiv.style.color = '#dc3545';
+            statusDiv.innerText = '❌ Error: Could not connect to API server.';
+        }
+    }
+    </script>
+
     <!-- DYNAMIC SYSTEM SETTINGS -->
 
     <div class="card" style="border-top: 5px solid #1a73e8; background: #e8f0fe;">
