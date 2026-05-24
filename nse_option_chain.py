@@ -2234,14 +2234,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     except Exception as te:
                                         logger.error(f"Failed to send touch alert to Telegram: {te}")
                                         
-                            # 2. Pre-Alert Get Ready (1.5 <= dist <= 7.0 points)
-                            elif dist <= 7.0:
+                            # 2. Pre-Alert Get Ready (within 1 point or 1% of the GVN Level)
+                            elif dist <= 1.0 or dist <= (lvl_val * 0.01):
                                 pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
                                 now_time = time.time()
                                 last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
                                 if now_time - last_pre_time > 300: # 5 minutes cooldown
                                     shared_data.last_pre_alerts[pre_key] = now_time
-                                    pre_msg = f"🔔 <b>GVN ENTRY PRE-ALERT (GET READY)</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    pre_msg = f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()} ({lvl_val:.2f})\n💸 <b>Current Price:</b> ₹{ltp:.2f}\n📏 <b>Distance:</b> {dist:.2f} pts away\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
                                     try:
                                         from gvn_telegram_engine import TelegramAlertManager
@@ -2326,8 +2326,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     if i + 1 < len(sorted_lvls):
                                         upper_lvl = sorted_lvls[i+1]
                             
-                            # Trigger if price is within 1.5 points of a level (Dot-to-Dot)
-                            if lower_lvl and (abs(ltp - lower_lvl) < 1.5):
+                            # Trigger if price exactly touches/crosses the level (Dot-to-Dot Touch Entry)
+                            if lower_lvl and (abs(ltp - lower_lvl) <= 0.25):
                                 manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
                                 # 🚀 GVN FIX: 12-Point Stop Loss
                                 manual_sl = ltp - 12.0 

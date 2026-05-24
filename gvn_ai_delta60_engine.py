@@ -209,156 +209,175 @@ class GVNAiDelta60Engine:
                 logger.info(f"🚫 [NIFTY 50 STOCK FILTER] PE entry blocked. Nifty 50 trend is STRONG BULLISH.")
                 is_bearish = False
 
-            # 🎯 GVN PROBABILITY & PRIORITY LEVEL DETECTION
-            hit_level_name = None
-            target_price = None
-            priority = None
+            # Store previous price to detect crossover/touch
+            if "last_ltps" not in self.memory:
+                self.memory["last_ltps"] = {}
+            previous_ltp = self.memory["last_ltps"].get(key, ltp)
+            self.memory["last_ltps"][key] = ltp
+            
+            # GVN Pro Alerts - Check proximity (1% or 1 point buffer) to i5, i6, i7
+            if "pro_alerts_sent" not in self.memory:
+                self.memory["pro_alerts_sent"] = {}
+                
+            for lvl_name in ["i5", "i6", "i7"]:
+                lvl_val = levels.get(lvl_name, 0)
+                if lvl_val > 0:
+                    dist = abs(ltp - lvl_val)
+                    # Check if within 1 point or 1% buffer
+                    if dist <= 1.0 or dist <= (lvl_val * 0.01):
+                        alert_time_key = f"{key}_{lvl_name}_pro_alert"
+                        last_alert_time = self.memory["pro_alerts_sent"].get(alert_time_key, 0)
+                        # Alert at most once every 5 minutes per level per strike
+                        if time.time() - last_alert_time > 300:
+                            alert_msg = (
+                                f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n"
+                                f"🎯 Symbol: {symbol} {strike['strike']} {strike['type']}\n"
+                                f"⚡ Level: <b>{lvl_name.upper()} ({lvl_val})</b>\n"
+                                f"💸 Current Price: <b>₹{ltp}</b>\n"
+                                f"📏 Distance: {round(dist, 2)} pts away"
+                            )
+                            logger.info(f"[PRO ALERT] {symbol} {strike['strike']} {strike['type']} is approaching {lvl_name.upper()} ({lvl_val}) @ {ltp}")
+                            if self.telegram:
+                                self.telegram.send_alert(alert_msg)
+                            self.memory["pro_alerts_sent"][alert_time_key] = time.time()
 
-            def is_near(price, level):
-                return level > 0 and (level * 0.98 <= price <= level * 1.02)
-
-            # Priority 1: i5 Level (50% Level)
-            if is_near(ltp, levels["i5"]):
-                hit_level_name, target_price, priority = "i5 (Priority 1: 50% Level)", levels["i3"], 1
-            # Priority 2: i7 Level
-            elif is_near(ltp, levels["i7"]):
-                hit_level_name, target_price, priority = "i7 (Priority 2)", levels["i5"], 2
-            # Priority 3: i1 / i0 Level (Bottom Bounce - Huge Target to i5)
-            elif is_near(ltp, levels.get("i1", 0)) or is_near(ltp, levels.get("i0", 0)):
-                hit_level_name, target_price, priority = "i1/i0 (Priority 3: Bottom Reversal)", levels["i5"], 3
-            # Priority 4: i3 Level (Breakout Level Touch)
-            elif is_near(ltp, levels["i3"]):
-                hit_level_name, target_price, priority = "i3 (Breakout Level)", levels["i2"], 5
-            # Priority Gap Up/Down: i6 Level
-            elif is_near(ltp, levels["i6"]) and ("GAP" in wind_dir or ltp > strike["high_915"] * 1.05 or ltp < strike["low_915"] * 0.95):
-                hit_level_name, target_price, priority = "i6 (Priority Gap Zone)", levels["i3"], 4
-
-            if hit_level_name:
-                alert_key = f"{key}_{hit_level_name}"
-                if alert_key not in self.memory["alerted_levels"]:
-                    # Create Alert on Touch!
-                    alert_msg = f"🔔 <b>GVN LEVEL ALERT</b> 🔔\n{symbol} {strike['strike']} {strike['type']} touched <b>{hit_level_name}</b> @ {ltp}\nTarget Probability: {target_price}"
-                    if self.telegram: self.telegram.send_alert(alert_msg)
-                    self.memory["alerted_levels"][alert_key] = True
-
-                # 🎯 GVN MECHANICAL ENTRY: Execute immediately on GVN level touch!
-                self._execute_smart_entry(symbol, strike, ltp, levels, priority)
+            # GVN Levels sorted in ascending order: [i1, i7, i6, i5, i3, i2, i0]
+            sorted_lvls = sorted([levels['i1'], levels['i7'], levels['i6'], levels['i5'], levels['i3'], levels['i2'], levels['i0']])
+            
+            # Find the levels crossover and execute trade
+            for idx, lvl in enumerate(sorted_lvls):
+                # Ensure there is a target level above the entry level
+                if idx + 1 >= len(sorted_lvls):
+                    continue
+                target_lvl = sorted_lvls[idx + 1]
+                
+                # Crossover/touch condition
+                is_triggered = False
+                if previous_ltp < lvl <= ltp:
+                    is_triggered = True
+                elif abs(ltp - lvl) <= 0.20:
+                    is_triggered = True
+                    
+                if is_triggered:
+                    is_allowed = True
+                    is_exp = (datetime.now().weekday() == 3)
+                    
+                    # Morning preference check
+                    pref_level_val = levels["i1"] if is_exp else levels["i5"]
+                    pref_key = f"{key}_pref_traded"
+                    
+                    # Force first morning entry to be near preference level
+                    if not self.memory.get(pref_key, False):
+                        if abs(lvl - pref_level_val) > 1.5:
+                            is_allowed = False
+                            
+                    if is_allowed and ((strike['type'] == 'CE' and is_bullish) or (strike['type'] == 'PE' and is_bearish)):
+                        sl = lvl - 12.0
+                        self.memory[pref_key] = True
+                        
+                        # Find matching level name from the engine's levels dictionary
+                        lvl_name = "Unknown"
+                        for k, v in levels.items():
+                            if abs(v - lvl) < 0.01:
+                                lvl_name = k.upper()
+                                break
+                        
+                        # Execute
+                        self._execute_gvn_level_trade(symbol, strike, lvl, target_lvl, sl, f"GVN Level Entry ({lvl_name} @ {lvl:.2f})")
+                        break
         else:
             trade = self.memory["active_trades"][key]
             
-            # 🌪️ WIND DIRECTION REVERSAL EXIT
-            wind_dir = shared_data.market_pulse.get("wind_direction", "UNKNOWN")
-            is_wind_against = (strike["type"] == "CE" and any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"])) or \
-                              (strike["type"] == "PE" and any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]))
-            
-            if is_wind_against:
-                remaining = trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0)
-                if remaining > 0:
-                    self._fire_order(symbol, strike, "SELL", remaining, "Full Exit (Wind Reversal)")
+            # Exit check: Target Hit
+            if ltp >= trade["target"]:
+                self._fire_order(symbol, strike, "SELL", trade["total_lots"], f"Full Exit (Target Hit @ {trade['target']})")
+                paper_id = trade.get("paper_id")
+                if paper_id:
+                    self.paper_trading.execute_paper_sell(paper_id, exit_price=ltp, exit_reason="TARGET_HIT")
                 del self.memory["active_trades"][key]
-                return
-
-            # 📈 INSTITUTIONAL LEVEL-TO-LEVEL TRAILING STOP LOSS (TSL)
-            # GVN levels are sorted in ascending order.
-            # Once premium crosses a level, TSL trails to the PREVIOUS crossed level!
-            sorted_lvls = sorted([v for k, v in levels.items() if k.startswith("i")])
-            crossed_lvls = [lvl for lvl in sorted_lvls if lvl <= ltp]
-            
-            if len(crossed_lvls) >= 2:
-                highest_crossed = crossed_lvls[-1]
-                new_sl = crossed_lvls[-2] # Previous level is the new stop-loss!
                 
-                if highest_crossed > trade.get("highest_level", 0) and highest_crossed > trade["entry"]:
-                    trade["highest_level"] = highest_crossed
-                    
-                    # Only trail upwards
-                    if new_sl > trade["sl"]:
-                        trade["sl"] = new_sl
-                        if self.telegram:
-                            self.telegram.send_alert(
-                                f"📈 <b>GVN LEVEL TSL TRAILED</b>\n"
-                                f"🎯 {symbol} {strike['strike']} {strike['type']} crossed {highest_crossed}\n"
-                                f"🛡️ <b>New Stop Loss (Previous Level):</b> ₹{new_sl}"
-                            )
-
-            # Multi-Stage Exit
-            if not trade["t1_hit"] and ltp >= trade["t1"]:
-                trade["t1_hit"] = True
-                self._fire_order(symbol, strike, "SELL", trade["total_lots"] // 2, "Partial Exit (T1 Hit)")
-            elif ltp >= trade["t2"]:
-                self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (T2 Hit)")
-                del self.memory["active_trades"][key]
-            # Stop Loss / Trailing Stop Loss Exit
+            # Exit check: Stop Loss Hit
             elif ltp <= trade["sl"]:
-                self._fire_order(symbol, strike, "SELL", trade["total_lots"] - (trade["total_lots"] // 2 if trade["t1_hit"] else 0), "Full Exit (SL Hit)")
+                self._fire_order(symbol, strike, "SELL", trade["total_lots"], f"Full Exit (SL Hit @ {trade['sl']})")
+                paper_id = trade.get("paper_id")
+                if paper_id:
+                    self.paper_trading.execute_paper_sell(paper_id, exit_price=ltp, exit_reason="SL_HIT")
                 del self.memory["active_trades"][key]
 
-    def _execute_smart_entry(self, symbol, strike, price, levels, priority):
+    def _execute_gvn_level_trade(self, symbol, strike, entry_price, target, sl, reason):
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
         key = f"{strike['strike']}_{strike['type']}"
         
-        # We use the custom probability target defined by the priority engine (like i1 bouncing to i5)
-        if priority == 3: # i1 / i0 hit (Zero to Hero)
-            t1, t2 = levels.get("i7", price + 15), levels.get("i5", price + 30)
-        elif priority == 2: # i7 hit
-            t1, t2 = levels.get("i6", price + 10), levels.get("i5", price + 20)
-        elif priority == 1: # i5 hit
-            t1, t2 = levels.get("i3", price + 20), levels.get("i2", price + 40)
-        else:
-            t1, t2 = levels.get("i3", price + 15), levels.get("i2", price + 30)
+        # Execute paper trade and store the ID
+        paper_trade = self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], entry_price, target, sl, target_lots * 50)
+        paper_id = paper_trade["id"] if paper_trade else None
         
-        # 🛡️ USER REQUESTED EXACTLY 12-POINT FIXED STOP LOSS
-        sl = price - 12
-        
-        wind_dir = shared_data.market_pulse.get("wind_direction", "UNKNOWN")
-        reason = f"Smart Priority Entry | Wind: {wind_dir} | SL: 12pts"
-        
-        self.memory["active_trades"][key] = {"entry": price, "t1": t1, "t2": t2, "sl": sl, "t1_hit": False, "total_lots": target_lots}
-        self._fire_order(symbol, strike, "BUY", target_lots, reason)
-        self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], price, t2, sl)
+        self.memory["active_trades"][key] = {
+            "entry": entry_price, 
+            "target": target, 
+            "sl": sl, 
+            "total_lots": target_lots,
+            "paper_id": paper_id
+        }
+        self._fire_order(symbol, strike, "BUY", target_lots, reason, target_price=target, sl_price=sl)
 
-    def _fire_order(self, symbol, strike, side, qty, reason):
+    def _fire_order(self, symbol, strike, side, qty, reason, target_price=None, sl_price=None):
         full_symbol = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
-        
-        # Calculate levels to display in the alert
-        levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
-        target_price = strike.get("ltp", 0.0) + 12.0
-        sl_price = strike.get("ltp", 0.0) - 12.0
-        
-        level_name = "I3"
-        if "i5" in reason.lower(): level_name = "I5"
-        elif "i7" in reason.lower(): level_name = "I7"
-        elif "i1" in reason.lower() or "i0" in reason.lower(): level_name = "I1/I0"
-        elif "i6" in reason.lower(): level_name = "I6"
-        
-        if levels:
-            if level_name == "I5":
-                target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
-            elif level_name == "I7":
-                target_price, sl_price = levels["i5"], round(levels["i7"] - 12.0, 2)
-            elif level_name == "I1/I0":
-                target_price, sl_price = levels["i5"], round(levels["i1"] - 12.0, 2)
-            elif level_name == "I6":
-                target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
-            elif level_name == "I3":
-                target_price, sl_price = levels["i2"], round(levels["i3"] - 12.0, 2)
-
         tsym = f"{symbol}_{int(strike['strike'])}_{strike['type']}"
         
-        alert = (
-            f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 Symbol: <b>{tsym}</b>\n"
-            f"⚡ Level Triggered: <b>{level_name}</b>\n"
-            f"💸 Entry Price: <b>₹{strike['ltp']}</b>\n"
-            f"✅ Target: <b>₹{target_price}</b>\n"
-            f"⛔ Stop Loss: <b>₹{sl_price}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚡ Processed exactly as per GVN Settings"
-        )
-        if self.telegram: self.telegram.send_alert(alert)
-        
+        if side == "SELL":
+            alert = (
+                f"🛑 <b>GVN MASTER ALGO - POSITION CLOSED</b> 🛑\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 Symbol: <b>{tsym}</b>\n"
+                f"⚡ Reason: <b>{reason}</b>\n"
+                f"💸 Exit Price: <b>₹{strike.get('ltp', 0.0)}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ Position closed successfully"
+            )
+            if self.telegram: self.telegram.send_alert(alert)
+        else:
+            # Calculate levels to display in the alert
+            levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
+            if target_price is None:
+                target_price = strike.get("ltp", 0.0) + 12.0
+            if sl_price is None:
+                sl_price = strike.get("ltp", 0.0) - 12.0
+            
+            level_name = "I3"
+            if "i5" in reason.lower(): level_name = "I5"
+            elif "i7" in reason.lower(): level_name = "I7"
+            elif "i1" in reason.lower() or "i0" in reason.lower(): level_name = "I1/I0"
+            elif "i6" in reason.lower(): level_name = "I6"
+            elif "i2" in reason.lower(): level_name = "I2"
+            elif "i3" in reason.lower(): level_name = "I3"
+            
+            if levels and target_price is None:
+                if level_name == "I5":
+                    target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
+                elif level_name == "I7":
+                    target_price, sl_price = levels["i5"], round(levels["i7"] - 12.0, 2)
+                elif level_name == "I1/I0":
+                    target_price, sl_price = levels["i5"], round(levels["i1"] - 12.0, 2)
+                elif level_name == "I6":
+                    target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
+                elif level_name == "I3":
+                    target_price, sl_price = levels["i2"], round(levels["i3"] - 12.0, 2)
+
+            alert = (
+                f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 Symbol: <b>{tsym}</b>\n"
+                f"⚡ Level Triggered: <b>{level_name}</b>\n"
+                f"💸 Entry Price: <b>₹{strike.get('ltp', 0.0)}</b>\n"
+                f"✅ Target: <b>₹{target_price:.2f}</b>\n"
+                f"⛔ Stop Loss: <b>₹{sl_price:.2f}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚡ Processed exactly as per GVN Settings"
+            )
+            if self.telegram: self.telegram.send_alert(alert)
+
         # 🚀 GVN MULTI-USER DYNAMIC ROUTING ENGINE
         try:
             from app import app, db, User, UserBrokerConfig, AlgoTrade
