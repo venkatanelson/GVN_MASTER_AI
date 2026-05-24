@@ -200,6 +200,15 @@ class GVNAiDelta60Engine:
                 is_bullish = False
                 is_bearish = False
 
+            # 4. 🛡️ F&O NIFTY 50 UNDERLYING STOCKS ALIGNMENT FILTER (Second Additional Confirmation)
+            nifty50_trend = shared_data.market_pulse.get("nifty50_trend_signal", "NEUTRAL")
+            if nifty50_trend == "STRONG BEARISH" and strike['type'] == 'CE':
+                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] CE entry blocked. Nifty 50 trend is STRONG BEARISH.")
+                is_bullish = False
+            if nifty50_trend == "STRONG BULLISH" and strike['type'] == 'PE':
+                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] PE entry blocked. Nifty 50 trend is STRONG BULLISH.")
+                is_bearish = False
+
             # 🎯 GVN PROBABILITY & PRIORITY LEVEL DETECTION
             hit_level_name = None
             target_price = None

@@ -74,6 +74,13 @@ live_option_ltps = {}
 # History of last 10 LTPs for Balloon Pressure Logic
 option_ltp_history = {} 
 
+# Temporary in-memory dictionary to store running high/low during 09:15 to 09:20 AM from NSE website
+nse_running_915_ohlc_temp = {}
+nse_915_finalized_today = False
+last_nse_915_poll_time = 0
+local_broker_915_ohlc = {}
+nse_single_poll_done = False
+
 # --- GVN Fibonacci Level Calculator ---
 def calculate_gvn_levels(high915, low915):
     """
@@ -108,6 +115,7 @@ logged_915_benchmarks = set()
 def load_recorded_915_ohlc():
     file_path = "gvn_recorded_915_ohlc.json"
     today_str = datetime.now().strftime("%Y-%m-%d")
+    default_data = {"date": today_str, "NIFTY": {}}
     if os.path.exists(file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -122,9 +130,14 @@ def load_recorded_915_ohlc():
                     with open("nse_status.log", "a", encoding="utf-8") as lf:
                         lf.write(f"{datetime.now()}: [CLEANUP] Cleared previous day's GVN 9:15 candle recordings.\n")
                 except: pass
+                try:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(default_data, f, indent=4)
+                except Exception as we:
+                    logger.error(f"Error writing cleared recorded 9:15 OHLC file to disk: {we}")
         except Exception as e:
             logger.error(f"Error loading recorded 9:15 OHLC: {e}")
-    return {"date": today_str, "NIFTY": {}}
+    return default_data
 
 def get_option_details_from_scrip_master(symbol, strike, opt_type):
     """
@@ -1314,6 +1327,77 @@ def fetch_from_nse_direct(symbol):
             time.sleep(2)
             
     return None
+
+last_nifty50_stocks_fetch_time = 0
+
+def fetch_nifty50_advances_declines():
+    """
+    Fetches Nifty 50 stock advances and declines from NSE website's allIndices endpoint.
+    Runs once every 5 minutes to avoid IP blocking.
+    """
+    global last_nifty50_stocks_fetch_time, nse_session
+    now_time = time.time()
+    
+    # Large gap check: 5 minutes (300 seconds)
+    if now_time - last_nifty50_stocks_fetch_time < 300:
+        return
+        
+    last_nifty50_stocks_fetch_time = now_time
+    logger.info("🔄 [NIFTY 50 SCANNER] Fetching Nifty 50 advances/declines from NSE website...")
+    
+    url = "https://www.nseindia.com/api/allIndices"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-GB,en;q=0.9,en-US;q=0.8",
+        "Referer": "https://www.nseindia.com/market-data/live-market-indices",
+        "Connection": "keep-alive"
+    }
+    
+    try:
+        if not nse_session.cookies:
+            # Seed session cookies
+            nse_session.get("https://www.nseindia.com", headers=headers, timeout=10)
+            time.sleep(1.5)
+            
+        resp = nse_session.get(url, headers=headers, timeout=12)
+        if resp.status_code == 200:
+            rj = resp.json()
+            data_list = rj.get("data", [])
+            for item in data_list:
+                idx_name = item.get("index", item.get("indexName", "")).upper()
+                if "NIFTY 50" in idx_name:
+                    adv = int(item.get("advances", 0))
+                    dec = int(item.get("declines", 0))
+                    unc = int(item.get("unchanged", 0))
+                    pct = float(item.get("percentChange", 0))
+                    
+                    # 50 stocks trend logic: positive/negative direction
+                    if adv >= 35:
+                        signal = "STRONG BULLISH"
+                    elif dec >= 35:
+                        signal = "STRONG BEARISH"
+                    elif adv >= 26:
+                        signal = "MODERATE BULLISH"
+                    elif dec >= 26:
+                        signal = "MODERATE BEARISH"
+                    else:
+                        signal = "NEUTRAL / SIDEWAYS"
+                        
+                    shared_data.market_pulse.update({
+                        "nifty50_advances": adv,
+                        "nifty50_declines": dec,
+                        "nifty50_unchanged": unc,
+                        "nifty50_pct_change": pct,
+                        "nifty50_trend_signal": signal
+                    })
+                    logger.info(f"✅ [NIFTY 50 SCANNER] Advances: {adv} | Declines: {dec} | Trend: {signal}")
+                    break
+        elif resp.status_code in [401, 403]:
+            # Reset session on authentication block
+            nse_session = requests.Session()
+    except Exception as e:
+        logger.error(f"❌ Error fetching Nifty 50 stock status: {e}")
 
 def fetch_from_shoonya(symbol, custom_cfg=None):
     """Fetch Option Chain from Shoonya NorenApi with Hybrid Fallback support."""
@@ -2731,6 +2815,215 @@ def nse_background_worker():
             # 🕒 SCHEDULED TIME CHECKS FOR GVN LEVELS
             now = datetime.now()
             today_str = now.strftime("%Y-%m-%d")
+            
+            # 🌐 GVN NSE WEBSITE LIVE 9:15-9:20 AM OHLC TRACKER
+            global nse_running_915_ohlc_temp, nse_915_finalized_today, last_nse_915_poll_time, local_broker_915_ohlc, nse_single_poll_done
+            current_time = now.time()
+            start_time = now.replace(hour=9, minute=15, second=0, microsecond=0).time()
+            poll_trigger_time = now.replace(hour=9, minute=19, second=40, microsecond=0).time()
+            end_time = now.replace(hour=9, minute=20, second=0, microsecond=0).time()
+            
+            # Reset finalized flag and temp dictionary if date changes (overnight safeguard)
+            if now.hour == 0 and now.minute == 0:
+                nse_915_finalized_today = False
+                nse_single_poll_done = False
+                nse_running_915_ohlc_temp.clear()
+                local_broker_915_ohlc.clear()
+            
+            # Perform tracking on weekdays (Monday to Friday)
+            if now.weekday() < 5:
+                if start_time <= current_time < end_time:
+                    # Reset finalized for today just in case we started within the window
+                    nse_915_finalized_today = False
+                    
+                    # --- STEP A: Track running High/Low locally from broker feed ---
+                    for symbol in ["NIFTY", "BANKNIFTY"]:
+                        # 1. Track spot price
+                        spot = float(shared_data.market_data.get(symbol, 0))
+                        if spot == 0 and symbol == "NIFTY":
+                            spot = float(shared_data.market_data.get("NIFTY 50", 0))
+                        if spot > 0:
+                            spot_key = f"{symbol}_SPOT"
+                            if spot_key not in local_broker_915_ohlc:
+                                local_broker_915_ohlc[spot_key] = {"high": spot, "low": spot}
+                            else:
+                                local_broker_915_ohlc[spot_key]["high"] = max(local_broker_915_ohlc[spot_key]["high"], spot)
+                                local_broker_915_ohlc[spot_key]["low"] = min(local_broker_915_ohlc[spot_key]["low"], spot)
+                                
+                            # 2. Track option strikes (ATM +/- 5 strikes)
+                            step = 50 if symbol == "NIFTY" else 100
+                            atm = round(spot / step) * step
+                            tracked_strikes = [int(atm + i * step) for i in range(-5, 6)]
+                            
+                            for strike in tracked_strikes:
+                                for opt_type in ["CE", "PE"]:
+                                    strike_key = f"{strike} {opt_type}"
+                                    search_keys = [
+                                        strike_key,
+                                        f"{symbol}_{strike}_{opt_type}",
+                                        f"{symbol} {strike} {opt_type}"
+                                    ]
+                                    ltp = 0.0
+                                    for sk in search_keys:
+                                        val = float(shared_data.market_data.get(sk, 0))
+                                        if val > 0:
+                                            ltp = val
+                                            break
+                                    if ltp == 0.0:
+                                        ltp = float(live_option_ltps.get(f"{strike}_{opt_type}", 0))
+                                        
+                                    if ltp > 0:
+                                        if symbol not in local_broker_915_ohlc:
+                                            local_broker_915_ohlc[symbol] = {}
+                                        if strike_key not in local_broker_915_ohlc[symbol]:
+                                            local_broker_915_ohlc[symbol][strike_key] = {"high": ltp, "low": ltp}
+                                        else:
+                                            local_broker_915_ohlc[symbol][strike_key]["high"] = max(local_broker_915_ohlc[symbol][strike_key]["high"], ltp)
+                                            local_broker_915_ohlc[symbol][strike_key]["low"] = min(local_broker_915_ohlc[symbol][strike_key]["low"], ltp)
+                    
+                    # --- STEP B: Poll NSE website EXACTLY ONCE at 09:19:40 AM (20s remaining) ---
+                    if poll_trigger_time <= current_time < end_time and not nse_single_poll_done:
+                        logger.info("🕒 [NSE 9:15 TRACKER] 09:19:40 AM reached. Executing single auto-refresh poll to NSE website...")
+                        for symbol in ["NIFTY", "BANKNIFTY"]:
+                            try:
+                                data = fetch_from_nse_direct(symbol)
+                                if data and "records" in data:
+                                    records = data["records"]
+                                    spot = float(records.get("underlyingValue", 0))
+                                    if spot > 0:
+                                        spot_key = f"{symbol}_SPOT"
+                                        if spot_key not in nse_running_915_ohlc_temp:
+                                            nse_running_915_ohlc_temp[spot_key] = {"high": spot, "low": spot}
+                                        else:
+                                            nse_running_915_ohlc_temp[spot_key]["high"] = max(nse_running_915_ohlc_temp[spot_key]["high"], spot)
+                                            nse_running_915_ohlc_temp[spot_key]["low"] = min(nse_running_915_ohlc_temp[spot_key]["low"], spot)
+                                            
+                                        step = 50 if symbol == "NIFTY" else 100
+                                        atm = round(spot / step) * step
+                                        tracked_strikes = [int(atm + i * step) for i in range(-5, 6)]
+                                        
+                                        option_data_list = records.get("data", [])
+                                        for item in option_data_list:
+                                            strike_val = int(item.get("strikePrice", 0))
+                                            if strike_val in tracked_strikes:
+                                                for opt_type in ["CE", "PE"]:
+                                                    opt_item = item.get(opt_type)
+                                                    if opt_item:
+                                                        ltp = float(opt_item.get("lastPrice", 0))
+                                                        if ltp > 0:
+                                                            strike_key = f"{strike_val} {opt_type}"
+                                                            if symbol not in nse_running_915_ohlc_temp:
+                                                                nse_running_915_ohlc_temp[symbol] = {}
+                                                            
+                                                            if strike_key not in nse_running_915_ohlc_temp[symbol]:
+                                                                nse_running_915_ohlc_temp[symbol][strike_key] = {"high": ltp, "low": ltp}
+                                                            else:
+                                                                nse_running_915_ohlc_temp[symbol][strike_key]["high"] = max(nse_running_915_ohlc_temp[symbol][strike_key]["high"], ltp)
+                                                                nse_running_915_ohlc_temp[symbol][strike_key]["low"] = min(nse_running_915_ohlc_temp[symbol][strike_key]["low"], ltp)
+                            except Exception as ex:
+                                logger.error(f"❌ Error in single NSE 9:15 poll for {symbol}: {ex}")
+                        nse_single_poll_done = True
+                
+                # Finalize at 09:20:00 AM: Merge local broker tracking and single NSE poll tracking
+                elif current_time >= end_time and not nse_915_finalized_today:
+                    logger.info("🕒 09:20:00 AM reached. Finalizing 9:15 OHLC Data...")
+                    
+                    merged_ohlc = {}
+                    
+                    # Seed with local broker tracked data
+                    for k, v in local_broker_915_ohlc.items():
+                        if isinstance(v, dict):
+                            merged_ohlc[k] = v.copy()
+                        
+                    # Overlay/merge NSE website data
+                    for k, v in nse_running_915_ohlc_temp.items():
+                        if k in ["NIFTY", "BANKNIFTY"] and isinstance(v, dict):
+                            if k not in merged_ohlc:
+                                merged_ohlc[k] = {}
+                            for sk, sv in v.items():
+                                if sk not in merged_ohlc[k]:
+                                    merged_ohlc[k][sk] = sv.copy()
+                                else:
+                                    merged_ohlc[k][sk]["high"] = max(merged_ohlc[k][sk]["high"], sv["high"])
+                                    merged_ohlc[k][sk]["low"] = min(merged_ohlc[k][sk]["low"], sv["low"])
+                        elif isinstance(v, dict):
+                            if k not in merged_ohlc:
+                                merged_ohlc[k] = v.copy()
+                            else:
+                                if "high" in v and "high" in merged_ohlc[k]:
+                                    merged_ohlc[k]["high"] = max(merged_ohlc[k]["high"], v["high"])
+                                if "low" in v and "low" in merged_ohlc[k]:
+                                    merged_ohlc[k]["low"] = min(merged_ohlc[k]["low"], v["low"])
+                                    
+                    if merged_ohlc:
+                        try:
+                            recorded_data = load_recorded_915_ohlc()
+                            recorded_data["date"] = today_str
+                            
+                            for symbol in ["NIFTY", "BANKNIFTY"]:
+                                # Spot
+                                spot_key = f"{symbol}_SPOT"
+                                if spot_key in merged_ohlc:
+                                    spot_data = merged_ohlc[spot_key]
+                                    if symbol not in recorded_data:
+                                        recorded_data[symbol] = {}
+                                    recorded_data[symbol][spot_key] = {
+                                        "high": round(spot_data["high"], 2),
+                                        "low": round(spot_data["low"], 2),
+                                        "timestamp": datetime.now().isoformat(),
+                                        "source": "REFINED_LOCAL_NSE_HYBRID"
+                                    }
+                                    logger.info(f"✅ Finalized {symbol} SPOT: High={spot_data['high']}, Low={spot_data['low']}")
+                                    
+                                    # Sync spot to shared_data benchmark
+                                    shared_data.gvn_915_benchmark[symbol] = {
+                                        "high": round(spot_data["high"], 2),
+                                        "low": round(spot_data["low"], 2),
+                                        "captured": True,
+                                        "date": today_str,
+                                        "timeframe": "5MIN",
+                                        "source": "REFINED_LOCAL_NSE_HYBRID"
+                                    }
+                                
+                                # Option strikes
+                                if symbol in merged_ohlc:
+                                    for strike_key, strike_data in merged_ohlc[symbol].items():
+                                        if symbol not in recorded_data:
+                                            recorded_data[symbol] = {}
+                                            
+                                        entry_data = {
+                                            "high": round(strike_data["high"], 2),
+                                            "low": round(strike_data["low"], 2),
+                                            "timestamp": datetime.now().isoformat(),
+                                            "source": "REFINED_LOCAL_NSE_HYBRID"
+                                        }
+                                        
+                                        # Try to get option symbol details from scrip master
+                                        parts = strike_key.split()
+                                        if len(parts) == 2:
+                                            try:
+                                                strike_val = int(parts[0])
+                                                opt_type = parts[1]
+                                                opt_symbol, expiry_date = get_option_details_from_scrip_master(symbol, strike_val, opt_type)
+                                                if opt_symbol: entry_data["option_symbol"] = opt_symbol
+                                                if expiry_date: entry_data["expiry_date"] = expiry_date
+                                                entry_data["opt_type"] = opt_type
+                                            except: pass
+                                            
+                                        recorded_data[symbol][strike_key] = entry_data
+                                        logger.info(f"✅ Finalized strike {symbol} {strike_key}: High={strike_data['high']}, Low={strike_data['low']}")
+                            
+                            with open("gvn_recorded_915_ohlc.json", "w", encoding="utf-8") as f:
+                                json.dump(recorded_data, f, indent=4)
+                            logger.info("💾 9:15 OHLC data successfully merged and saved to JSON.")
+                        except Exception as e:
+                            logger.error(f"❌ Failed to save finalized hybrid data: {e}")
+                            
+                    nse_running_915_ohlc_temp.clear()
+                    local_broker_915_ohlc.clear()
+                    nse_915_finalized_today = True
+                    nse_single_poll_done = False
+
             time_091615 = now.replace(hour=9, minute=16, second=15, microsecond=0)
             time_092015 = now.replace(hour=9, minute=20, second=15, microsecond=0)
             
@@ -2749,6 +3042,9 @@ def nse_background_worker():
                 if not is_captured_today or not is_timeframe_5min:
                     logger.info("🕒 Time is past 09:20:15. Triggering 5-Minute GVN Levels Retrieval...")
                     retrieve_and_record_915_levels(timeframe="5MIN")
+
+            # Fetch Nifty 50 underlying stocks status periodically (anti-blocking gap is handled inside function)
+            fetch_nifty50_advances_declines()
 
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")

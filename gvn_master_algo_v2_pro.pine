@@ -67,8 +67,9 @@ gvn0   = N2 * 0.118 / 0.5
 gvn100 = N1 * 0.786 / 0.5
 gvnR   = gvn100 - gvn0
 
-plot(gvn0,   title="Gvn=i0",   color=color.rgb(16,231,124), linewidth=1)
-plot(gvn100, title="Gvn=i1",   color=color.aqua, linewidth=1)
+// Attractive gradient colors & thick lines for professional look
+p0   = plot(gvn0,   title="Gvn=i0",   color=color.rgb(241, 196, 15), linewidth=2)  // Vibrant Yellow/Gold
+p100 = plot(gvn100, title="Gvn=i1",   color=color.rgb(26, 188, 156), linewidth=2)  // Vibrant Teal/Cyan
 
 i2 = gvn0 + 0.763 * gvnR
 i3 = gvn0 + 0.618 * gvnR
@@ -76,11 +77,20 @@ i5 = gvn0 + 0.5   * gvnR
 i6 = gvn0 + 0.382 * gvnR
 i7 = gvn0 + 0.220 * gvnR
 
-plot(i2, "Gvn=i2", color=color.red)
-plot(i3, "Gvn=i3", color=color.rgb(231,43,168))
-plot(i5, "Gvn=i5", color=color.rgb(11,46,201), linewidth=1)
-plot(i6, "Gvn=i6", color=color.purple)
-plot(i7, "Gvn=i7", color=color.black)
+p2 = plot(i2, "Gvn=i2", color=color.rgb(231, 76, 60), linewidth=2)                // Vibrant Red
+p3 = plot(i3, "Gvn=i3", color=color.rgb(233, 30, 99), linewidth=2)                // Vibrant Pink
+p5 = plot(i5, "Gvn=i5", color=color.rgb(41, 128, 185), linewidth=2)               // Vibrant Blue
+p6 = plot(i6, "Gvn=i6", color=color.rgb(155, 89, 182), linewidth=2)               // Vibrant Purple
+p7 = plot(i7, "Gvn=i7", color=color.rgb(230, 126, 34), linewidth=2)               // Vibrant Orange
+
+// Soft transparent shadows/glows between levels (exactly like premium screenshots)
+showGvnShadows = input.bool(true, "Show GVN Level Shadows/Glow", group="Main Lines Settings")
+fill(p100, p2, color = showGvnShadows ? color.new(color.rgb(231, 76, 60), 92) : na, title="i1-i2 Fill")
+fill(p2, p3, color = showGvnShadows ? color.new(color.rgb(233, 30, 99), 92) : na, title="i2-i3 Fill")
+fill(p3, p5, color = showGvnShadows ? color.new(color.rgb(41, 128, 185), 92) : na, title="i3-i5 Fill")
+fill(p5, p6, color = showGvnShadows ? color.new(color.rgb(155, 89, 182), 92) : na, title="i5-i6 Fill")
+fill(p6, p7, color = showGvnShadows ? color.new(color.rgb(230, 126, 34), 92) : na, title="i6-i7 Fill")
+fill(p7, p0, color = showGvnShadows ? color.new(color.rgb(241, 196, 15), 92) : na, title="i7-i0 Fill")
 
 /// =====================
 // BUY (Original Box + SL Label)
