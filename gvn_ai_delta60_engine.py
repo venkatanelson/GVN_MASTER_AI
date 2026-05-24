@@ -202,11 +202,11 @@ class GVNAiDelta60Engine:
 
             # 4. 🛡️ F&O NIFTY 50 UNDERLYING STOCKS ALIGNMENT FILTER (Second Additional Confirmation)
             nifty50_trend = shared_data.market_pulse.get("nifty50_trend_signal", "NEUTRAL")
-            if nifty50_trend == "STRONG BEARISH" and strike['type'] == 'CE':
-                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] CE entry blocked. Nifty 50 trend is STRONG BEARISH.")
+            if nifty50_trend in ["STRONG BEARISH", "MODERATE BEARISH"] and strike['type'] == 'CE':
+                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] CE entry blocked. Nifty 50 trend is {nifty50_trend}.")
                 is_bullish = False
-            if nifty50_trend == "STRONG BULLISH" and strike['type'] == 'PE':
-                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] PE entry blocked. Nifty 50 trend is STRONG BULLISH.")
+            if nifty50_trend in ["STRONG BULLISH", "MODERATE BULLISH"] and strike['type'] == 'PE':
+                logger.info(f"🚫 [NIFTY 50 STOCK FILTER] PE entry blocked. Nifty 50 trend is {nifty50_trend}.")
                 is_bearish = False
 
             # Store previous price to detect crossover/touch
