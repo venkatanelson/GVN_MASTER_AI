@@ -203,7 +203,51 @@ class TelegramAlertManager:
     
     def alert_entry(self, trade_info):
         """Send entry signal"""
-        if not self.should_send_alert("ENTRY", trade_info.get("symbol")):
+        import shared_data
+        import os
+        import json
+        
+        trade_sym = trade_info.get("symbol", "")
+        
+        # Determine the base index symbol from trade_sym
+        base_sym = "NIFTY"
+        try:
+            ts_upper = str(trade_sym).upper()
+            if "BANKNIFTY" in ts_upper: base_sym = "BANKNIFTY"
+            elif "FINNIFTY" in ts_upper: base_sym = "FINNIFTY"
+            elif "MIDCPNIFTY" in ts_upper or "MIDCP" in ts_upper: base_sym = "MIDCPNIFTY"
+            elif "SENSEX" in ts_upper: base_sym = "SENSEX"
+            elif "MCX" in ts_upper or "CRUDE" in ts_upper: base_sym = "MCX"
+            elif "NIFTY" in ts_upper: base_sym = "NIFTY"
+        except:
+            pass
+            
+        # Get active dashboard symbol from shared memory
+        active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+        if base_sym != active_sym:
+            logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because active dashboard symbol is {active_sym}")
+            return
+            
+        # Verify if it is one of the morning locked strikes for this index
+        is_locked = False
+        try:
+            if os.path.exists("morning_locked_strikes.json"):
+                with open("morning_locked_strikes.json", "r") as f:
+                    lock_data = json.load(f)
+                if lock_data.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                    idx_locks = lock_data.get(base_sym, {})
+                    ce_lock = idx_locks.get("CE")
+                    pe_lock = idx_locks.get("PE")
+                    if (ce_lock and str(ce_lock) in trade_sym) or (pe_lock and str(pe_lock) in trade_sym):
+                        is_locked = True
+        except Exception as e:
+            logger.error(f"Error checking morning locked strikes in telegram engine: {e}")
+            
+        if not is_locked:
+            logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because it is not a locked morning strike.")
+            return
+
+        if not self.should_send_alert("ENTRY", trade_sym):
             return
         
         # 🚀 GVN TRANSPARENCY: Print full details to console

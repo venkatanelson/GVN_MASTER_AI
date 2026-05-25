@@ -1301,11 +1301,16 @@
             });
             const activeTab = document.getElementById('tab-' + idx);
             if (activeTab) activeTab.classList.add('active');
+            
+            // Sync active symbol with server
+            fetch('/api/set-active-symbol?symbol=' + idx)
+                .catch(err => console.error("Error setting active symbol:", err));
+                
             updateScanner();
         }
 
         function updateScanner() {
-            fetch('/api/gvn-scanner')
+            fetch('/api/gvn-scanner?symbol=' + currentActiveIndex)
                 .then(r => r.json())
                 .then(res => {
                     // 🌟 Update Monitored Strikes
@@ -1610,7 +1615,7 @@
 
         // Auto-refresh demo logs
         setInterval(() => {
-            fetch('/api/gvn-scanner')
+            fetch('/api/gvn-scanner?symbol=' + currentActiveIndex)
             .then(r => r.json())
             .then(data => {
                 if (robotActive) {

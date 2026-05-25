@@ -2104,7 +2104,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
 
             # Calculate Greeks
             effective_iv = iv if iv > 0 else 18.0
-            delta = opt.get("delta")
+            delta = abs(opt.get("delta")) if opt.get("delta") is not None else None
             gamma, theta = 0, 0
             
             if not delta:
@@ -2218,37 +2218,64 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                             if dist <= 7.0:
                                 any_near_level = True
                             
-                            # 1. Level Touch Alert (< 1.5 points)
-                            if dist < 1.5:
-                                touch_key = f"{full_sym}_{lvl_name}_{lvl_val}"
-                                now_time = time.time()
-                                last_alert_time = shared_data.last_touched_levels.get(touch_key, 0)
-                                if now_time - last_alert_time > 300: # 5 minutes cooldown
-                                    shared_data.last_touched_levels[touch_key] = now_time
-                                    msg_text = f"🔔 <b>GVN LEVEL TOUCH DETECTED</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
-                                    logger.info(f"🚨 [LEVEL TOUCH] {full_sym} touched {lvl_name} at {lvl_val}")
+                            # Retrieve active symbol from dashboard
+                            active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                            
+                            # Only trigger alerts if this option belongs to the active index
+                            if symbol == active_sym:
+                                # Determine if this strike is one of the morning locked strikes
+                                is_locked = False
+                                try:
+                                    if os.path.exists("morning_locked_strikes.json"):
+                                        with open("morning_locked_strikes.json", "r") as f:
+                                            lock_data = json.load(f)
+                                        if lock_data.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                                            idx_locks = lock_data.get(symbol, {})
+                                            if int(strike) in [idx_locks.get("CE"), idx_locks.get("PE")]:
+                                                is_locked = True
+                                except Exception as e:
+                                    logger.error(f"Error checking morning locked strikes in alert: {e}")
+                                
+                                if not is_locked:
                                     try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send touch alert to Telegram: {te}")
+                                        d60 = current_delta_60_strikes.get(symbol, {})
+                                        if int(strike) in [d60.get("CE"), d60.get("PE")]:
+                                            is_locked = True
+                                    except Exception as e:
+                                        logger.error(f"Error checking current_delta_60_strikes in alert: {e}")
                                         
-                            # 2. Pre-Alert Get Ready (within 1 point or 1% of the GVN Level)
-                            elif dist <= 1.0 or dist <= (lvl_val * 0.01):
-                                pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
-                                now_time = time.time()
-                                last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
-                                if now_time - last_pre_time > 300: # 5 minutes cooldown
-                                    shared_data.last_pre_alerts[pre_key] = now_time
-                                    pre_msg = f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()} ({lvl_val:.2f})\n💸 <b>Current Price:</b> ₹{ltp:.2f}\n📏 <b>Distance:</b> {dist:.2f} pts away\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
-                                    logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(pre_msg)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send pre-alert to Telegram: {te}")
+                                if is_locked:
+                                    # 1. Level Touch Alert (< 1.5 points)
+                                    if dist < 1.5:
+                                        touch_key = f"{full_sym}_{lvl_name}_{lvl_val}"
+                                        now_time = time.time()
+                                        last_alert_time = shared_data.last_touched_levels.get(touch_key, 0)
+                                        if now_time - last_alert_time > 300: # 5 minutes cooldown
+                                            shared_data.last_touched_levels[touch_key] = now_time
+                                            msg_text = f"🔔 <b>GVN LEVEL TOUCH DETECTED</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                            logger.info(f"🚨 [LEVEL TOUCH] {full_sym} touched {lvl_name} at {lvl_val}")
+                                            try:
+                                                from gvn_telegram_engine import TelegramAlertManager
+                                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                                tg.bot.send_message(msg_text)
+                                            except Exception as te:
+                                                logger.error(f"Failed to send touch alert to Telegram: {te}")
+                                                
+                                    # 2. Pre-Alert Get Ready (within 1 point or 1% of the GVN Level)
+                                    elif dist <= 1.0 or dist <= (lvl_val * 0.01):
+                                        pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
+                                        now_time = time.time()
+                                        last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
+                                        if now_time - last_pre_time > 300: # 5 minutes cooldown
+                                            shared_data.last_pre_alerts[pre_key] = now_time
+                                            pre_msg = f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()} ({lvl_val:.2f})\n💸 <b>Current Price:</b> ₹{ltp:.2f}\n📏 <b>Distance:</b> {dist:.2f} pts away\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                            logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
+                                            try:
+                                                from gvn_telegram_engine import TelegramAlertManager
+                                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                                tg.bot.send_message(pre_msg)
+                                            except Exception as te:
+                                                logger.error(f"Failed to send pre-alert to Telegram: {te}")
                     
                     # 1. P&L Tracker for Active Trade
                     if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:

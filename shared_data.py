@@ -73,6 +73,7 @@ PERMANENT_CREDENTIALS_BACKUP = {
 
 # Scanner Data
 gvn_scanner_data = {}
+active_dashboard_symbol = "NIFTY"
 
 # ⚡ FAST POLLING & ALERTS STATE
 fast_polling_mode = False

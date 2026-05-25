@@ -1057,21 +1057,81 @@ def bypass_levels():
         print(f"❌ Error in bypass-levels endpoint: {e}\n{traceback.format_exc()}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/set-active-symbol')
+def set_active_symbol():
+    """Sets the active dashboard symbol in shared memory"""
+    symbol = request.args.get('symbol', 'NIFTY').upper()
+    shared_data.active_dashboard_symbol = symbol
+    print(f"🔄 Active dashboard symbol updated to: {symbol}")
+    return jsonify({"status": "success", "active_symbol": symbol})
+
 @app.route('/api/gvn-scanner')
 def get_gvn_scanner():
     """Consolidated high-speed scanner data for the GVN Master Dashboard"""
+    symbol = request.args.get('symbol', 'NIFTY').upper()
+    
     # 🚀 GVN SYNC: Fallback to NIFTY 50 if NIFTY is 0
     n_spot = shared_data.market_data.get("NIFTY", 0)
     if n_spot == 0:
         n_spot = shared_data.market_data.get("NIFTY 50", 0)
         
+    gvn_scanner = getattr(shared_data, 'gvn_scanner_data', {})
+    scanner_dict = gvn_scanner.get("scanner", {})
+    summary_dict = gvn_scanner.get("summary", {})
+    pulse_dict = gvn_scanner.get("pulse", {})
+    
+    # Extract the requested symbol's grid or fallback to the general grid
+    if symbol in scanner_dict:
+        alpha_grid = scanner_dict.get(symbol, [])[:14]
+    else:
+        alpha_grid = getattr(shared_data, 'gvn_alpha_grid', [])
+        
+    # Get the spot price for the active symbol
+    spot_val = summary_dict.get(symbol, {}).get("spot", 0)
+    if spot_val == 0:
+        spot_val = shared_data.market_data.get(symbol, 0)
+        
+    # Build complete mapped data dictionary for compatibilities
+    mapped_data = {}
+    for s in scanner_dict:
+        mapped_data[s] = scanner_dict[s][:14]
+        
+    # Build complete mapped pulse dictionary
+    mapped_pulse = {}
+    if pulse_dict:
+        for s, p in pulse_dict.items():
+            if isinstance(p, dict):
+                mapped_pulse[s] = p
+                
+    # Ensure active symbol is present in market_pulse mapped dictionary
+    if symbol not in mapped_pulse:
+        flat_pulse = getattr(shared_data, 'market_pulse', {})
+        mapped_pulse[symbol] = {
+            "sentiment": flat_pulse.get("sentiment", "NEUTRAL"),
+            "score": flat_pulse.get("score", 50),
+            "trend": flat_pulse.get("trend", "SIDEWAYS"),
+            "pcr": flat_pulse.get("pcr", 1.0),
+            "pressure": flat_pulse.get("pressure", "NORMAL FLOW"),
+            "support": flat_pulse.get("support", 0),
+            "resistance": flat_pulse.get("resistance", 0),
+            "ai_insight": flat_pulse.get("ai_insight", "Scanning..."),
+            "inst_activity": flat_pulse.get("inst_activity", "LOW"),
+            "wind_direction": flat_pulse.get("wind_direction", flat_pulse.get("trend", "SIDEWAYS")),
+            "wind_power": flat_pulse.get("wind_power", "NORMAL"),
+            "smart_money": flat_pulse.get("smart_money", "LOW"),
+            "trap_zone": flat_pulse.get("trap_zone", "SAFE"),
+            "vacuum_detected": flat_pulse.get("vacuum_detected", False)
+        }
+        
     return jsonify({
         "status": "success",
         "last_updated": datetime.now().strftime("%H:%M:%S"),
-        "nifty_spot": n_spot,
-        "alpha_grid": getattr(shared_data, 'gvn_alpha_grid', []),
-        "market_pulse": getattr(shared_data, 'market_pulse', {}),
-        "scanner_data": getattr(shared_data, 'gvn_scanner_data', {}),
+        "nifty_spot": spot_val if spot_val > 0 else n_spot,
+        "alpha_grid": alpha_grid,
+        "market_pulse": mapped_pulse,
+        "data": mapped_data,
+        "scanner_data": gvn_scanner,
+        "summary": summary_dict,
         "demo_signals": getattr(shared_data, 'demo_signals', [])
     })
 

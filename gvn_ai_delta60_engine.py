@@ -71,7 +71,7 @@ class GVNAiDelta60Engine:
                         logger.info(f"🤖 [AI BRAIN] {index} Spot: {spot} | Market Score: {score} | Trades: {len(self.memory['active_trades'])}")
 
                     # 2. Monitor & Execute
-                    strikes = self._pick_alpha_strikes(records, spot)
+                    strikes = self._pick_alpha_strikes(records, spot, index)
                     
                     # 📸 PERIODIC SNAPSHOT (Every 5 minutes)
                     if time.time() - self.last_snapshot_time > 300:
@@ -129,7 +129,7 @@ class GVNAiDelta60Engine:
         ratio = tot_pe / tot_ce
         shared_data.market_pulse["score"] = int(min(ratio * 50, 100))
 
-    def _pick_alpha_strikes(self, records, spot):
+    def _pick_alpha_strikes(self, records, spot, symbol):
         is_expiry = datetime.now().weekday() in [2, 3]
         target_d = 0.50 if is_expiry else 0.62
         alpha_grid = []
