@@ -2277,6 +2277,12 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     #         except Exception as te:
                                     #             logger.error(f"Failed to send pre-alert to Telegram: {te}")
                                     pass
+                                    
+                    # Track previous LTP for crossover checks
+                    if not hasattr(shared_data, 'last_option_chain_ltps'):
+                        shared_data.last_option_chain_ltps = {}
+                    previous_ltp = shared_data.last_option_chain_ltps.get(full_sym, ltp)
+                    shared_data.last_option_chain_ltps[full_sym] = ltp
                     
                     # 1. P&L Tracker for Active Trade
                     if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
@@ -2336,7 +2342,13 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                             
                             # 2. Trigger Re-entry (When price touches/crosses the target level again)
                             if getattr(shared_data, 'target_pullback_flags', {}).get(full_sym, False):
-                                if abs(ltp - last_tgt) <= 0.25:
+                                is_retrigger = False
+                                if (previous_ltp < last_tgt <= ltp) or (previous_ltp > last_tgt >= ltp):
+                                    is_retrigger = True
+                                elif abs(ltp - last_tgt) <= 0.35: # Slightly wider buffer for high-speed updates
+                                    is_retrigger = True
+                                    
+                                if is_retrigger:
                                     # Find the next higher GVN level as the new target
                                     new_tgt = last_tgt + 30.0
                                     for idx, lvl in enumerate(sorted_lvls):
@@ -2413,8 +2425,15 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     if i + 1 < len(sorted_lvls):
                                         upper_lvl = sorted_lvls[i+1]
                             
-                            # Trigger if price exactly touches/crosses the level (Dot-to-Dot Touch Entry)
-                            if lower_lvl and (abs(ltp - lower_lvl) <= 0.25):
+                            # Trigger if price touches or crosses/jumps over the level (Dot-to-Dot Touch Entry)
+                            is_triggered = False
+                            if lower_lvl:
+                                if (previous_ltp < lower_lvl <= ltp) or (previous_ltp > lower_lvl >= ltp):
+                                    is_triggered = True
+                                elif abs(ltp - lower_lvl) <= 0.35: # Slightly wider buffer for high speed option movements
+                                    is_triggered = True
+                                    
+                            if is_triggered:
                                 manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
                                 # 🚀 GVN FIX: 12-Point Stop Loss
                                 manual_sl = ltp - 12.0 
