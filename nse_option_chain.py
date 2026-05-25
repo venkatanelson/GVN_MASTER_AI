@@ -2245,37 +2245,38 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                         logger.error(f"Error checking current_delta_60_strikes in alert: {e}")
                                         
                                 if is_locked:
-                                    # 1. Level Touch Alert (< 1.5 points)
-                                    if dist < 1.5:
-                                        touch_key = f"{full_sym}_{lvl_name}_{lvl_val}"
-                                        now_time = time.time()
-                                        last_alert_time = shared_data.last_touched_levels.get(touch_key, 0)
-                                        if now_time - last_alert_time > 300: # 5 minutes cooldown
-                                            shared_data.last_touched_levels[touch_key] = now_time
-                                            msg_text = f"🔔 <b>GVN LEVEL TOUCH DETECTED</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
-                                            logger.info(f"🚨 [LEVEL TOUCH] {full_sym} touched {lvl_name} at {lvl_val}")
-                                            try:
-                                                from gvn_telegram_engine import TelegramAlertManager
-                                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                                tg.bot.send_message(msg_text)
-                                            except Exception as te:
-                                                logger.error(f"Failed to send touch alert to Telegram: {te}")
-                                                
-                                    # 2. Pre-Alert Get Ready (within 1 point or 1% of the GVN Level)
-                                    elif dist <= 1.0 or dist <= (lvl_val * 0.01):
-                                        pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
-                                        now_time = time.time()
-                                        last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
-                                        if now_time - last_pre_time > 300: # 5 minutes cooldown
-                                            shared_data.last_pre_alerts[pre_key] = now_time
-                                            pre_msg = f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()} ({lvl_val:.2f})\n💸 <b>Current Price:</b> ₹{ltp:.2f}\n📏 <b>Distance:</b> {dist:.2f} pts away\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
-                                            logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
-                                            try:
-                                                from gvn_telegram_engine import TelegramAlertManager
-                                                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                                tg.bot.send_message(pre_msg)
-                                            except Exception as te:
-                                                logger.error(f"Failed to send pre-alert to Telegram: {te}")
+                                    # 1. Level Touch Alert (< 1.5 points) - DISABLED AS PER USER REQUEST TO AVOID SPAM
+                                    # if dist < 1.5:
+                                    #     touch_key = f"{full_sym}_{lvl_name}_{lvl_val}"
+                                    #     now_time = time.time()
+                                    #     last_alert_time = shared_data.last_touched_levels.get(touch_key, 0)
+                                    #     if now_time - last_alert_time > 300: # 5 minutes cooldown
+                                    #         shared_data.last_touched_levels[touch_key] = now_time
+                                    #         msg_text = f"🔔 <b>GVN LEVEL TOUCH DETECTED</b> 🔔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()}\n💸 <b>Level Price:</b> ₹{lvl_val:.2f}\n📈 <b>Current LTP:</b> ₹{ltp:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    #         logger.info(f"🚨 [LEVEL TOUCH] {full_sym} touched {lvl_name} at {lvl_val}")
+                                    #         try:
+                                    #             from gvn_telegram_engine import TelegramAlertManager
+                                    #             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                    #             tg.bot.send_message(msg_text)
+                                    #         except Exception as te:
+                                    #             logger.error(f"Failed to send touch alert to Telegram: {te}")
+                                    #             
+                                    # 2. Pre-Alert Get Ready (within 1 point or 1% of the GVN Level) - DISABLED AS PER USER REQUEST TO AVOID SPAM
+                                    # elif dist <= 1.0 or dist <= (lvl_val * 0.01):
+                                    #     pre_key = f"{full_sym}_{lvl_name}_{lvl_val}"
+                                    #     now_time = time.time()
+                                    #     last_pre_time = shared_data.last_pre_alerts.get(pre_key, 0)
+                                    #     if now_time - last_pre_time > 300: # 5 minutes cooldown
+                                    #         shared_data.last_pre_alerts[pre_key] = now_time
+                                    #         pre_msg = f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Strike:</b> {full_sym.replace('_', ' ')}\n⚡ <b>GVN Level:</b> {lvl_name.upper()} ({lvl_val:.2f})\n💸 <b>Current Price:</b> ₹{ltp:.2f}\n📏 <b>Distance:</b> {dist:.2f} pts away\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    #         logger.info(f"🚨 [PRE-ALERT] {full_sym} is near {lvl_name} ({lvl_val:.2f}), LTP={ltp:.2f}")
+                                    #         try:
+                                    #             from gvn_telegram_engine import TelegramAlertManager
+                                    #             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                    #             tg.bot.send_message(pre_msg)
+                                    #         except Exception as te:
+                                    #             logger.error(f"Failed to send pre-alert to Telegram: {te}")
+                                    pass
                     
                     # 1. P&L Tracker for Active Trade
                     if shared_data.demo_trade.get("active") and shared_data.demo_trade.get("symbol") == full_sym:
@@ -2299,6 +2300,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                             except Exception as e:
                                 logger.error(f"Error sending exit alert: {e}")
                                 
+                            # 🔄 Save last hit target for GVN Re-entry tracking
+                            if not hasattr(shared_data, 'last_completed_targets'):
+                                shared_data.last_completed_targets = {}
+                            shared_data.last_completed_targets[full_sym] = tgt
+                            if not hasattr(shared_data, 'target_pullback_flags'):
+                                shared_data.target_pullback_flags = {}
+                            shared_data.target_pullback_flags[full_sym] = False
+                                
                         elif ltp <= sl:
                             shared_data.demo_trade["active"] = False
                             pnl = ltp - entry_price
@@ -2314,6 +2323,57 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 })
                             except Exception as e:
                                 logger.error(f"Error sending exit alert: {e}")
+
+                    # 🔄 GVN LADDER RE-ENTRY ENGINE (Dot-to-Dot Pullback Re-entry)
+                    if not shared_data.demo_trade.get("active"):
+                        last_tgt = getattr(shared_data, 'last_completed_targets', {}).get(full_sym, 0)
+                        if last_tgt > 0:
+                            # 1. Track Pullback (Price must dip below target level to qualify for re-entry)
+                            if ltp < last_tgt - 0.50:
+                                if not hasattr(shared_data, 'target_pullback_flags'):
+                                    shared_data.target_pullback_flags = {}
+                                shared_data.target_pullback_flags[full_sym] = True
+                            
+                            # 2. Trigger Re-entry (When price touches/crosses the target level again)
+                            if getattr(shared_data, 'target_pullback_flags', {}).get(full_sym, False):
+                                if abs(ltp - last_tgt) <= 0.25:
+                                    # Find the next higher GVN level as the new target
+                                    new_tgt = last_tgt + 30.0
+                                    for idx, lvl in enumerate(sorted_lvls):
+                                        if abs(lvl - last_tgt) < 0.50:
+                                            if idx + 1 < len(sorted_lvls):
+                                                new_tgt = sorted_lvls[idx + 1]
+                                            break
+                                            
+                                    new_sl = last_tgt - 12.0 # Strict 12-point Stop Loss
+                                    
+                                    shared_data.demo_trade = {
+                                        "active": True,
+                                        "symbol": full_sym,
+                                        "entry_price": ltp,
+                                        "target": new_tgt,
+                                        "sl": new_sl,
+                                        "qty": 50 if symbol == "NIFTY" else 15
+                                    }
+                                    
+                                    # Reset pullback flag for this strike
+                                    shared_data.target_pullback_flags[full_sym] = False
+                                    
+                                    logger.info(f"🔄 [GVN RE-ENTRY] {full_sym} re-entered at {ltp:.2f} (Target={new_tgt:.2f}, SL={new_sl:.2f})")
+                                    execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"GVN Re-entry near {last_tgt:.2f}")
+                                    
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.alert_entry({
+                                            "symbol": full_sym,
+                                            "entry_price": ltp,
+                                            "target": new_tgt,
+                                            "sl": new_sl,
+                                            "level": f"RE-ENTRY @ {last_tgt:.2f}"
+                                        })
+                                    except Exception as te:
+                                        logger.error(f"Error sending re-entry alert: {te}")
 
                     # 2. Level-to-Level Signal Trigger
                     # 🔒 PERSISTENT MORNING LOCK: Only trigger trades on locked morning strike

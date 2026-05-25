@@ -215,35 +215,73 @@ class GVNAiDelta60Engine:
             previous_ltp = self.memory["last_ltps"].get(key, ltp)
             self.memory["last_ltps"][key] = ltp
             
-            # GVN Pro Alerts - Check proximity (1% or 1 point buffer) to i5, i6, i7
-            if "pro_alerts_sent" not in self.memory:
-                self.memory["pro_alerts_sent"] = {}
-                
-            for lvl_name in ["i5", "i6", "i7"]:
-                lvl_val = levels.get(lvl_name, 0)
-                if lvl_val > 0:
-                    dist = abs(ltp - lvl_val)
-                    # Check if within 1 point or 1% buffer
-                    if dist <= 1.0 or dist <= (lvl_val * 0.01):
-                        alert_time_key = f"{key}_{lvl_name}_pro_alert"
-                        last_alert_time = self.memory["pro_alerts_sent"].get(alert_time_key, 0)
-                        # Alert at most once every 5 minutes per level per strike
-                        if time.time() - last_alert_time > 300:
-                            alert_msg = (
-                                f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n"
-                                f"🎯 Symbol: {symbol} {strike['strike']} {strike['type']}\n"
-                                f"⚡ Level: <b>{lvl_name.upper()} ({lvl_val})</b>\n"
-                                f"💸 Current Price: <b>₹{ltp}</b>\n"
-                                f"📏 Distance: {round(dist, 2)} pts away"
-                            )
-                            logger.info(f"[PRO ALERT] {symbol} {strike['strike']} {strike['type']} is approaching {lvl_name.upper()} ({lvl_val}) @ {ltp}")
-                            if self.telegram:
-                                self.telegram.send_alert(alert_msg)
-                            self.memory["pro_alerts_sent"][alert_time_key] = time.time()
+            # GVN Pro Alerts - Check proximity (1% or 1 point buffer) to i5, i6, i7 (DISABLED AS PER USER REQUEST TO PREVENT ALERT SPAM)
+            # if "pro_alerts_sent" not in self.memory:
+            #     self.memory["pro_alerts_sent"] = {}
+            #     
+            # for lvl_name in ["i5", "i6", "i7"]:
+            #     lvl_val = levels.get(lvl_name, 0)
+            #     if lvl_val > 0:
+            #         dist = abs(ltp - lvl_val)
+            #         # Check if within 1 point or 1% buffer
+            #         if dist <= 1.0 or dist <= (lvl_val * 0.01):
+            #             alert_time_key = f"{key}_{lvl_name}_pro_alert"
+            #             last_alert_time = self.memory["pro_alerts_sent"].get(alert_time_key, 0)
+            #             # Alert at most once every 5 minutes per level per strike
+            #             if time.time() - last_alert_time > 300:
+            #                 alert_msg = (
+            #                     f"⚠️ <b>GVN PRO ALERT: APPROACHING {lvl_name.upper()}</b> ⚠️\n"
+            #                     f"🎯 Symbol: {symbol} {strike['strike']} {strike['type']}\n"
+            #                     f"⚡ Level: <b>{lvl_name.upper()} ({lvl_val})</b>\n"
+            #                     f"💸 Current Price: <b>₹{ltp}</b>\n"
+            #                     f"📏 Distance: {round(dist, 2)} pts away"
+            #                 )
+            #                 logger.info(f"[PRO ALERT] {symbol} {strike['strike']} {strike['type']} is approaching {lvl_name.upper()} ({lvl_val}) @ {ltp}")
+            #                 if self.telegram:
+            #                     self.telegram.send_alert(alert_msg)
+            #                 self.memory["pro_alerts_sent"][alert_time_key] = time.time()
 
             # GVN Levels sorted in ascending order: [i1, i7, i6, i5, i3, i2, i0]
             sorted_lvls = sorted([levels['i1'], levels['i7'], levels['i6'], levels['i5'], levels['i3'], levels['i2'], levels['i0']])
             
+            # 🔄 GVN LADDER RE-ENTRY ENGINE (Dot-to-Dot Pullback Re-entry)
+            if "last_completed_targets" not in self.memory:
+                self.memory["last_completed_targets"] = {}
+            if "target_pullback_flags" not in self.memory:
+                self.memory["target_pullback_flags"] = {}
+                
+            last_tgt = self.memory["last_completed_targets"].get(key, 0)
+            if last_tgt > 0:
+                # 1. Track Pullback (Price must dip below target level to qualify for re-entry)
+                if ltp < last_tgt - 0.50:
+                    self.memory["target_pullback_flags"][key] = True
+                
+                # 2. Trigger Re-entry (When price touches/crosses the target level again)
+                if self.memory["target_pullback_flags"].get(key, False):
+                    is_retrigger = False
+                    if previous_ltp < last_tgt <= ltp:
+                        is_retrigger = True
+                    elif abs(ltp - last_tgt) <= 0.20:
+                        is_retrigger = True
+                        
+                    if is_retrigger:
+                        # Find the next higher GVN level as the new target
+                        new_tgt = last_tgt + 30.0
+                        for idx, lvl in enumerate(sorted_lvls):
+                            if abs(lvl - last_tgt) < 0.50:
+                                if idx + 1 < len(sorted_lvls):
+                                    new_tgt = sorted_lvls[idx + 1]
+                                break
+                                
+                        new_sl = last_tgt - 12.0 # Strict 12-point Stop Loss
+                        
+                        # Reset pullback flag for this strike
+                        self.memory["target_pullback_flags"][key] = False
+                        
+                        # Execute
+                        self._execute_gvn_level_trade(symbol, strike, ltp, new_tgt, new_sl, f"GVN Level Re-entry (near {last_tgt:.2f})")
+                        return
+
             # Find the levels crossover and execute trade
             for idx, lvl in enumerate(sorted_lvls):
                 # Ensure there is a target level above the entry level
@@ -294,6 +332,16 @@ class GVNAiDelta60Engine:
                 paper_id = trade.get("paper_id")
                 if paper_id:
                     self.paper_trading.execute_paper_sell(paper_id, exit_price=ltp, exit_reason="TARGET_HIT")
+                
+                # 🔄 Save last hit target for GVN Re-entry tracking
+                if "last_completed_targets" not in self.memory:
+                    self.memory["last_completed_targets"] = {}
+                self.memory["last_completed_targets"][key] = trade["target"]
+                
+                if "target_pullback_flags" not in self.memory:
+                    self.memory["target_pullback_flags"] = {}
+                self.memory["target_pullback_flags"][key] = False
+                
                 del self.memory["active_trades"][key]
                 
             # Exit check: Stop Loss Hit
