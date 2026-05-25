@@ -429,27 +429,27 @@ def generate_emulated_option_chain(symbol, spot_price):
     if "BANKNIFTY" in symbol_upper:
         base_strike = 100
         strike_range = range(int(spot_price // 100) * 100 - 1500, int(spot_price // 100) * 100 + 1600, 100)
-        iv = 18.0
+        iv = 19.5
         expiry_weekday = 2 # Wednesday
     elif "FINNIFTY" in symbol_upper:
         base_strike = 50
         strike_range = range(int(spot_price // 50) * 50 - 800, int(spot_price // 50) * 50 + 850, 50)
-        iv = 16.0
+        iv = 17.5
         expiry_weekday = 1 # Tuesday
     elif "MIDCPNIFTY" in symbol_upper:
         base_strike = 25
         strike_range = range(int(spot_price // 25) * 25 - 400, int(spot_price // 25) * 25 + 425, 25)
-        iv = 17.0
+        iv = 18.5
         expiry_weekday = 0 # Monday
     elif "SENSEX" in symbol_upper:
         base_strike = 100
         strike_range = range(int(spot_price // 100) * 100 - 2000, int(spot_price // 100) * 100 + 2100, 100)
-        iv = 17.5
+        iv = 18.5
         expiry_weekday = 4 # Friday
     else: # NIFTY
         base_strike = 50
         strike_range = range(int(spot_price // 50) * 50 - 800, int(spot_price // 50) * 50 + 850, 50)
-        iv = 15.0
+        iv = 16.6
         expiry_weekday = 3 # Thursday
 
     # 🌟 GVN SPECIAL: Use User-Verified/System-Active Expiries for accurate Black-Scholes pricing
