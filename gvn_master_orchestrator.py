@@ -21,8 +21,6 @@ try:
     from gvn_live_execution_engine import GVNLiveExecutionEngine
     from gvn_ai_delta60_engine import GVNAiDelta60Engine
     from nse_option_chain import start_nse_worker
-    from truedata_ws_connector import start_truedata_ws_engine
-    from truedata_connector import start_truedata_engine
 except ImportError as e:
     print(f"⚠️ Warning: Some engines could not be imported: {e}")
 
@@ -150,32 +148,7 @@ class GVNMasterOrchestrator:
         start_nse_worker()
         logger.info("🔥 NSE Option Chain Worker started.")
 
-        # 🚀 START TRUEDATA HIGH-SPEED WS & REST ENGINES
-        TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
-        truedata_active = False
-        if TRUEDATA_ENABLED:
-            try:
-                from truedata_rest_api import TrueDataRestAPI
-                logger.info("🔍 Validating TrueData subscription...")
-                test_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
-                if test_api.token:
-                    truedata_active = True
-                    logger.info("✅ TrueData subscription validated successfully!")
-                else:
-                    logger.warning("⚠️ TrueData Subscription Expired or Login Failed. Bypassing TrueData engine start to prevent console spam. NSE Direct fallback will be used.")
-            except Exception as e:
-                logger.warning(f"⚠️ TrueData validation failed: {e}")
-
-            if truedata_active:
-                try:
-                    start_truedata_ws_engine()
-                    logger.info("✅ TrueData High-Speed WS Engine Started")
-                    start_truedata_engine()
-                    logger.info("✅ TrueData REST Spot Engine Started")
-                except Exception as e:
-                    logger.warning(f"⚠️ TrueData Start Failed: {e}")
-        else:
-            logger.info("⏭️ Skipping TrueData validation & engines (TrueData is disabled).")
+        # TrueData is completely disabled and removed as requested by user.
 
         self.system_initialized = True
         shared_data.system_status["initialized"] = True

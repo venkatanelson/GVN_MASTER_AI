@@ -14,14 +14,8 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NSE_OptionChain")
 
-TRUEDATA_ENABLED = os.getenv("TRUEDATA_ENABLED", "false").lower() == "true"
+# TrueData is completely disabled and removed.
 td_api = None
-if TRUEDATA_ENABLED:
-    try:
-        from truedata_rest_api import TrueDataRestAPI
-        td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
-    except Exception as e:
-        logger.warning(f"⚠️ TrueData REST API failed to initialize: {e}")
 
 # 🌪️ GVN WIND ENGINE INTEGRATION
 from gvn_ai_wind_engine import GVNAiWindEngine
