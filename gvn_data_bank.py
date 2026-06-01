@@ -35,6 +35,20 @@ def init_db():
             iv FLOAT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS market_wind_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            symbol TEXT,
+            wind_direction TEXT,
+            wind_power FLOAT,
+            trend_type TEXT,
+            smart_money TEXT,
+            battle_status TEXT,
+            pcr FLOAT,
+            underlying_value FLOAT
+        )
+    ''')
     conn.commit()
     conn.close()
     logger.info("✅ GVN Data Bank initialized.")
@@ -159,6 +173,54 @@ def get_historical_trend(symbol, strike, opt_type, hours=24):
     except Exception as e:
         logger.error(f"❌ Error fetching trend: {e}")
         return []
+
+def save_wind_status(symbol, wind_dir, wind_power, trend_type, smart_money, battle_status, pcr, spot):
+    """
+    Saves the calculated wind direction and metrics to the sqlite DB.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO market_wind_history 
+            (timestamp, symbol, wind_direction, wind_power, trend_type, smart_money, battle_status, pcr, underlying_value)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (ts, symbol, wind_dir, float(wind_power), trend_type, smart_money, battle_status, float(pcr), float(spot)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"❌ Error saving wind status: {e}")
+
+def get_latest_wind_status(symbol):
+    """
+    Retrieves the most recent wind status record for a symbol from the database.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT wind_direction, wind_power, trend_type, smart_money, battle_status, pcr, underlying_value, timestamp
+            FROM market_wind_history
+            WHERE symbol = ?
+            ORDER BY timestamp DESC LIMIT 1
+        ''', (symbol,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                "wind_direction": row[0],
+                "wind_power": row[1],
+                "trend_type": row[2],
+                "smart_money": row[3],
+                "battle_status": row[4],
+                "pcr": row[5],
+                "underlying_value": row[6],
+                "timestamp": row[7]
+            }
+    except Exception as e:
+        logger.error(f"❌ Error fetching latest wind status: {e}")
+    return None
 
 if __name__ == "__main__":
     init_db()

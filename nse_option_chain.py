@@ -1275,11 +1275,22 @@ def retrieve_and_record_915_levels(timeframe="5MIN"):
                         logger.error(f"❌ [RETRIEVER] Error fetching option {symbol} {strike_key}: {e}")
 
 def fetch_from_nse_direct(symbol):
-    """Bypass NSE Blocks using Cookie Session with improved headers"""
+    """Bypass NSE Blocks using Cookie Session with improved headers and smart retries"""
     global nse_session
     url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    
+    # 🕵️ ROTATING USER AGENTS TO AVOID SIGNATURE PATTERN BLOCKS
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edge/122.0.0.0",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+    ]
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "User-Agent": random.choice(user_agents),
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "en-GB,en;q=0.9,en-US;q=0.8,te;q=0.7",
         "Accept-Encoding": "gzip, deflate, br",
@@ -1289,10 +1300,14 @@ def fetch_from_nse_direct(symbol):
     
     for attempt in range(5):
         try:
+            # Rotate agent on retry attempts
+            if attempt > 0:
+                headers["User-Agent"] = random.choice(user_agents)
+                
             # 1. Get cookies from main site - crucial step
             if attempt == 0 or not nse_session.cookies:
                 nse_session.get("https://www.nseindia.com", headers=headers, timeout=15)
-                time.sleep(1.5)
+                time.sleep(random.uniform(1.2, 2.2)) # Random jitter
             
             # 2. Get API data
             response = nse_session.get(url, headers=headers, timeout=15)
@@ -1312,19 +1327,28 @@ def fetch_from_nse_direct(symbol):
                         with open("nse_status.log", "a") as f:
                             f.write(f"{datetime.now()}: [NSE DIRECT] Success but EMPTY data. Forcing Refresh...\n")
                         nse_session = requests.Session() # Reset session on empty data
-                        time.sleep(2)
+                        time.sleep(random.uniform(2.0, 4.0))
                 except:
                     pass
             elif response.status_code in [401, 403]:
-                # Refresh Session
+                # 🚨 BLOCKED: Reset session & sleep exponentially with randomized jitter
+                with open("nse_status.log", "a") as f:
+                    f.write(f"{datetime.now()}: [NSE DIRECT BLOCK] Code {response.status_code} on attempt {attempt+1}. Resetting session and backing off...\n")
                 nse_session = requests.Session()
-                time.sleep(2)
+                # Exponential backoff with random jitter: 4s, 6s, 10s, 18s...
+                backoff_time = (2 ** (attempt + 1)) + random.uniform(2.0, 5.0)
+                time.sleep(backoff_time)
             else:
-                time.sleep(2)
+                # Other HTTP Errors
+                backoff_time = (2 ** attempt) + random.uniform(1.0, 3.0)
+                time.sleep(backoff_time)
         except Exception as e:
             with open("nse_status.log", "a") as f:
-                f.write(f"{datetime.now()}: [NSE DIRECT ERROR] {str(e)}\n")
-            time.sleep(2)
+                f.write(f"{datetime.now()}: [NSE DIRECT ERROR] Attempt {attempt+1}: {str(e)}\n")
+            # Clear session on error
+            nse_session = requests.Session()
+            backoff_time = (2 ** (attempt + 1)) + random.uniform(1.5, 3.5)
+            time.sleep(backoff_time)
             
     return None
 

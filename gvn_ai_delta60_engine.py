@@ -28,7 +28,7 @@ class GVNAiDelta60Engine:
             "active_trades": {},
             "oi_trend": "NEUTRAL"
         }
-        self.indices = ["NIFTY", "BANKNIFTY"]
+        self.indices = ["NIFTY", "SENSEX"]
         self.is_running = False
         
         if bot_token and chat_id:
@@ -71,7 +71,7 @@ class GVNAiDelta60Engine:
                         logger.info(f"🤖 [AI BRAIN] {index} Spot: {spot} | Market Score: {score} | Trades: {len(self.memory['active_trades'])}")
 
                     # 2. Monitor & Execute
-                    strikes = self._pick_alpha_strikes(records, spot, index)
+                    strikes = self._pick_gvn_14_strikes(records, spot, index)
                     
                     # 📸 PERIODIC SNAPSHOT (Every 5 minutes)
                     if time.time() - self.last_snapshot_time > 300:
@@ -129,24 +129,85 @@ class GVNAiDelta60Engine:
         ratio = tot_pe / tot_ce
         shared_data.market_pulse["score"] = int(min(ratio * 50, 100))
 
-    def _pick_alpha_strikes(self, records, spot, symbol):
-        is_expiry = datetime.now().weekday() in [2, 3]
-        target_d = 0.50 if is_expiry else 0.62
-        alpha_grid = []
+    def _pick_gvn_14_strikes(self, records, spot, symbol):
+        """
+        Dynamically selects exactly 14 strikes per index (7 CE and 7 PE):
+        - CE: 4 ITM (delta ~0.60), 3 OTM (delta ~0.46)
+        - PE: 4 ITM (delta ~0.60), 3 OTM (delta ~0.46)
+        """
+        ce_itm_candidates = []
+        ce_otm_candidates = []
+        pe_itm_candidates = []
+        pe_otm_candidates = []
+        
         for item in records.get("data", []):
-            for t in ["CE", "PE"]:
-                if t in item:
-                    opt = item[t]
-                    delta = abs(opt.get("delta", 0.5))
-                    if 0.40 <= delta <= 0.75:
-                        alpha_grid.append({
-                            "strike": item["strikePrice"], "type": t,
-                            "ltp": opt.get("lastPrice", 0), "delta": delta,
-                            "high_915": opt.get("high_915", opt.get("lastPrice", 0) + 15),
-                            "low_915": opt.get("low_915", opt.get("lastPrice", 0) - 15),
-                            "symbol": opt.get("symbol") or opt.get("tradingSymbol") or f"{symbol}{item['strikePrice']}{t}"
-                        })
-        return sorted(alpha_grid, key=lambda x: abs(x["delta"] - target_d))[:14]
+            strike_price = item.get("strikePrice") or item.get("strike")
+            if not strike_price:
+                continue
+                
+            for opt_type in ["CE", "PE"]:
+                if opt_type in item:
+                    opt = item[opt_type]
+                    
+                    # Extract or compute delta
+                    delta = opt.get("delta")
+                    if delta is None or delta == 0:
+                        try:
+                            # Compute using Black-Scholes if missing
+                            iv = opt.get("impliedVolatility", 16.5) or 16.5
+                            sigma = iv / 100.0
+                            today = datetime.now()
+                            expiry_weekday = 4 if symbol == "SENSEX" else 3
+                            days_to_expiry = max(1, (expiry_weekday - today.weekday()) % 7)
+                            T = days_to_expiry / 365.0
+                            r = 0.07
+                            delta = abs(nse_option_chain.calculate_delta(spot, strike_price, T, r, sigma, opt_type))
+                        except Exception:
+                            # Proportional fallback estimation
+                            if opt_type == "CE":
+                                delta = 0.5 - ((strike_price - spot) / spot)
+                            else:
+                                delta = 0.5 + ((strike_price - spot) / spot)
+                            delta = min(0.99, max(0.01, abs(delta)))
+                    else:
+                        delta = abs(delta)
+                    
+                    strike_data = {
+                        "strike": strike_price,
+                        "type": opt_type,
+                        "ltp": opt.get("lastPrice", opt.get("lastTradedPrice", 0)),
+                        "delta": delta,
+                        "oi": opt.get("openInterest", opt.get("oi", 0)),
+                        "oi_change": opt.get("changeinOpenInterest", opt.get("oi_change", 0)),
+                        "volume": opt.get("totalTradedVolume", opt.get("volume", 0)),
+                        "high_915": opt.get("high_915", opt.get("lastPrice", 0) + 15),
+                        "low_915": opt.get("low_915", opt.get("lastPrice", 0) - 15),
+                        "symbol": opt.get("symbol") or opt.get("tradingSymbol") or f"{symbol}{strike_price}{opt_type}"
+                    }
+                    
+                    if opt_type == "CE":
+                        if strike_price <= spot:
+                            ce_itm_candidates.append(strike_data)
+                        else:
+                            ce_otm_candidates.append(strike_data)
+                    else: # PE
+                        if strike_price >= spot:
+                            pe_itm_candidates.append(strike_data)
+                        else:
+                            pe_otm_candidates.append(strike_data)
+                            
+        # Select 4 CE ITM closest to delta 0.60
+        ce_itm_selected = sorted(ce_itm_candidates, key=lambda x: abs(x["delta"] - 0.60))[:4]
+        # Select 3 CE OTM closest to delta 0.46
+        ce_otm_selected = sorted(ce_otm_candidates, key=lambda x: abs(x["delta"] - 0.46))[:3]
+        
+        # Select 4 PE ITM closest to delta 0.60
+        pe_itm_selected = sorted(pe_itm_candidates, key=lambda x: abs(x["delta"] - 0.60))[:4]
+        # Select 3 PE OTM closest to delta 0.46
+        pe_otm_selected = sorted(pe_otm_candidates, key=lambda x: abs(x["delta"] - 0.46))[:3]
+        
+        selected = ce_itm_selected + ce_otm_selected + pe_itm_selected + pe_otm_selected
+        return selected
 
     def _manage_trade_cycle(self, symbol, strike):
         key = f"{strike['strike']}_{strike['type']}"
@@ -182,8 +243,20 @@ class GVNAiDelta60Engine:
         if key not in self.memory["active_trades"]:
             # CE Entry: Bullish Sentiment (Score >= 65) or UP WIND
             # PE Entry: Bearish Sentiment (Score <= 35) or DOWN WIND
-            wind_dir = shared_data.market_pulse.get("wind_direction", "NEUTRAL")
-            wind_power = shared_data.market_pulse.get("wind_power", 1.0)
+            
+            # Fetch latest wind direction from the Database (Engine 1)
+            latest_wind = gvn_data_bank.get_latest_wind_status(symbol)
+            if latest_wind:
+                wind_dir = latest_wind["wind_direction"]
+                wind_power = latest_wind["wind_power"]
+                # Keep shared_data.market_pulse in sync
+                shared_data.market_pulse["wind_direction"] = wind_dir
+                shared_data.market_pulse["wind_power"] = wind_power
+                shared_data.market_pulse["trend_type"] = latest_wind["trend_type"]
+                shared_data.market_pulse["smart_money"] = latest_wind["smart_money"]
+            else:
+                wind_dir = shared_data.market_pulse.get("wind_direction", "NEUTRAL")
+                wind_power = shared_data.market_pulse.get("wind_power", 1.0)
             
             is_bullish = strike['type'] == 'CE' and (shared_data.market_pulse.get("score", 50) >= 65 or any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]))
             is_bearish = strike['type'] == 'PE' and (shared_data.market_pulse.get("score", 50) <= 35 or any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]))
