@@ -210,6 +210,11 @@ class GVNAiDelta60Engine:
         return selected
 
     def _manage_trade_cycle(self, symbol, strike):
+        # 🎯 GVN SCANNER: Only execute trades if this symbol is the active dashboard selection
+        active_index = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY').upper()
+        if symbol.upper() != active_index:
+            return
+
         key = f"{strike['strike']}_{strike['type']}"
         ltp = strike["ltp"]
         # ⚡ REAL-TIME WEBSOCKET LTP OVERRIDE (Sub-second execution)
@@ -217,7 +222,18 @@ class GVNAiDelta60Engine:
         real_ltp = shared_data.market_data.get(search_key, 0)
         if real_ltp > 0:
             ltp = real_ltp
-        levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
+            
+        # 🔒 GVN SAFE LEVELS CALCULATION: Double check with real recorded 9:15 candles to avoid missing data
+        high_915 = strike.get("high_915", 0)
+        low_915 = strike.get("low_915", 0)
+        try:
+            real_ohlc = nse_option_chain.get_real_option_915_ohlc(symbol, strike["strike"], strike["type"])
+            if real_ohlc:
+                high_915, low_915 = real_ohlc
+        except Exception as ohlc_err:
+            pass
+            
+        levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915)
         if not levels: return
         
         # 🔒 PERSISTENT MORNING LOCK: Only allow trades on the morning locked strike

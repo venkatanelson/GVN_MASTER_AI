@@ -446,16 +446,29 @@ def generate_emulated_option_chain(symbol, spot_price):
         iv = 16.6
         expiry_weekday = 3 # Thursday
 
-    # 🌟 GVN SPECIAL: Use User-Verified/System-Active Expiries for accurate Black-Scholes pricing
-    if symbol_upper == "NIFTY":
-        expiry_str_raw = "26-05-2026"
-    elif "MCX" in symbol_upper or "CRUDE" in symbol_upper:
-        expiry_str_raw = "14-05-2026"
-    else:
-        expiry_str_raw = None
+    # 🌟 GVN SPECIAL: Dynamically determine the next expiry from scrip master for accurate Black-Scholes pricing
+    expiry_dt = None
+    try:
+        scrip_path = "angel_scrip_master.json"
+        if os.path.exists(scrip_path):
+            with open(scrip_path, "r", encoding="utf-8") as f:
+                master_data = json.load(f)
+            exp_dates = []
+            today_date = today.date()
+            for item in master_data:
+                if item.get('name') == symbol_upper and item.get('expiry') and item.get('exch_seg') in ['NFO', 'BFO']:
+                    try:
+                        exp_dt_obj = datetime.strptime(item.get('expiry'), "%d%b%Y")
+                        if exp_dt_obj.date() >= today_date:
+                            exp_dates.append(exp_dt_obj)
+                    except:
+                        pass
+            if exp_dates:
+                expiry_dt = min(exp_dates)
+    except Exception as ex:
+        pass
 
-    if expiry_str_raw:
-        expiry_dt = datetime.strptime(expiry_str_raw, "%d-%m-%Y")
+    if expiry_dt:
         days_to_expiry = max(0, (expiry_dt.date() - today.date()).days)
     else:
         days_to_expiry = (expiry_weekday - today.weekday()) % 7
@@ -1113,7 +1126,7 @@ def load_all_recorded_benchmarks():
     Loads all index benchmarks from gvn_recorded_915_ohlc.json into shared_data.gvn_915_benchmark.
     """
     logger.info("🔄 [BENCHMARK] Loading recorded benchmarks from JSON file...")
-    indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"]
+    indices = ["NIFTY", "SENSEX"]
     recorded_data = load_recorded_915_ohlc()
     timeframe = recorded_data.get("timeframe", "1MIN")
     loaded_count = 0
@@ -1141,7 +1154,7 @@ def retrieve_and_record_915_levels(timeframe="5MIN"):
     saving them to gvn_recorded_915_ohlc.json and SQLite database.
     """
     logger.info(f"🔄 [RETRIEVER] Fetching 9:15 AM levels for timeframe={timeframe}...")
-    indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"]
+    indices = ["NIFTY", "SENSEX"]
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     # 1. Fetch and record index spot candles
@@ -1799,7 +1812,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         shared_data.daily_authorized_strikes = {}
 
     # 🌟 GVN DYNAMIC STRIKE INJECTION (Symmetrical 4 ITM/ATM + 2 OTM Tracks)
-    if symbol in ["NIFTY", "SENSEX", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
+    if symbol in ["NIFTY", "SENSEX"]:
         forced_strikes = []
         
         fallback_step = 50
@@ -2961,7 +2974,7 @@ def nse_background_worker():
                     nse_915_finalized_today = False
                     
                     # --- STEP A: Track running High/Low locally from broker feed ---
-                    for symbol in ["NIFTY", "BANKNIFTY"]:
+                    for symbol in ["NIFTY", "SENSEX"]:
                         # 1. Track spot price
                         spot = float(shared_data.market_data.get(symbol, 0))
                         if spot == 0 and symbol == "NIFTY":
@@ -3008,7 +3021,7 @@ def nse_background_worker():
                     # --- STEP B: Poll NSE website EXACTLY ONCE at 09:19:40 AM (20s remaining) ---
                     if poll_trigger_time <= current_time < end_time and not nse_single_poll_done:
                         logger.info("🕒 [NSE 9:15 TRACKER] 09:19:40 AM reached. Executing single auto-refresh poll to NSE website...")
-                        for symbol in ["NIFTY", "BANKNIFTY"]:
+                        for symbol in ["NIFTY", "SENSEX"]:
                             try:
                                 data = fetch_from_nse_direct(symbol)
                                 if data and "records" in data:
@@ -3061,7 +3074,7 @@ def nse_background_worker():
                         
                     # Overlay/merge NSE website data
                     for k, v in nse_running_915_ohlc_temp.items():
-                        if k in ["NIFTY", "BANKNIFTY"] and isinstance(v, dict):
+                        if k in ["NIFTY", "SENSEX"] and isinstance(v, dict):
                             if k not in merged_ohlc:
                                 merged_ohlc[k] = {}
                             for sk, sv in v.items():
@@ -3084,7 +3097,7 @@ def nse_background_worker():
                             recorded_data = load_recorded_915_ohlc()
                             recorded_data["date"] = today_str
                             
-                            for symbol in ["NIFTY", "BANKNIFTY"]:
+                            for symbol in ["NIFTY", "SENSEX"]:
                                 # Spot
                                 spot_key = f"{symbol}_SPOT"
                                 if spot_key in merged_ohlc:
@@ -3174,7 +3187,7 @@ def nse_background_worker():
                 f.write(f"{datetime.now()}: NSE Worker Pulse... (Active: {dhan_master_config.get('active')})\n")
             
             # 🌟 GVN ULTRA-FAST TICK-BY-TICK SCANNING FOR ACTIVE SYMBOLS
-            for symbol in ["NIFTY", "SENSEX", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]:
+            for symbol in ["NIFTY", "SENSEX"]:
                 with open("nse_status.log", "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now()}: [NSE Worker] Fetching {symbol}...\n")
                 analyze_and_update_gvn_scanner(symbol)

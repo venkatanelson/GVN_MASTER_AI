@@ -22,7 +22,7 @@ class GVNMasterRobot:
         self.active_trades = {} # {symbol: trade_info}
         self.last_processed_time = None
         self.strike_level_cache = {} # Cache GVN levels for strikes
-        self.market_indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "MIDCPNIFTY"]
+        self.market_indices = ["NIFTY", "SENSEX"]
         self.is_running = False
         
         # Initialize advanced trading module
@@ -58,6 +58,12 @@ class GVNMasterRobot:
                 
                 for strike in priority_strikes:
                     try:
+                        # 🎯 GVN SCANNER: Only execute trades if this is the active dashboard symbol
+                        index_name = strike.get('index', '').upper()
+                        active_index = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY').upper()
+                        if index_name != active_index:
+                            continue
+
                         symbol = strike['symbol']
                         ltp = strike.get('ltp', 0)
                         delta = strike.get('delta', 0)
