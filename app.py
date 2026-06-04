@@ -640,9 +640,59 @@ def user_status():
 
 @app.route('/api/ai-memory')
 def get_ai_memory():
-    """Returns the latest institutional observations and level touches"""
-    memory = getattr(shared_data, 'ai_memory', [])
-    return jsonify({"memory": memory})
+    """Returns today's AI observation memory + a plain-English evening report."""
+    mem = shared_data.ai_memory
+    observations = mem.get("observations", [])
+    date = mem.get("date", "")
+
+    # ── Build plain-English summary (last 10 observations) ──
+    recent = observations[-10:] if len(observations) >= 10 else observations
+    report_lines = [f"📅 GVN AI Report — {date}", f"Total Observations: {len(observations)}", ""]
+
+    if recent:
+        # Aggregate summary values
+        trap_count  = sum(1 for o in recent if o.get("trap_status") == "TRAP")
+        hold_count  = len(recent) - trap_count
+        speeds      = [o.get("market_speed", "") for o in recent]
+        fast_count  = speeds.count("FAST ⚡")
+        slow_count  = speeds.count("SLOW 🐢")
+        winds       = [o.get("wind", "") for o in recent]
+        common_wind = max(set(winds), key=winds.count) if winds else "UNKNOWN"
+        latest      = recent[-1] if recent else {}
+        pcr         = latest.get("pcr", 1.0)
+        oi_bias     = latest.get("oi_bias", "N/A")
+        support     = latest.get("support", 0)
+        resistance  = latest.get("resistance", 0)
+        last_levels = latest.get("levels_touched", [])
+        greeks_d60  = latest.get("greeks_delta60", {})
+        greeks_d46  = latest.get("greeks_delta46", {})
+
+        report_lines += [
+            f"🌬️  Dominant Wind Direction : {common_wind}",
+            f"🪤  Trap vs Hold            : TRAP×{trap_count} | HOLD×{hold_count}",
+            f"⚡  Market Speed            : Fast×{fast_count} | Slow×{slow_count}",
+            f"📊  Last PCR                : {pcr}",
+            f"🏦  OI Institutional Bias   : {oi_bias}",
+            f"🛡️  Key Support             : {support}",
+            f"🚧  Key Resistance          : {resistance}",
+            f"📍  Levels Touched (last)   : {', '.join(last_levels)}",
+            "",
+            "📐 Greeks Summary (Delta 60 Strike):",
+            f"   Delta={greeks_d60.get('delta','NA')} | Gamma={greeks_d60.get('gamma','NA')} | Theta={greeks_d60.get('theta','NA')}",
+            "",
+            "📐 Greeks Summary (Delta 46 Strike):",
+            f"   Delta={greeks_d46.get('delta','NA')} | Gamma={greeks_d46.get('gamma','NA')} | Theta={greeks_d46.get('theta','NA')}",
+        ]
+    else:
+        report_lines.append("No observations recorded yet for today. Market may not have started.")
+
+    return jsonify({
+        "date": date,
+        "total_observations": len(observations),
+        "observations": observations,
+        "evening_report": "\n".join(report_lines)
+    })
+
 
 @app.route('/api/broker-status')
 def broker_status():
@@ -1132,7 +1182,8 @@ def get_gvn_scanner():
         "data": mapped_data,
         "scanner_data": gvn_scanner,
         "summary": summary_dict,
-        "demo_signals": getattr(shared_data, 'demo_signals', [])
+        "demo_signals": getattr(shared_data, 'demo_signals', []),
+        "z2h_watchlist": getattr(shared_data, 'gvn_z2h_watchlist', [])
     })
 
 @app.route('/api/live-signals')
@@ -1366,6 +1417,27 @@ def clear_demo_history():
         print("Error clearing demo history:", e)
         db.session.rollback()
     
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/clear-today-trades')
+def clear_today_trades():
+    """Clear only today's trade records from DB. Preserves historical data."""
+    try:
+        import datetime
+        today = datetime.date.today()
+        today_start = datetime.datetime.combine(today, datetime.time.min)
+        deleted = db.session.query(AlgoTrade).filter(
+            AlgoTrade.timestamp >= today_start
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        # Also clear in-memory trade state
+        import shared_data
+        shared_data.demo_logs = []
+        shared_data.demo_trade = {"active": False}
+        print(f"✅ Today's Trades Cleared: {deleted} records removed.")
+    except Exception as e:
+        print(f"❌ Error clearing today's trades: {e}")
+        db.session.rollback()
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/restart-server')

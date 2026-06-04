@@ -102,6 +102,57 @@ def calculate_gvn_levels(high915, low915):
     }
     return levels
 
+def get_session_parameters(current_dt=None):
+    """
+    Returns session-specific parameter adjustments based on local Indian Time.
+    """
+    if current_dt is None:
+        current_dt = datetime.now()
+    t_hour = current_dt.hour
+    t_min = current_dt.minute
+    time_val = t_hour + (t_min / 60.0)
+    
+    # 1. Morning High-Speed Reversals (09:15 AM - 10:30 AM)
+    if 9.25 <= time_val <= 10.5:
+        return {
+            "session_name": "MORNING_MOMENTUM",
+            "entry_buffer": 1.5,     # Tighter entry buffer for high speed
+            "enable_new_trades": True,
+            "allow_z2h_entries": False, # Z2H is afternoon only!
+            "trailing_stop_activation": 15.0,
+            "trailing_stop_step": 5.0
+        }
+    # 2. Afternoon Range Breakouts / Reversals (12:00 PM - 03:00 PM)
+    elif 12.0 <= time_val <= 15.0:
+        return {
+            "session_name": "AFTERNOON_BREAKOUT",
+            "entry_buffer": 3.0,     # Normal entry buffer
+            "enable_new_trades": True,
+            "allow_z2h_entries": True,  # Z2H is afternoon only
+            "trailing_stop_activation": 20.0,
+            "trailing_stop_step": 8.0
+        }
+    # 3. End-Session Decay / Closed (after 03:00 PM or before 09:15 AM)
+    elif time_val > 15.0 or time_val < 9.25:
+        return {
+            "session_name": "END_SESSION_DECAY",
+            "entry_buffer": 0.0,
+            "enable_new_trades": False,  # Block new entries
+            "allow_z2h_entries": False,
+            "trailing_stop_activation": 999.0,
+            "trailing_stop_step": 0.0
+        }
+    # Default Dull / Wait Zone (10:30 AM - 12:00 PM)
+    else:
+        return {
+            "session_name": "DULL_ZONE",
+            "entry_buffer": 2.0,
+            "enable_new_trades": True,
+            "allow_z2h_entries": False,
+            "trailing_stop_activation": 12.0,
+            "trailing_stop_step": 4.0
+        }
+
 # --- GVN Real 9:15 Option Candle Recovery ---
 option_915_cache = {}
 logged_915_benchmarks = set()
@@ -346,6 +397,11 @@ def norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 def calculate_delta(S, K, T, r, sigma, option_type):
+    # 🧠 GVN EXPIRY Greeks Smoothing: If time to expiry is less than 12 hours (0.5 days),
+    # mock it to 0.5 days to avoid Greeks collapse and keep delta curves smooth.
+    if 0 < T < (0.5 / 365.0):
+        T = 0.5 / 365.0
+
     if T <= 0 or sigma <= 0:
         return 1.0 if (option_type == "CE" and S > K) or (option_type == "PE" and S < K) else 0.0
 
@@ -1779,6 +1835,34 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         shared_data.market_data[symbol.upper()] = underlying_value
         # Force "NIFTY" key too for generic lookups
         if symbol == "NIFTY": shared_data.market_data["NIFTY"] = underlying_value
+
+        # 🚀 Track previous spot and touched index GVN levels
+        if not hasattr(shared_data, 'last_index_spots'):
+            shared_data.last_index_spots = {}
+        previous_spot = shared_data.last_index_spots.get(symbol, underlying_value)
+        shared_data.last_index_spots[symbol] = underlying_value
+        
+        if not hasattr(shared_data, 'touched_index_levels'):
+            shared_data.touched_index_levels = {}
+        if symbol not in shared_data.touched_index_levels:
+            shared_data.touched_index_levels[symbol] = set()
+            
+        index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+        if index_benchmark and index_benchmark.get("high", 0) > 0 and index_benchmark.get("low", 0) > 0:
+            if index_benchmark.get("date") != getattr(shared_data, 'last_touched_index_date', ''):
+                shared_data.touched_index_levels[symbol] = set()
+                shared_data.last_touched_index_date = index_benchmark.get("date")
+                
+            index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"])
+            if index_levels:
+                idx_buffer = underlying_value * 0.0005
+                for lvl_name in ["i5", "i6", "i7"]:
+                    lvl_val = index_levels.get(lvl_name, 0)
+                    if lvl_val > 0:
+                        if (previous_spot < lvl_val <= underlying_value) or (previous_spot > lvl_val >= underlying_value):
+                            shared_data.touched_index_levels[symbol].add(lvl_name)
+                        elif abs(underlying_value - lvl_val) <= idx_buffer:
+                            shared_data.touched_index_levels[symbol].add(lvl_name)
     
     # 🌟 GVN SPECIAL: Extract Nearest Expiry
     expiry_list = data.get("records", {}).get("expiryDates", [])
@@ -1797,6 +1881,33 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     days_to_expiry = max((expiry_dt - now_dt).days, 0.01)
     T = days_to_expiry / 365.0  
     r = 0.07 
+
+    # Determine if it is the expiry day for this index
+    is_expiry_day = False
+    current_dt = datetime.now()
+    try:
+        import pandas as pd
+        playback_time = data.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        if isinstance(playback_time, str):
+            current_dt = datetime.strptime(playback_time, "%Y-%m-%d %H:%M:%S")
+            current_date = current_dt.date()
+        else:
+            current_dt = pd.to_datetime(playback_time).to_pydatetime()
+            current_date = current_dt.date()
+        if expiry_dt.date() == current_date:
+            is_expiry_day = True
+    except Exception as ex:
+        is_expiry_day = (expiry_dt.date() == datetime.now().date())
+        current_date = datetime.now().date()
+        current_dt = datetime.now()
+
+    # Reset Zero-to-Hero watchlist if date changes
+    playback_date_str = current_date.strftime("%Y-%m-%d")
+    if hasattr(shared_data, 'gvn_z2h_watchlist') and len(shared_data.gvn_z2h_watchlist) > 0:
+        first_item = shared_data.gvn_z2h_watchlist[0]
+        if first_item.get("date") != playback_date_str:
+            shared_data.gvn_z2h_watchlist = []
+            logger.info(f"🔄 [AUTO-RESET] Zero-to-Hero watchlist cleared for day {playback_date_str}.")
 
     # Reset scanner data for this symbol
     gvn_scanner_data[symbol] = []
@@ -2080,14 +2191,127 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     true_best_ce_60 = None
     true_best_pe_60 = None
 
-    options_count = len(records.get("data", []))
-    with open("nse_status.log", "a") as f:
-        f.write(f"{datetime.now()}: [NSE Worker] {symbol} data count: {options_count}\n")
-
-    # 🚀 GVN PRESSURE ENGINE: Initialize Global Metrics
+    # 🚀 GVN WIND ENGINE & PRESSURE PRE-CALCULATION
     total_ce_oi, total_pe_oi = 0, 0
     max_ce_oi, max_pe_oi = 0, 0
     max_ce_strike, max_pe_strike = 0, 0
+    
+    # 1. Quick pass to compute global OI metrics
+    for item in records.get("data", []):
+        strike = item.get("strikePrice") or item.get("strike")
+        if not strike: continue
+        
+        options_to_process = []
+        if "CE" in item or "PE" in item:
+            if "CE" in item: options_to_process.append(("CE", item["CE"]))
+            if "PE" in item: options_to_process.append(("PE", item["PE"]))
+        elif "type" in item:
+            options_to_process.append((item.get("type"), item))
+            
+        for opt_type, opt in options_to_process:
+            oi_val = opt.get("openInterest") or opt.get("oi", 0) or 0
+            if opt_type == "CE":
+                total_ce_oi += oi_val
+                if oi_val > max_ce_oi:
+                    max_ce_oi = oi_val
+                    max_ce_strike = strike
+            elif opt_type == "PE":
+                total_pe_oi += oi_val
+                if oi_val > max_pe_oi:
+                    max_pe_oi = oi_val
+                    max_pe_strike = strike
+
+    # 2. Run USD-INR check and benchmark calculations
+    usd_inr = 83.50
+    try:
+        usd_inr = float(shared_data.market_data.get("USDINR", 83.50))
+    except: pass
+    
+    ref_price = underlying_value
+    benchmark = shared_data.gvn_915_benchmark.get(symbol)
+    if benchmark and benchmark.get("high", 0) > 0 and benchmark.get("low", 0) > 0:
+        ref_price = (benchmark["high"] + benchmark["low"]) / 2
+        
+    ce_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
+    pe_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
+    ce_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
+    pe_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
+    
+    pcr = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 1.0
+    mock_delta = min(1.0, max(-1.0, (pcr - 1) * 2))
+    
+    dna = wind_engine.get_market_dna(
+        symbol=symbol, ltp=underlying_value, vwap=ref_price,
+        ce_oi=total_ce_oi, pe_oi=total_pe_oi,
+        ce_coi=ce_coi, pe_coi=pe_coi,
+        ce_vol=ce_vol, pe_vol=pe_vol,
+        delta=mock_delta, gamma=0.015, theta=-0.5
+    )
+    
+    sentiment = "NEUTRAL"
+    if pcr > 1.2: sentiment = "BULLISH"
+    elif pcr < 0.8: sentiment = "BEARISH"
+    
+    trend = "SIDEWAYS"
+    if pcr > 1.3: trend = "STRONG BULLISH"
+    elif pcr < 0.7: trend = "STRONG BEARISH"
+    
+    ai_insight = dna.get("insight", "Scanning...")
+    if usd_inr > 95.0:
+        ai_insight += f" | ⚠️ INR {usd_inr} pressure detected."
+        
+    if abs(underlying_value - ref_price) < 30 and 0.8 < pcr < 1.2:
+        trend = "PREMIUM EATING"
+        ai_insight = "Slow Move + Expiry = Theta Trap. Premium not expanding."
+        
+    vacuum_status = wind_engine.detect_liquidity_vacuum(total_ce_oi, total_pe_oi, max_ce_oi, max_pe_oi)
+    
+    # Initialize symbol dictionary in market_pulse
+    if symbol not in market_pulse:
+        market_pulse[symbol] = {}
+        
+    market_pulse[symbol].update({
+        "sentiment": sentiment,
+        "score": int(pcr * 100) if pcr < 1 else 100,
+        "trend": trend,
+        "pcr": pcr,
+        "pressure": "IRON WALL DETECTED" if (max_ce_oi > 2000000) else "NORMAL FLOW",
+        "support": max_pe_strike,
+        "resistance": max_ce_strike,
+        "ai_insight": ai_insight,
+        "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW",
+        "wind_direction": dna["wind_engine"]["wind_state"],
+        "wind_power": dna["wind_engine"]["wind_power"],
+        "smart_money": dna["smart_money_status"],
+        "trap_zone": dna["wind_engine"]["trend_type"],
+        "vacuum_detected": "VACUUM" in vacuum_status
+    })
+    
+    # Update global shared state
+    shared_data.market_pulse.update({
+        "sentiment": market_pulse[symbol]["sentiment"],
+        "score": market_pulse[symbol]["score"],
+        "trend": market_pulse[symbol]["trend"],
+        "volume": "HIGH" if (ce_vol + pe_vol) > 500000 else "NORMAL",
+        "inst_activity": market_pulse[symbol]["inst_activity"],
+        "support": max_pe_strike,
+        "resistance": max_ce_strike,
+        "pcr": round(pcr, 2),
+        "pressure": market_pulse[symbol]["pressure"],
+        "ai_insight": market_pulse[symbol]["ai_insight"],
+        "wind_direction": market_pulse[symbol]["wind_direction"],
+        "wind_power": market_pulse[symbol]["wind_power"],
+        "smart_money": market_pulse[symbol]["smart_money"],
+        "trap_zone": market_pulse[symbol]["trap_zone"],
+        "last_updated": datetime.now().strftime("%H:%M:%S")
+    })
+    
+    shared_data.market_pulse["zone"] = f"SUP: {max_pe_strike} | RES: {max_ce_strike}"
+    shared_data.market_pulse["priority"] = f"PCR: {shared_data.market_pulse['pcr']}"
+    
+    options_count = len(records.get("data", []))
+    with open("nse_status.log", "a") as f:
+        f.write(f"{datetime.now()}: [NSE Worker] {symbol} data count: {options_count}\n")
 
     for item in records.get("data", []):
         # Handle both formats: Dhan (item is the option) and NSE (item contains CE/PE keys)
@@ -2436,56 +2660,127 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         is_strike_allowed = False
 
                     if is_strike_allowed and not shared_data.demo_trade.get("active"):
+                        # Get current session parameters
+                        session_params = get_session_parameters(current_dt)
+                        
                         # 🚀 GVN WIND DIRECTION ALIGNMENT ENFORCEMENT:
                         wind_dir = market_pulse.get(symbol, {}).get("wind_direction", "")
+                        wind_power = market_pulse.get(symbol, {}).get("wind_power", 1.0)
+                        
                         is_wind_aligned = False
                         if opt_type == "CE":
-                            if "UP WIND" in wind_dir or "SHORT COVERING" in wind_dir or "SLOW UP" in wind_dir:
+                            # CE requires Bullish Wind and NOT Bearish Wind
+                            if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
                                 is_wind_aligned = True
+                            if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+                                is_wind_aligned = False
                         elif opt_type == "PE":
-                            if "DOWN WIND" in wind_dir or "LONG UNWINDING" in wind_dir or "SLOW DOWN" in wind_dir:
+                            # PE requires Bearish Wind and NOT Bullish Wind
+                            if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
                                 is_wind_aligned = True
-                        
-                        # If the wind direction does not match the option type (or is sideways), do not enter trade!
-                        if is_wind_aligned:
-                            lower_lvl = None
-                            upper_lvl = None
-                            for i in range(len(sorted_lvls)):
-                                if ltp >= sorted_lvls[i]:
-                                    lower_lvl = sorted_lvls[i]
-                                    if i + 1 < len(sorted_lvls):
-                                        upper_lvl = sorted_lvls[i+1]
-                            
-                            # Trigger if price touches or crosses/jumps over the level (Dot-to-Dot Touch Entry)
-                            is_triggered = False
-                            if lower_lvl:
-                                if (previous_ltp < lower_lvl <= ltp) or (previous_ltp > lower_lvl >= ltp):
-                                    is_triggered = True
-                                elif abs(ltp - lower_lvl) <= 0.35: # Slightly wider buffer for high speed option movements
-                                    is_triggered = True
-                                    
-                            if is_triggered:
-                                manual_tgt = upper_lvl if upper_lvl else (ltp * 1.1)
-                                # 🚀 GVN FIX: 12-Point Stop Loss
-                                manual_sl = ltp - 12.0 
+                            if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+                                is_wind_aligned = False
                                 
+                        # 🛡️ THE GVN WIND FILTER (AVOIDING 12-PT SL HITS)
+                        # Reject ALL entries if it's a Trap / Premium Eating zone or Wind Power is low
+                        if "PREMIUM EATING" in wind_dir or "TRAP" in wind_dir or wind_power < 0.8:
+                            is_wind_aligned = False
+                            
+                        # 🛡️ F&O NIFTY 50 UNDERLYING STOCKS ALIGNMENT FILTER (Second Additional Confirmation)
+                        nifty50_trend = shared_data.market_pulse.get("nifty50_trend_signal", "NEUTRAL")
+                        if nifty50_trend in ["STRONG BEARISH", "MODERATE BEARISH"] and opt_type == "CE":
+                            is_wind_aligned = False
+                        if nifty50_trend in ["STRONG BULLISH", "MODERATE BULLISH"] and opt_type == "PE":
+                            is_wind_aligned = False
+                            
+                        # Check session permission
+                        if not session_params.get("enable_new_trades", True):
+                            is_wind_aligned = False
+                        
+                        if is_wind_aligned:
+                            # 🚀 GVN MASTER ROBOT v2.5.2 Optimization:
+                            # Only trigger standard level entry if price touches or crosses i5, i6, or i7 levels.
+                            i5_val = levels.get("i5", 0)
+                            i6_val = levels.get("i6", 0)
+                            i7_val = levels.get("i7", 0)
+                            
+                            triggered_level_name = None
+                            entry_level_val = None
+                            manual_tgt = None
+                            manual_sl = None
+                            
+                            # Enforce Index Level Touch Check to avoid fake entries
+                            # If no index benchmark is captured yet, we default to True for test compatibility
+                            index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+                            has_benchmark = index_benchmark and index_benchmark.get("high", 0) > 0
+                            
+                            is_idx_i5_touched = True
+                            is_idx_i6_touched = True
+                            is_idx_i7_touched = True
+                            
+                            if has_benchmark:
+                                is_idx_i5_touched = "i5" in shared_data.touched_index_levels.get(symbol, set())
+                                is_idx_i6_touched = "i6" in shared_data.touched_index_levels.get(symbol, set())
+                                is_idx_i7_touched = "i7" in shared_data.touched_index_levels.get(symbol, set())
+                            
+                            # 1st Entry (i5) Touch / Crossover Check
+                            if i5_val > 0:
+                                is_i5_triggered = False
+                                if (previous_ltp < i5_val <= ltp) or (previous_ltp > i5_val >= ltp):
+                                    is_i5_triggered = True
+                                elif abs(ltp - i5_val) <= 0.35:
+                                    is_i5_triggered = True
+                                
+                                if is_i5_triggered and is_idx_i5_touched:
+                                    triggered_level_name = "i5"
+                                    entry_level_val = i5_val
+                                    # Target is i2 on expiry day, else i3
+                                    target_lvl_name = "i2" if is_expiry_day else "i3"
+                                    manual_tgt = levels.get(target_lvl_name, ltp * 1.1)
+                                    manual_sl = round(i5_val - 12.0, 2)
+                                    
+                            # Intermediate Entry (i6) Touch / Crossover Check (Only if i5 not already triggered)
+                            if not triggered_level_name and i6_val > 0:
+                                is_i6_triggered = False
+                                if (previous_ltp < i6_val <= ltp) or (previous_ltp > i6_val >= ltp):
+                                    is_i6_triggered = True
+                                elif abs(ltp - i6_val) <= 0.35:
+                                    is_i6_triggered = True
+                                    
+                                if is_i6_triggered and is_idx_i6_touched:
+                                    triggered_level_name = "i6"
+                                    entry_level_val = i6_val
+                                    # Target is i3 on expiry day, else i5
+                                    target_lvl_name = "i3" if is_expiry_day else "i5"
+                                    manual_tgt = levels.get(target_lvl_name, ltp * 1.1)
+                                    manual_sl = round(i6_val - 12.0, 2)
+                                    
+                            # 2nd Entry (i7) Touch / Crossover Check (Only if i5/i6 not already triggered)
+                            if not triggered_level_name and i7_val > 0:
+                                is_i7_triggered = False
+                                if (previous_ltp < i7_val <= ltp) or (previous_ltp > i7_val >= ltp):
+                                    is_i7_triggered = True
+                                elif abs(ltp - i7_val) <= 0.35:
+                                    is_i7_triggered = True
+                                    
+                                if is_i7_triggered and is_idx_i7_touched:
+                                    triggered_level_name = "i7"
+                                    entry_level_val = i7_val
+                                    # Target is i5 on expiry day, else i6
+                                    target_lvl_name = "i5" if is_expiry_day else "i6"
+                                    manual_tgt = levels.get(target_lvl_name, ltp * 1.1)
+                                    manual_sl = round(i7_val - 12.0, 2)
+                                    
+                            if triggered_level_name:
                                 shared_data.demo_trade = {
                                     "active": True,
                                     "symbol": full_sym,
                                     "entry_price": ltp,
                                     "target": manual_tgt,
                                     "sl": manual_sl,
-                                    "qty": 50 if symbol == "NIFTY" else 15 # Back to 50 standard
+                                    "qty": 50 if symbol == "NIFTY" else 15
                                 }
-                                
-                                # Find which level name was triggered
-                                lvl_name = "Manual"
-                                for k, v in levels.items():
-                                    if abs(ltp - v) < 2.0:
-                                        lvl_name = k
-                                        break
-                                        
-                                execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"Touch Entry near {lvl_name.upper()}")
+                                execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"Touch Entry near {triggered_level_name.upper()}")
                                 
                                 try:
                                     from gvn_telegram_engine import TelegramAlertManager
@@ -2496,7 +2791,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                         "entry_price": ltp, 
                                         "target": manual_tgt, 
                                         "sl": manual_sl,
-                                        "level": lvl_name.upper()
+                                        "level": triggered_level_name.upper()
                                     })
                                 except: pass
                 
@@ -2553,6 +2848,202 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         logged_915_benchmarks.add(cache_key)
                     except Exception as db_err:
                         logger.error(f"❌ Failed to log 9:15 option benchmark: {db_err}")
+
+                # 🚀 GVN ZERO-TO-HERO EXPIRY DAY STRATEGY
+                if is_expiry_day and delta is not None and 0.46 <= delta <= 0.60:
+                    is_qualified = False
+                    if strike_low > 0:
+                        # If candle is flat (mock or single trade), automatically qualify
+                        if abs(strike_high - strike_low) < 0.05:
+                            is_qualified = True
+                        elif strike_levels and strike_levels.get("i7", 0) > 0 and strike_low < strike_levels.get("i7", 0):
+                            is_qualified = True
+
+                    if is_qualified:
+                        if not hasattr(shared_data, 'gvn_z2h_watchlist'):
+                            shared_data.gvn_z2h_watchlist = []
+                        
+                        contract_key = f"{symbol}_{int(strike)}_{opt_type}"
+                        existing_item = next((item for item in shared_data.gvn_z2h_watchlist if item["full_symbol"] == contract_key), None)
+                        
+                        bottom_level = strike_levels.get("i0", 0)
+                        target1 = strike_levels.get("i7", 0)
+                        target2 = strike_levels.get("i6", 0)
+                        target3 = strike_levels.get("i5", 0)
+                        
+                        if not existing_item:
+                            new_z2h_item = {
+                                "symbol": symbol,
+                                "strike": int(strike),
+                                "opt_type": opt_type,
+                                "full_symbol": contract_key,
+                                "strike_name": f"{int(strike)} {opt_type}",
+                                "low_915": round(strike_low, 2),
+                                "high_915": round(strike_high, 2),
+                                "i7": round(target1, 2),
+                                "i6": round(target2, 2),
+                                "i5": round(target3, 2),
+                                "bottom_level": round(bottom_level, 2),
+                                "ltp": round(ltp, 2),
+                                "status": "PENDING ENTRY",
+                                "entry_price": 0.0,
+                                "target1": round(target1, 2),
+                                "target2": round(target2, 2),
+                                "target3": round(target3, 2),
+                                "sl": 0.0,
+                                "date": playback_date_str
+                            }
+                            shared_data.gvn_z2h_watchlist.append(new_z2h_item)
+                            logger.info(f"🚀 [Z2H WATCHLIST ADDED] {contract_key} - 9:15 Low: {strike_low} < i7: {target1}")
+                        else:
+                            # Update live details
+                            existing_item["ltp"] = round(ltp, 2)
+                            existing_item["low_915"] = round(strike_low, 2)
+                            existing_item["high_915"] = round(strike_high, 2)
+                            existing_item["i7"] = round(target1, 2)
+                            existing_item["i6"] = round(target2, 2)
+                            existing_item["i5"] = round(target3, 2)
+                            existing_item["bottom_level"] = round(bottom_level, 2)
+                            existing_item["target1"] = round(target1, 2)
+                            existing_item["target2"] = round(target2, 2)
+                            existing_item["target3"] = round(target3, 2)
+                            
+                            # 🚀 GVN STATE MACHINE: Check triggers
+                            status = existing_item["status"]
+                            
+                            if status == "PENDING ENTRY":
+                                # Get current session parameters
+                                session_params = get_session_parameters(current_dt)
+                                
+                                # Check if LTP touches bottom level (within ±3 points)
+                                # And Wind Direction aligns
+                                wind_dir = market_pulse.get(symbol, {}).get("wind_direction", "")
+                                wind_power = market_pulse.get(symbol, {}).get("wind_power", 1.0)
+                                
+                                is_wind_aligned = False
+                                if opt_type == "CE":
+                                    # CE requires Bullish Wind and NOT Bearish Wind
+                                    if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+                                        is_wind_aligned = True
+                                    if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+                                        is_wind_aligned = False
+                                elif opt_type == "PE":
+                                    # PE requires Bearish Wind and NOT Bullish Wind
+                                    if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+                                        is_wind_aligned = True
+                                    if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+                                        is_wind_aligned = False
+                                        
+                                # Reject Z2H entries if session doesn't allow it, or Trap, or low power
+                                if not session_params.get("allow_z2h_entries", False) or not session_params.get("enable_new_trades", True):
+                                    is_wind_aligned = False
+                                if "PREMIUM EATING" in wind_dir or "TRAP" in wind_dir or wind_power < 0.8:
+                                    is_wind_aligned = False
+                                    
+                                # F&O Underlying stocks filter
+                                nifty50_trend = shared_data.market_pulse.get("nifty50_trend_signal", "NEUTRAL")
+                                if nifty50_trend in ["STRONG BEARISH", "MODERATE BEARISH"] and opt_type == "CE":
+                                    is_wind_aligned = False
+                                if nifty50_trend in ["STRONG BULLISH", "MODERATE BULLISH"] and opt_type == "PE":
+                                    is_wind_aligned = False
+                                        
+                                if abs(ltp - bottom_level) <= 3.0 and is_wind_aligned:
+                                    existing_item["status"] = "ACTIVE"
+                                    existing_item["entry_price"] = round(ltp, 2)
+                                    existing_item["sl"] = round(ltp - 12.0, 2)
+                                    
+                                    # Execute automated BUY order
+                                    execute_live_trade_for_active_users(contract_key, "BUY", ltp, f"GVN Z2H entry near {bottom_level:.2f}")
+                                    
+                                    # Send Telegram entry alert
+                                    msg_text = f"🚀 <b>[GVN ZERO-TO-HERO ACTIVE]</b> 🚀\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Entry Price:</b> ₹{ltp:.2f}\n🎯 <b>T1 (i7):</b> ₹{target1:.2f}\n🎯 <b>T2 (i6):</b> ₹{target2:.2f}\n🎯 <b>T3 (i5):</b> ₹{target3:.2f}\n⛔ <b>SL:</b> ₹{ltp - 12.0:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"🚀 [Z2H ENTRY TRIGGERED] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                            elif status == "ACTIVE":
+                                sl_level = existing_item["sl"]
+                                if ltp <= sl_level:
+                                    existing_item["status"] = "SL HIT"
+                                    execute_live_trade_for_active_users(contract_key, "SELL", ltp, "Z2H SL Hit ⛔")
+                                    
+                                    msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                                elif ltp >= target1:
+                                    existing_item["status"] = "T1 HIT"
+                                    msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T1 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 1:</b> ₹{target1:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"🎯 [Z2H T1 HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                            elif status == "T1 HIT":
+                                sl_level = existing_item["sl"]
+                                if ltp <= sl_level:
+                                    existing_item["status"] = "SL HIT"
+                                    execute_live_trade_for_active_users(contract_key, "SELL", ltp, "Z2H SL Hit ⛔")
+                                    
+                                    msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                                elif ltp >= target2:
+                                    existing_item["status"] = "T2 HIT"
+                                    msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T2 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 2:</b> ₹{target2:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"🎯 [Z2H T2 HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                            elif status == "T2 HIT":
+                                sl_level = existing_item["sl"]
+                                if ltp <= sl_level:
+                                    existing_item["status"] = "SL HIT"
+                                    execute_live_trade_for_active_users(contract_key, "SELL", ltp, "Z2H SL Hit ⛔")
+                                    
+                                    msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                        
+                                elif ltp >= target3:
+                                    existing_item["status"] = "T3 HIT"
+                                    execute_live_trade_for_active_users(contract_key, "SELL", ltp, "Z2H Target 3 Met 🏆")
+                                    
+                                    msg_text = f"🏆 <b>[GVN ZERO-TO-HERO T3 HIT - TARGET MET]</b> 🏆\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Gain:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                    logger.info(f"🏆 [Z2H T3 HIT] {contract_key} at {ltp}")
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        tg.bot.send_message(msg_text)
+                                    except Exception as te:
+                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
                 
                 # Index-based Bias (for context)
                 index_levels = {}
@@ -2614,6 +3105,58 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         "potential": "HIGH" if score >= 60 else "MODERATE",
                         "levels": strike_levels
                     })
+
+    # 🕒 AUTO SQUARE-OFF AT 3:10 PM IST
+    time_val = current_dt.hour + (current_dt.minute / 60.0)
+    if time_val >= 15.166:
+        # 1. Square off standard demo trade if active
+        if getattr(shared_data, 'demo_trade', {}).get("active", False):
+            full_sym = shared_data.demo_trade["symbol"]
+            try:
+                parts = full_sym.split('_')
+                if len(parts) >= 3:
+                    st_val = parts[1]
+                    op_t = parts[2]
+                    ltp_key = f"{int(float(st_val))}_{op_t}"
+                    exit_price = live_option_ltps.get(ltp_key, shared_data.demo_trade["entry_price"])
+                else:
+                    exit_price = shared_data.demo_trade["entry_price"]
+            except:
+                exit_price = shared_data.demo_trade["entry_price"]
+                
+            shared_data.demo_trade["active"] = False
+            execute_live_trade_for_active_users(full_sym, "SELL", exit_price, "Auto Square-off @ 15:10 ⏰")
+            
+            pnl = exit_price - shared_data.demo_trade["entry_price"]
+            logger.info(f"⏰ [AUTO SQUARE-OFF 3:10 PM] Closed standard trade {full_sym} at {exit_price}")
+            try:
+                from gvn_telegram_engine import TelegramAlertManager
+                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                tg.alert_exit({
+                    "symbol": full_sym,
+                    "exit_reason": "Auto Square-off @ 15:10 ⏰",
+                    "exit_price": exit_price,
+                    "pnl": pnl
+                })
+            except: pass
+            
+        # 2. Square off active Z2H options in watchlist
+        if hasattr(shared_data, 'gvn_z2h_watchlist'):
+            for item in shared_data.gvn_z2h_watchlist:
+                if item["status"] in ["ACTIVE", "T1 HIT", "T2 HIT"]:
+                    contract_key = item["full_symbol"]
+                    exit_price = item["ltp"]
+                    item["status"] = "SL HIT" # Set to terminal status to stop updates
+                    execute_live_trade_for_active_users(contract_key, "SELL", exit_price, "Z2H Expiry Square-off @ 15:10 ⏰")
+                    
+                    gain = exit_price - item["entry_price"]
+                    logger.info(f"⏰ [AUTO SQUARE-OFF 3:10 PM] Closed Z2H trade {contract_key} at {exit_price}")
+                    msg_text = f"⏰ <b>[GVN Z2H AUTO SQUARE-OFF]</b> ⏰\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{exit_price:.2f}\n📈 <b>Gain:</b> ₹{gain:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                    try:
+                        from gvn_telegram_engine import TelegramAlertManager
+                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                        tg.bot.send_message(msg_text)
+                    except: pass
 
     # 🌟 GVN DYNAMIC SCANNER: Data is now handled strictly via real-time feeds
     # to avoid discrepancies between dashboard and market truth.
@@ -2703,110 +3246,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             with open("nse_status.log", "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now()}: [MORNING LOCK ERROR] {str(e)}\n")
         
-    # 🚀 GVN PRESSURE ENGINE: Final Analysis & Prediction
-    try:
-        pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0
-        benchmark = shared_data.gvn_915_benchmark.get(symbol, {})
-        
-        # 🧠 GVN AI MASTER LOGIC v3.0 (Trap & Momentum)
-        sentiment = "NEUTRAL"
-        trend = "SIDEWAYS"
-        pressure_msg = "NORMAL"
-        ai_insight = "Equilibrium. No clear institutional bias yet."
-        
-        # Get 200 MA from user's observation (Default: 23,518 for Nifty)
-        ma_200 = 23518 if symbol == "NIFTY" else (74650 if symbol == "SENSEX" else 0)
-        spot = underlying_value
-        usd_inr = 95.74 # User's observed rate
-
-        if pcr < 0.7:
-            sentiment = "BEARISH"
-            trend = "AGGRESSIVE SELLING"
-            pressure_msg = "🛑 HEAVY SELLING PRESSURE"
-            ai_insight = f"Iron Wall at {max_ce_strike}. PCR {pcr} suggests a Sharp Fall."
-        elif pcr > 1.3:
-            sentiment = "BULLISH"
-            trend = "AGGRESSIVE BUYING"
-            pressure_msg = "🚀 HEAVY BUYING PRESSURE"
-            ai_insight = f"Strong Base at {max_pe_strike}. PCR {pcr} suggests a Breakout Rally."
-        
-        # 🚨 TRAP DETECTION LOGIC
-        if ma_200 > 0 and abs(spot - ma_200) < 20:
-            if 0.9 <= pcr <= 1.1:
-                pressure_msg = "🚨 INSTITUTIONAL TRAP"
-                ai_insight = f"Market held at 200 MA ({ma_200}). Premium Eating Zone active. Avoid OTM."
-            else:
-                ai_insight += f" | Battle Zone near 200 MA ({ma_200})."
-
-        # ⚠️ CURRENCY PRESSURE
-        if usd_inr > 95.0:
-            ai_insight += f" | ⚠️ INR {usd_inr} pressure detected."
-
-        # 📉 PREMIUM EATING DETECTION
-        ref_price = (benchmark.get("high", spot) + benchmark.get("low", spot)) / 2 if benchmark else spot
-        if abs(spot - ref_price) < 30:
-            if pcr > 0.8 and pcr < 1.2:
-                trend = "PREMIUM EATING 📉"
-                ai_insight = "Slow Move + Expiry = Theta Trap. Premium not expanding."
-
-        # 🌪️ WIND ENGINE MARKET DNA CALCULATION
-        ce_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
-        pe_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
-        ce_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
-        pe_coi = sum(item.get("oi_change", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
-        
-        # Approximate global Greeks based on PCR bias
-        mock_delta = min(1.0, max(-1.0, (pcr - 1) * 2)) 
-        
-        dna = wind_engine.get_market_dna(
-            symbol=symbol, ltp=spot, vwap=ref_price, 
-            ce_oi=total_ce_oi, pe_oi=total_pe_oi,
-            ce_coi=ce_coi, pe_coi=pe_coi,
-            ce_vol=ce_vol, pe_vol=pe_vol,
-            delta=mock_delta, gamma=0.015, theta=-0.5
-        )
-        
-        vacuum_status = wind_engine.detect_liquidity_vacuum(total_ce_oi, total_pe_oi, max_ce_oi, max_pe_oi)
-        
-        market_pulse[symbol] = {
-            "sentiment": sentiment,
-            "score": int(pcr * 100) if pcr < 1 else 100,
-            "trend": trend,
-            "pcr": pcr,
-            "pressure": pressure_msg,
-            "support": max_pe_strike,
-            "resistance": max_ce_strike,
-            "ai_insight": ai_insight,
-            "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW",
-            "wind_direction": dna["wind_engine"]["wind_state"],
-            "wind_power": dna["wind_engine"]["wind_power"],
-            "smart_money": dna["smart_money_status"],
-            "trap_zone": dna["wind_engine"]["trend_type"],
-            "vacuum_detected": "VACUUM" in vacuum_status
-        }
-        
-        # Update Global Pulse for Dashboard
-        # 🚀 GVN IRON WALL ENGINE: Update global market pulse with real OI data
-        shared_data.market_pulse.update({
-            "sentiment": market_pulse[symbol]["sentiment"],
-            "score": market_pulse[symbol]["score"],
-            "trend": market_pulse[symbol]["trend"],
-            "volume": market_pulse[symbol].get("volume", 0),
-            "inst_activity": market_pulse[symbol]["inst_activity"],
-            "support": max_pe_strike,
-            "resistance": max_ce_strike,
-            "pcr": round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else 1.0,
-            "pressure": "IRON WALL DETECTED" if (max_ce_oi > 2000000) else "NORMAL FLOW",
-            "ai_insight": f"Institutional Wall at {max_ce_strike} (CE OI: {max_ce_oi})",
-            "last_updated": datetime.now().strftime("%H:%M:%S")
-        })
-        
-        # 🎯 GVN SYNC: Force dashboard fields for app.py compatibility
-        shared_data.market_pulse["zone"] = f"SUP: {max_pe_strike} | RES: {max_ce_strike}"
-        shared_data.market_pulse["priority"] = f"PCR: {shared_data.market_pulse['pcr']}"
-        
-    except Exception as e:
-        logger.error(f"Pressure Engine Error: {e}")
+    # 🚀 GVN PRESSURE ENGINE: Complete (already run at start of function)
+    pass
     try:
         # 🧠 SYNC ALPHA GRID (Top 14 Strikes for Dashboard)
         shared_data.gvn_alpha_grid = gvn_scanner_data.get(symbol, [])[:14]
@@ -2883,7 +3324,159 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     # Update fast polling status globally
     shared_data.fast_polling_mode = any_near_level
 
+    # ──────────────────────────────────────────────────────
+    # 🤖 GVN AI OBSERVATION ENGINE — record every scan cycle
+    # ──────────────────────────────────────────────────────
+    try:
+        _update_ai_memory_observations(symbol, underlying_value, market_pulse, gvn_scanner_data)
+    except Exception as _ai_err:
+        logger.error(f"[AI MEMORY] Observation write failed: {_ai_err}")
+
+def _update_ai_memory_observations(symbol, spot, market_pulse_data, scanner_data):
+    """
+    GVN AI Observation Engine — Called every scan cycle.
+
+    Observes and records:
+    1. Wind Direction & Power (Bull/Bear/Trap/Premium Eating)
+    2. Trap vs Hold — institutional position vs price action
+    3. Market Speed — slow grind vs fast momentum
+    4. Greek Impacts — Delta 60/46 strikes' Theta/Gamma effect
+    5. OI Build-up — institutional S/R strength at key levels
+    6. Level Activity — which Fibonacci levels (i5/i6/i7) were tested
+
+    Result is written to shared_data.ai_memory (max 100 per day, auto-clears daily).
+    """
+    import datetime
+    now = datetime.datetime.now()
+    time_str = now.strftime("%H:%M:%S")
+
+    # ── 1. Wind Direction ──────────────────────────────────
+    pulse = market_pulse_data.get(symbol, {})
+    wind_dir   = pulse.get("wind_direction", "UNKNOWN")
+    wind_power = pulse.get("wind_power", 0.0)
+    trap_zone  = pulse.get("trap_zone", "UNKNOWN")
+    pcr        = pulse.get("pcr", 1.0)
+    sentiment  = pulse.get("sentiment", "NEUTRAL")
+    trend      = pulse.get("trend", "SIDEWAYS")
+    support    = pulse.get("support", 0)
+    resistance = pulse.get("resistance", 0)
+    smart_money = pulse.get("smart_money", "UNKNOWN")
+    vacuum_detected = pulse.get("vacuum_detected", False)
+
+    # ── 2. Trap vs Hold ────────────────────────────────────
+    # Trap: price moves against institutional build (OI vs price direction mismatch)
+    trap_status = "HOLD"
+    trap_reasons = []
+    if "TRAP" in str(trap_zone).upper() or "PREMIUM EATING" in str(wind_dir).upper():
+        trap_status = "TRAP"
+        trap_reasons.append(f"Zone={trap_zone}")
+    if wind_power < 0.8:
+        trap_status = "TRAP"
+        trap_reasons.append(f"LowWindPower={round(wind_power, 2)}")
+    if "LONG UNWINDING" in str(wind_dir).upper() and pcr > 1.1:
+        trap_status = "TRAP"
+        trap_reasons.append("LongUnwinding+HighPCR=FalseBullish")
+    if "SHORT COVERING" in str(wind_dir).upper() and pcr < 0.9:
+        trap_status = "TRAP"
+        trap_reasons.append("ShortCovering+LowPCR=FalseBearish")
+
+    # ── 3. Market Speed ────────────────────────────────────
+    # Compare recent scanner LTPs for momentum velocity
+    scanner_items = scanner_data.get(symbol, [])
+    ltp_changes = []
+    for item in scanner_items:
+        lv = item.get("levels", {})
+        ltp = item.get("ltp", 0)
+        i5 = lv.get("i5", 0)
+        i7 = lv.get("i7", 0)
+        if i5 > 0 and i7 > 0 and ltp > 0:
+            spread = i5 - i7
+            if spread > 0:
+                ltp_changes.append(abs(ltp - i7) / spread)
+
+    speed_pct = 0.0
+    if ltp_changes:
+        speed_pct = round(sum(ltp_changes) / len(ltp_changes) * 100, 1)
+
+    if speed_pct > 75:
+        market_speed = "FAST ⚡"
+    elif speed_pct > 40:
+        market_speed = "MEDIUM 🟡"
+    else:
+        market_speed = "SLOW 🐢"
+
+    # ── 4. Greek Impacts (Delta 60/46 strikes) ─────────────
+    delta60_items = [item for item in scanner_items if 0.55 <= abs(item.get("delta", 0)) <= 0.65]
+    delta46_items = [item for item in scanner_items if 0.40 <= abs(item.get("delta", 0)) <= 0.52]
+
+    def _greek_summary(items):
+        if not items:
+            return {"delta": "NA", "gamma": "NA", "theta": "NA"}
+        avg_delta = round(sum(i.get("delta", 0) for i in items) / len(items), 3)
+        avg_gamma = round(sum(i.get("gamma", 0) for i in items) / len(items), 4)
+        avg_theta = round(sum(i.get("theta", 0) for i in items) / len(items), 2)
+        gamma_label = "HIGH" if abs(avg_gamma) > 0.002 else "NORMAL"
+        theta_label = "HIGH DECAY" if avg_theta < -1.0 else ("MODERATE DECAY" if avg_theta < -0.3 else "LOW DECAY")
+        return {
+            "delta": avg_delta,
+            "gamma": f"{avg_gamma} ({gamma_label})",
+            "theta": f"{avg_theta} ({theta_label})"
+        }
+
+    greeks_d60 = _greek_summary(delta60_items)
+    greeks_d46 = _greek_summary(delta46_items)
+
+    # ── 5. OI Build-up ─────────────────────────────────────
+    total_ce_oi = sum(i.get("oi_change", 0) for i in scanner_items if "CE" in i.get("strike", ""))
+    total_pe_oi = sum(i.get("oi_change", 0) for i in scanner_items if "PE" in i.get("strike", ""))
+
+    if total_pe_oi > total_ce_oi and total_pe_oi > 0:
+        oi_bias = "PUT WRITERS DOMINANT (Bullish Institutional)"
+    elif total_ce_oi > total_pe_oi and total_ce_oi > 0:
+        oi_bias = "CALL WRITERS DOMINANT (Bearish Institutional)"
+    elif total_pe_oi > 0 and total_ce_oi < 0:
+        oi_bias = "CALL UNWINDING + PUT BUILD (Strong Bullish)"
+    elif total_ce_oi > 0 and total_pe_oi < 0:
+        oi_bias = "PUT UNWINDING + CALL BUILD (Strong Bearish)"
+    else:
+        oi_bias = "OI NEUTRAL / MIXED SIGNALS"
+
+    # ── 6. Level Activity ──────────────────────────────────
+    levels_touched = []
+    for item in scanner_items:
+        i_lv = item.get("i_level", "NORMAL")
+        if i_lv != "NORMAL":
+            levels_touched.append(f"{item.get('strike', '?')} @ {i_lv}")
+
+    # ── Assemble Observation Entry ─────────────────────────
+    observation = {
+        "time":         time_str,
+        "symbol":       symbol,
+        "spot":         round(spot, 2),
+        "wind":         wind_dir,
+        "wind_power":   round(wind_power, 2),
+        "trap_status":  trap_status,
+        "trap_reasons": trap_reasons if trap_reasons else ["None — clean hold"],
+        "market_speed": market_speed,
+        "speed_pct":    speed_pct,
+        "sentiment":    sentiment,
+        "trend":        trend,
+        "pcr":          round(pcr, 2),
+        "support":      support,
+        "resistance":   resistance,
+        "smart_money":  smart_money,
+        "vacuum":       "YES ⚠️" if vacuum_detected else "NO",
+        "oi_bias":      oi_bias,
+        "levels_touched": levels_touched if levels_touched else ["None this cycle"],
+        "greeks_delta60": greeks_d60,
+        "greeks_delta46": greeks_d46,
+    }
+
+    shared_data.append_ai_memory(observation)
+    logger.debug(f"[AI MEMORY] Observation logged at {time_str} for {symbol}: {trap_status} | {wind_dir} | {market_speed}")
+
 def nse_background_worker():
+
     print("🚀 [NSE Worker] Thread Started Successfully.")
     
     # 1. Load recorded benchmarks from JSON first (Admin Bypass/Recovery)

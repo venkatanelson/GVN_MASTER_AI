@@ -75,6 +75,9 @@ PERMANENT_CREDENTIALS_BACKUP = {
 gvn_scanner_data = {}
 active_dashboard_symbol = "NIFTY"
 
+# GVN Zero to Hero Expiry Watchlist
+gvn_z2h_watchlist = []
+
 # ⚡ FAST POLLING & ALERTS STATE
 fast_polling_mode = False
 last_touched_levels = {}
@@ -156,6 +159,33 @@ if TRUEDATA_ENABLED:
         td_api = TrueDataRestAPI(username=os.getenv("TRUEDATA_USERNAME"), password=os.getenv("TRUEDATA_PASSWORD"))
     except Exception:
         pass
+
+# ──────────────────────────────────────────────────────────
+# 🤖 GVN AI OBSERVATION MEMORY
+# Volatile daily log — auto-clears on new trading day.
+# Stores option chain observations: trap/hold, speed, greeks impact, wind.
+# Max 100 entries per day to prevent storage bloat.
+# ──────────────────────────────────────────────────────────
+import datetime as _dt
+
+ai_memory = {
+    "date": _dt.date.today().isoformat(),
+    "observations": []
+}
+
+def append_ai_memory(entry: dict):
+    """Thread-safe helper to add an observation to ai_memory. Auto-clears on new day."""
+    with _data_lock:
+        today = _dt.date.today().isoformat()
+        if ai_memory["date"] != today:
+            ai_memory["date"] = today
+            ai_memory["observations"] = []
+        if len(ai_memory["observations"]) < 100:
+            ai_memory["observations"].append(entry)
+        else:
+            # Rolling window — drop oldest, keep fresh
+            ai_memory["observations"].pop(0)
+            ai_memory["observations"].append(entry)
 
 # Thread-safe setter/getter utilities
 def get_market_data():

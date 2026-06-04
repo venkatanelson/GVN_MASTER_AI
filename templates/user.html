@@ -1072,6 +1072,37 @@
             <tbody id="scanner-body"></tbody>
         </div>
 
+        <!-- 🚀 GVN ZERO-TO-HERO WATCHLIST -->
+        <div class="premium-card" style="margin-top: 30px; border: 1px dashed rgba(245, 158, 11, 0.3); background: radial-gradient(circle at top left, rgba(245, 158, 11, 0.05), transparent);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; font-weight: 900; background: linear-gradient(135deg, #f59e0b, #eef2f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🚀 GVN Expiry Day Zero-to-Hero Watchlist</h3>
+                <span class="pulse-badge" id="z2h-status-badge" style="background: rgba(245, 158, 11, 0.1); color: var(--warning); padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; display: inline-block; animation: pulse 1.5s infinite;"></span>
+                    MONITORING ACTIVE
+                </span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">OPTION SYMBOL</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">9:15 HIGH / LOW</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">7 LEVEL (i7)</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ENTRY LEVEL (i0)</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">LIVE LTP</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">STATUS</th>
+                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">TRIGGER ZONE</th>
+                        </tr>
+                    </thead>
+                    <tbody id="z2h-watchlist-body">
+                        <tr>
+                            <td colspan="7" style="padding: 25px; text-align: center; color: var(--text-dim); font-size: 13px;">No active expiry-day Zero-to-Hero options detected yet. Waiting for expiry setups...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- TODAY'S LIVE SIGNALS -->
         <div class="premium-card" style="margin-top: 30px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -1477,6 +1508,70 @@
             fetch('/api/gvn-scanner?symbol=' + currentActiveIndex)
                 .then(r => r.json())
                 .then(res => {
+                    // 🚀 Update Zero-to-Hero Watchlist
+                    const z2hBody = document.getElementById('z2h-watchlist-body');
+                    const z2hWatchlist = res.z2h_watchlist || [];
+                    const activeZ2H = z2hWatchlist.filter(item => item.symbol === currentActiveIndex);
+                    
+                    if (activeZ2H.length === 0) {
+                        z2hBody.innerHTML = `
+                            <tr>
+                                <td colspan="7" style="padding: 25px; text-align: center; color: var(--text-dim); font-size: 13px;">No active expiry-day Zero-to-Hero options detected yet. Waiting for expiry setups...</td>
+                            </tr>
+                        `;
+                    } else {
+                        let z2hHtml = '';
+                        activeZ2H.forEach(item => {
+                            let statusColor = 'var(--text-dim)';
+                            let statusBg = 'rgba(255,255,255,0.05)';
+                            if (item.status === 'ACTIVE') {
+                                statusColor = 'var(--warning)';
+                                statusBg = 'rgba(245, 158, 11, 0.1)';
+                            } else if (item.status.includes('HIT') && !item.status.includes('SL')) {
+                                statusColor = 'var(--secondary)';
+                                statusBg = 'rgba(16, 185, 129, 0.1)';
+                            } else if (item.status.includes('SL')) {
+                                statusColor = 'var(--danger)';
+                                statusBg = 'rgba(239, 68, 68, 0.1)';
+                            }
+                            
+                            let actionZone = '<span style="color: var(--text-dim);">Waiting for Entry...</span>';
+                            if (item.status === 'PENDING ENTRY') {
+                                const dist = Math.abs(item.ltp - item.bottom_level);
+                                if (dist <= 3) {
+                                    actionZone = `<span class="glow-effect" style="color: var(--secondary); font-weight: 800; animation: pulse 1.5s infinite;">🔥 ENTRY ZONE (±${dist.toFixed(1)} pts)</span>`;
+                                } else {
+                                    actionZone = `<span style="color: var(--warning);">Above Entry by ${(item.ltp - item.bottom_level).toFixed(1)} pts</span>`;
+                                }
+                            } else if (item.status === 'ACTIVE') {
+                                actionZone = `<span style="color: var(--secondary); font-weight: 800;">Targeting T1 (${item.target1})</span>`;
+                            } else if (item.status === 'T1 HIT') {
+                                actionZone = `<span style="color: var(--secondary); font-weight: 800;">Targeting T2 (${item.target2})</span>`;
+                            } else if (item.status === 'T2 HIT') {
+                                actionZone = `<span style="color: var(--secondary); font-weight: 800;">Targeting T3 (${item.target3})</span>`;
+                            } else if (item.status === 'T3 HIT') {
+                                actionZone = '<span style="color: var(--secondary); font-weight: 800;">🏆 Target Reached!</span>';
+                            } else if (item.status === 'SL HIT') {
+                                actionZone = '<span style="color: var(--danger); font-weight: 800;">⛔ SL Triggered</span>';
+                            }
+                            
+                            z2hHtml += `
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); background: ${item.status === 'ACTIVE' ? 'rgba(245, 158, 11, 0.02)' : 'transparent'};">
+                                    <td style="padding: 15px;"><span style="font-weight: 800; color: var(--primary);">${item.strike_name}</span></td>
+                                    <td style="padding: 15px; font-size: 13px;">H: ₹${item.high_915.toFixed(2)} / L: ₹${item.low_915.toFixed(2)}</td>
+                                    <td style="padding: 15px; font-size: 13px; font-weight: 700; color: var(--text-dim);">₹${item.i7.toFixed(2)}</td>
+                                    <td style="padding: 15px; font-size: 13px; font-weight: 700; color: var(--secondary);">₹${item.bottom_level.toFixed(2)}</td>
+                                    <td style="padding: 15px; font-size: 14px; font-weight: 800; color: var(--text-light);">₹${item.ltp.toFixed(2)}</td>
+                                    <td style="padding: 15px;">
+                                        <span style="background: ${statusBg}; color: ${statusColor}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; letter-spacing: 0.5px;">${item.status}</span>
+                                    </td>
+                                    <td style="padding: 15px; font-size: 12px;">${actionZone}</td>
+                                </tr>
+                            `;
+                        });
+                        z2hBody.innerHTML = z2hHtml;
+                    }
+
                     // 🌟 Update Monitored Strikes
                     if (res.user_strikes) {
                         document.getElementById('ce-strike-name').innerText = res.user_strikes.CALL || 'N/A';

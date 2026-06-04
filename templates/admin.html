@@ -261,16 +261,94 @@
                     document.getElementById('oc-last-updated').innerText = s.last_updated || "--:--:--";
                     
                     // NIFTY
-                    document.getElementById('nifty-spot').innerText = "₹" + (s.NIFTY.spot || 0).toLocaleString();
-                    document.getElementById('nifty-atm').innerText = s.NIFTY.atm || 0;
-                    document.getElementById('nifty-ce').innerText = s.NIFTY.ce_60 || 0;
-                    document.getElementById('nifty-pe').innerText = s.NIFTY.pe_60 || 0;
+                    if (s.NIFTY) {
+                        document.getElementById('nifty-spot').innerText = "₹" + (s.NIFTY.spot || 0).toLocaleString();
+                        document.getElementById('nifty-atm').innerText = s.NIFTY.atm || 0;
+                        document.getElementById('nifty-ce').innerText = s.NIFTY.ce_60 || 0;
+                        document.getElementById('nifty-pe').innerText = s.NIFTY.pe_60 || 0;
+                    }
                     
                     // BANKNIFTY
-                    document.getElementById('banknifty-spot').innerText = "₹" + (s.BANKNIFTY.spot || 0).toLocaleString();
-                    document.getElementById('banknifty-atm').innerText = s.BANKNIFTY.atm || 0;
-                    document.getElementById('banknifty-ce').innerText = s.BANKNIFTY.ce_60 || 0;
-                    document.getElementById('banknifty-pe').innerText = s.BANKNIFTY.pe_60 || 0;
+                    if (s.BANKNIFTY) {
+                        document.getElementById('banknifty-spot').innerText = "₹" + (s.BANKNIFTY.spot || 0).toLocaleString();
+                        document.getElementById('banknifty-atm').innerText = s.BANKNIFTY.atm || 0;
+                        document.getElementById('banknifty-ce').innerText = s.BANKNIFTY.ce_60 || 0;
+                        document.getElementById('banknifty-pe').innerText = s.BANKNIFTY.pe_60 || 0;
+                    }
+
+                    // FINNIFTY
+                    if (s.FINNIFTY) {
+                        document.getElementById('finnifty-spot').innerText = "₹" + (s.FINNIFTY.spot || 0).toLocaleString();
+                        document.getElementById('finnifty-atm').innerText = s.FINNIFTY.atm || 0;
+                        document.getElementById('finnifty-ce').innerText = s.FINNIFTY.ce_60 || 0;
+                        document.getElementById('finnifty-pe').innerText = s.FINNIFTY.pe_60 || 0;
+                    }
+
+                    // SENSEX
+                    if (s.SENSEX) {
+                        document.getElementById('sensex-spot').innerText = "₹" + (s.SENSEX.spot || 0).toLocaleString();
+                        document.getElementById('sensex-atm').innerText = s.SENSEX.atm || 0;
+                        document.getElementById('sensex-ce').innerText = s.SENSEX.ce_60 || 0;
+                        document.getElementById('sensex-pe').innerText = s.SENSEX.pe_60 || 0;
+                    }
+                }
+
+                // 🚀 Update Zero-to-Hero Watchlist in Admin Panel
+                const z2hBody = document.getElementById('z2h-watchlist-body');
+                if (z2hBody) {
+                    const z2hList = data.z2h_watchlist || [];
+                    if (z2hList.length === 0) {
+                        z2hBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #999; padding: 25px;">No active expiry-day Zero-to-Hero options detected yet. Waiting for setups...</td></tr>`;
+                    } else {
+                        let html = '';
+                        z2hList.forEach(item => {
+                            let statusColor = '#666';
+                            let statusBg = '#eee';
+                            if (item.status === 'ACTIVE') {
+                                statusColor = '#ea8600';
+                                statusBg = '#fff7e0';
+                            } else if (item.status.includes('HIT') && !item.status.includes('SL')) {
+                                statusColor = '#28a745';
+                                statusBg = '#e8f5e9';
+                            } else if (item.status.includes('SL')) {
+                                statusColor = '#dc3545';
+                                statusBg = '#ffe6e6';
+                            }
+
+                            let actionZone = 'Waiting for Entry...';
+                            if (item.status === 'PENDING ENTRY') {
+                                const dist = Math.abs(item.ltp - item.bottom_level);
+                                if (dist <= 3) {
+                                    actionZone = `<span class="live-pulse" style="color: #28a745; font-weight: bold;">🔥 ENTRY ZONE (±${dist.toFixed(1)} pts)</span>`;
+                                } else {
+                                    actionZone = `<span style="color: #ea8600;">Above Entry by ${(item.ltp - item.bottom_level).toFixed(1)} pts</span>`;
+                                }
+                            } else if (item.status === 'ACTIVE') {
+                                actionZone = `<span style="color: #28a745; font-weight: bold;">Targeting T1 (${item.target1})</span>`;
+                            } else if (item.status === 'T1 HIT') {
+                                actionZone = `<span style="color: #28a745; font-weight: bold;">Targeting T2 (${item.target2})</span>`;
+                            } else if (item.status === 'T2 HIT') {
+                                actionZone = `<span style="color: #28a745; font-weight: bold;">Targeting T3 (${item.target3})</span>`;
+                            } else if (item.status === 'T3 HIT') {
+                                actionZone = '<span style="color: #28a745; font-weight: bold;">🏆 Target Reached!</span>';
+                            } else if (item.status === 'SL HIT') {
+                                actionZone = '<span style="color: #dc3545; font-weight: bold;">⛔ SL Triggered</span>';
+                            }
+
+                            html += `
+                                <tr style="background: ${item.status === 'ACTIVE' ? '#fff9db' : 'transparent'};">
+                                    <td><span style="font-weight: bold; color: #1a73e8;">${item.strike_name}</span></td>
+                                    <td>H: ₹${item.high_915.toFixed(2)} / L: ₹${item.low_915.toFixed(2)}</td>
+                                    <td style="font-weight: bold; color: #666;">₹${item.i7.toFixed(2)}</td>
+                                    <td style="font-weight: bold; color: #28a745;">₹${item.bottom_level.toFixed(2)}</td>
+                                    <td style="font-weight: bold; color: #333;">₹${item.ltp.toFixed(2)}</td>
+                                    <td><span style="background: ${statusBg}; color: ${statusColor}; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${item.status}</span></td>
+                                    <td>${actionZone}</td>
+                                </tr>
+                            `;
+                        });
+                        z2hBody.innerHTML = html;
+                    }
                 }
             });
     }
@@ -344,6 +422,34 @@
         <div id="ai-memory-log" style="background: white; border: 1px solid #d1e3ff; border-radius: 8px; height: 200px; overflow-y: auto; padding: 15px; font-family: monospace; font-size: 13px; color: #1e3a8a; line-height: 1.6;">
             > Initializing AI Deep Scan...
         </div>
+    </div>
+
+    <!-- 🚀 GVN ZERO-TO-HERO EXPIRY WATCHLIST (FOR ADMIN MONITORING) -->
+    <div class="card" style="border-top: 5px solid #ff9800; background: #fffcf4;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="color: #ff9800; margin: 0;">🚀 GVN Expiry Day Zero-to-Hero Watchlist</h2>
+            <span class="live-pulse" style="font-size: 12px; font-weight: bold; color: #ff9800; border: 1px solid #ff9800; background: white; padding: 4px 12px; border-radius: 20px;">
+                ● MONITORING ACTIVE
+            </span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>OPTION SYMBOL</th>
+                    <th>9:15 HIGH / LOW</th>
+                    <th>7 LEVEL (i7)</th>
+                    <th>ENTRY LEVEL (i0)</th>
+                    <th>LIVE LTP</th>
+                    <th>STATUS</th>
+                    <th>TRIGGER ZONE</th>
+                </tr>
+            </thead>
+            <tbody id="z2h-watchlist-body">
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #999; padding: 25px;">No active expiry-day Zero-to-Hero options detected yet. Waiting for setups...</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
     <!-- 🌟 TODAY'S LIVE SIGNALS (FOR ADMIN MONITORING) -->

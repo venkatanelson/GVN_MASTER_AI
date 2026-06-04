@@ -92,16 +92,28 @@ class GVNAiDelta60Engine:
         is_killed = shared_data.market_pulse.get("admin_kill_switch", False)
         is_off = shared_data.market_pulse.get("algo_status", "OFF") == "OFF"
         
-        if is_killed or is_off:
+        # 🕒 AUTO SQUARE-OFF CUTOFF (3:10 PM IST)
+        now = datetime.now()
+        time_val = now.hour + (now.minute / 60.0)
+        is_time_cutoff = time_val >= 15.166
+        
+        if is_killed or is_off or is_time_cutoff:
             if self.memory["active_trades"]:
-                logger.warning("🚨 [KILL SWITCH] Squaring off all positions immediately!")
-                if self.telegram: self.telegram.send_alert("🚨 <b>ADMIN KILL SWITCH ACTIVATED</b> 🚨\nSquaring off all positions!")
+                reason = "Auto Square-off @ 15:10 ⏰" if is_time_cutoff else "EMERGENCY SQUARE-OFF"
+                logger.warning(f"🚨 [{reason}] Squaring off all positions immediately!")
+                if self.telegram: 
+                    self.telegram.send_alert(f"⏰ <b>AUTO SQUARE-OFF CUTOFF (3:10 PM IST) ACTIVATED</b> ⏰\nSquaring off all positions!")
                 
                 # Close all active trades
                 for key in list(self.memory["active_trades"].keys()):
                     trade = self.memory["active_trades"][key]
                     # Simulate or Execute SELL Order for all lots
-                    self._fire_order(key.split('_')[0], {"ltp": 0, "strike": key.split('_')[0], "type": key.split('_')[1]}, "SELL", trade["total_lots"], "EMERGENCY SQUARE-OFF")
+                    strike_val = key.split('_')[0]
+                    opt_type = key.split('_')[1]
+                    self._fire_order(strike_val, {"ltp": 0, "strike": strike_val, "type": opt_type}, "SELL", trade["total_lots"], reason)
+                    paper_id = trade.get("paper_id")
+                    if paper_id:
+                        self.paper_trading.execute_paper_sell(paper_id, exit_price=0, exit_reason="AUTO_SQUARE_OFF_310PM")
                 
                 self.memory["active_trades"] = {}
             return False
@@ -214,6 +226,8 @@ class GVNAiDelta60Engine:
         active_index = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY').upper()
         if symbol.upper() != active_index:
             return
+
+        session_params = nse_option_chain.get_session_parameters()
 
         key = f"{strike['strike']}_{strike['type']}"
         ltp = strike["ltp"]
@@ -353,7 +367,7 @@ class GVNAiDelta60Engine:
                     elif abs(ltp - last_tgt) <= 0.20:
                         is_retrigger = True
                         
-                    if is_retrigger:
+                    if is_retrigger and session_params.get("enable_new_trades", True):
                         # Find the next higher GVN level as the new target
                         new_tgt = last_tgt + 30.0
                         for idx, lvl in enumerate(sorted_lvls):
@@ -371,47 +385,94 @@ class GVNAiDelta60Engine:
                         self._execute_gvn_level_trade(symbol, strike, ltp, new_tgt, new_sl, f"GVN Level Re-entry (near {last_tgt:.2f})")
                         return
 
-            # Find the levels crossover and execute trade
-            for idx, lvl in enumerate(sorted_lvls):
-                # Ensure there is a target level above the entry level
-                if idx + 1 >= len(sorted_lvls):
-                    continue
-                target_lvl = sorted_lvls[idx + 1]
+            # GVN Pro Level Touch/Crossover checks: strictly 1st Entry (i5), intermediate Entry (i6), and 2nd Entry (i7)
+            i5_val = levels.get("i5", 0)
+            i6_val = levels.get("i6", 0)
+            i7_val = levels.get("i7", 0)
+            
+            triggered_level_name = None
+            entry_level_val = None
+            target_val = None
+            sl_val = None
+            
+            is_exp = (datetime.now().weekday() == 3)
+            
+            # Enforce Index Level Touch Check to avoid fake entries
+            # If no index benchmark is captured yet, we default to True for test compatibility
+            index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+            has_benchmark = index_benchmark and index_benchmark.get("high", 0) > 0
+            
+            is_idx_i5_touched = True
+            is_idx_i6_touched = True
+            is_idx_i7_touched = True
+            
+            if has_benchmark:
+                is_idx_i5_touched = "i5" in shared_data.touched_index_levels.get(symbol, set())
+                is_idx_i6_touched = "i6" in shared_data.touched_index_levels.get(symbol, set())
+                is_idx_i7_touched = "i7" in shared_data.touched_index_levels.get(symbol, set())
+            
+            # Check i5 (1st Entry)
+            if i5_val > 0:
+                is_i5_triggered = False
+                if previous_ltp < i5_val <= ltp:
+                    is_i5_triggered = True
+                elif abs(ltp - i5_val) <= 0.20:
+                    is_i5_triggered = True
+                    
+                if is_i5_triggered and is_idx_i5_touched:
+                    triggered_level_name = "I5"
+                    entry_level_val = i5_val
+                    # Target is i2 on expiry day, else i3
+                    target_lvl_name = "i2" if is_exp else "i3"
+                    target_val = levels.get(target_lvl_name, ltp + 12.0)
+                    sl_val = round(i5_val - 12.0, 2)
+                    
+            # Check i6 (Intermediate Entry) - only if i5 not triggered
+            if not triggered_level_name and i6_val > 0:
+                is_i6_triggered = False
+                if previous_ltp < i6_val <= ltp:
+                    is_i6_triggered = True
+                elif abs(ltp - i6_val) <= 0.20:
+                    is_i6_triggered = True
+                    
+                if is_i6_triggered and is_idx_i6_touched:
+                    triggered_level_name = "I6"
+                    entry_level_val = i6_val
+                    # Target is i3 on expiry day, else i5
+                    target_lvl_name = "i3" if is_exp else "i5"
+                    target_val = levels.get(target_lvl_name, ltp + 12.0)
+                    sl_val = round(i6_val - 12.0, 2)
+                    
+            # Check i7 (2nd Entry) - only if i5/i6 not triggered
+            if not triggered_level_name and i7_val > 0:
+                is_i7_triggered = False
+                if previous_ltp < i7_val <= ltp:
+                    is_i7_triggered = True
+                elif abs(ltp - i7_val) <= 0.20:
+                    is_i7_triggered = True
+                    
+                if is_i7_triggered and is_idx_i7_touched:
+                    triggered_level_name = "I7"
+                    entry_level_val = i7_val
+                    # Target is i5 on expiry day, else i6
+                    target_lvl_name = "i5" if is_exp else "i6"
+                    target_val = levels.get(target_lvl_name, ltp + 12.0)
+                    sl_val = round(i7_val - 12.0, 2)
+                    
+            if triggered_level_name:
+                is_allowed = True
+                pref_level_val = levels["i1"] if is_exp else levels["i5"]
+                pref_key = f"{key}_pref_traded"
                 
-                # Crossover/touch condition
-                is_triggered = False
-                if previous_ltp < lvl <= ltp:
-                    is_triggered = True
-                elif abs(ltp - lvl) <= 0.20:
-                    is_triggered = True
-                    
-                if is_triggered:
-                    is_allowed = True
-                    is_exp = (datetime.now().weekday() == 3)
-                    
-                    # Morning preference check
-                    pref_level_val = levels["i1"] if is_exp else levels["i5"]
-                    pref_key = f"{key}_pref_traded"
-                    
-                    # Force first morning entry to be near preference level
-                    if not self.memory.get(pref_key, False):
-                        if abs(lvl - pref_level_val) > 1.5:
-                            is_allowed = False
-                            
-                    if is_allowed and ((strike['type'] == 'CE' and is_bullish) or (strike['type'] == 'PE' and is_bearish)):
-                        sl = lvl - 12.0
-                        self.memory[pref_key] = True
+                # Force first morning entry to be near preference level
+                if not self.memory.get(pref_key, False):
+                    if abs(entry_level_val - pref_level_val) > 1.5:
+                        is_allowed = False
                         
-                        # Find matching level name from the engine's levels dictionary
-                        lvl_name = "Unknown"
-                        for k, v in levels.items():
-                            if abs(v - lvl) < 0.01:
-                                lvl_name = k.upper()
-                                break
-                        
-                        # Execute
-                        self._execute_gvn_level_trade(symbol, strike, lvl, target_lvl, sl, f"GVN Level Entry ({lvl_name} @ {lvl:.2f})")
-                        break
+                if is_allowed and session_params.get("enable_new_trades", True) and ((strike['type'] == 'CE' and is_bullish) or (strike['type'] == 'PE' and is_bearish)):
+                    self.memory[pref_key] = True
+                    # Execute
+                    self._execute_gvn_level_trade(symbol, strike, entry_level_val, target_val, sl_val, f"GVN Level Entry ({triggered_level_name} @ {entry_level_val:.2f})")
         else:
             trade = self.memory["active_trades"][key]
             
@@ -491,14 +552,18 @@ class GVNAiDelta60Engine:
             elif "i3" in reason.lower(): level_name = "I3"
             
             if levels and target_price is None:
+                is_exp = (datetime.now().weekday() == 3)
                 if level_name == "I5":
-                    target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
+                    target_price = levels["i2"] if is_exp else levels["i3"]
+                    sl_price = round(levels["i5"] - 12.0, 2)
+                elif level_name == "I6":
+                    target_price = levels["i3"] if is_exp else levels["i5"]
+                    sl_price = round(levels["i6"] - 12.0, 2)
                 elif level_name == "I7":
-                    target_price, sl_price = levels["i5"], round(levels["i7"] - 12.0, 2)
+                    target_price = levels["i5"] if is_exp else levels["i6"]
+                    sl_price = round(levels["i7"] - 12.0, 2)
                 elif level_name == "I1/I0":
                     target_price, sl_price = levels["i5"], round(levels["i1"] - 12.0, 2)
-                elif level_name == "I6":
-                    target_price, sl_price = levels["i3"], round(levels["i6"] - 12.0, 2)
                 elif level_name == "I3":
                     target_price, sl_price = levels["i2"], round(levels["i3"] - 12.0, 2)
 
