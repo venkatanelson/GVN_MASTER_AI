@@ -275,7 +275,7 @@ def get_option_details_from_scrip_master(symbol, strike, opt_type):
             
     return None, None
 
-def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None, open_val=None, close_val=None):
+def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None, open_val=None, close_val=None, source=None):
     file_path = "gvn_recorded_915_ohlc.json"
     data = load_recorded_915_ohlc()
     sym_key = symbol.upper() if symbol else "NIFTY"
@@ -287,6 +287,8 @@ def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=Non
         entry_data["open"] = float(open_val)
     if close_val is not None:
         entry_data["close"] = float(close_val)
+    if source is not None:
+        entry_data["source"] = source
         
     opt_symbol = None
     expiry_date = None
@@ -316,7 +318,7 @@ def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=Non
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-        logger.info(f"💾 Recorded 9:15 candle for {sym_key} {strike_name}: Open={open_val}, High={high}, Low={low}, Close={close_val} (timeframe={timeframe})")
+        logger.info(f"💾 Recorded 9:15 candle for {sym_key} {strike_name}: Open={open_val}, High={high}, Low={low}, Close={close_val} (source={source}, timeframe={timeframe})")
     except Exception as e:
         logger.error(f"Error saving recorded 9:15 OHLC: {e}")
 
@@ -347,7 +349,11 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
     # 1. Try to load from today's recorded JSON file (Retrieval Program / Bypass)
     recorded_data = load_recorded_915_ohlc()
     rec = recorded_data.get(symbol_upper, {}).get(strike_key) or recorded_data.get("NIFTY", {}).get(strike_key)
-    if rec:
+    
+    # If the source is local hybrid or mock, we skip it to fetch real broker API data
+    is_mock = rec and (rec.get("source") in ["REFINED_LOCAL_NSE_HYBRID", "EMULATOR", "MOCK", None] or "open" not in rec)
+    
+    if rec and not is_mock:
         logger.info(f"🎯 [RETRIEVED RECORDING] Found GVN 9:15 AM OHLC for {symbol_upper} {strike_key}: High={rec['high']}, Low={rec['low']}")
         return rec["high"], rec["low"]
 
@@ -355,7 +361,7 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
     cache_key = f"{symbol}_{int(strike)}_{opt_type}"
     if cache_key in option_915_cache:
         val = option_915_cache[cache_key]
-        save_recorded_915_ohlc(strike_key, val[0], val[1], symbol=symbol_upper)
+        save_recorded_915_ohlc(strike_key, val[0], val[1], symbol=symbol_upper, source="CACHE_FALLBACK")
         return val
         
     # Calculate timeframe dynamically based on current time
@@ -369,10 +375,14 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
         if candle and candle.get("high") and candle.get("low"):
             high = float(candle["high"])
             low = float(candle["low"])
+            open_val = float(candle.get("open", 0))
+            close_val = float(candle.get("close", 0))
             actual_tf = candle.get("timeframe", timeframe)
-            save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe=actual_tf)
+            
+            source_label = "ANGEL_ONE_HISTORICAL" if candle.get("source") != "TrueData" else "TRUE_DATA_HISTORICAL"
+            save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe=actual_tf, open_val=open_val, close_val=close_val, source=source_label)
             option_915_cache[cache_key] = (high, low)
-            logger.info(f"🎯 [V2 RETRIEVER] Retrieved & Recorded REAL 9:15 AM {actual_tf} OHLC for {symbol_upper} {strike_key}: High={high}, Low={low}")
+            logger.info(f"🎯 [V2 RETRIEVER] Retrieved & Recorded REAL 9:15 AM {actual_tf} OHLC for {symbol_upper} {strike_key}: Open={open_val}, High={high}, Low={low}, Close={close_val} (source={source_label})")
             return high, low
     except Exception as e:
         logger.error(f"❌ Failed to fetch real 9:15 OHLC for {symbol_upper} {strike_key} via get_915_candle_angel_v2: {e}")
@@ -385,9 +395,13 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
             if candle and candle.get("high") and candle.get("low"):
                 high = float(candle["high"])
                 low = float(candle["low"])
-                save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe="1MIN")
+                open_val = float(candle.get("open", 0))
+                close_val = float(candle.get("close", 0))
+                source_label = "ANGEL_ONE_HISTORICAL" if candle.get("source") != "TrueData" else "TRUE_DATA_HISTORICAL"
+                
+                save_recorded_915_ohlc(strike_key, high, low, symbol=symbol_upper, timeframe="1MIN", open_val=open_val, close_val=close_val, source=source_label)
                 option_915_cache[cache_key] = (high, low)
-                logger.info(f"🎯 [V2 RETRIEVER FALLBACK] Retrieved & Recorded REAL 9:15 AM 1MIN OHLC for {symbol_upper} {strike_key}: High={high}, Low={low}")
+                logger.info(f"🎯 [V2 RETRIEVER FALLBACK] Retrieved & Recorded REAL 9:15 AM 1MIN OHLC for {symbol_upper} {strike_key}: Open={open_val}, High={high}, Low={low}, Close={close_val} (source={source_label})")
                 return high, low
         except Exception as e:
             logger.error(f"❌ Failed 1MIN fallback for {symbol_upper} {strike_key}: {e}")
