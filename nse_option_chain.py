@@ -275,7 +275,7 @@ def get_option_details_from_scrip_master(symbol, strike, opt_type):
             
     return None, None
 
-def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None):
+def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=None, open_val=None, close_val=None):
     file_path = "gvn_recorded_915_ohlc.json"
     data = load_recorded_915_ohlc()
     sym_key = symbol.upper() if symbol else "NIFTY"
@@ -283,7 +283,11 @@ def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=Non
         data[sym_key] = {}
         
     entry_data = {"high": float(high), "low": float(low), "timestamp": datetime.now().isoformat()}
-    
+    if open_val is not None:
+        entry_data["open"] = float(open_val)
+    if close_val is not None:
+        entry_data["close"] = float(close_val)
+        
     opt_symbol = None
     expiry_date = None
     opt_type = None
@@ -312,7 +316,7 @@ def save_recorded_915_ohlc(strike_name, high, low, symbol="NIFTY", timeframe=Non
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-        logger.info(f"💾 Recorded 9:15 candle for {sym_key} {strike_name}: High={high}, Low={low} (timeframe={timeframe})")
+        logger.info(f"💾 Recorded 9:15 candle for {sym_key} {strike_name}: Open={open_val}, High={high}, Low={low}, Close={close_val} (timeframe={timeframe})")
     except Exception as e:
         logger.error(f"Error saving recorded 9:15 OHLC: {e}")
 
@@ -1023,12 +1027,13 @@ def process_candles_for_timeframe(candles, timeframe, source="AngelOne"):
         if not c_915:
             c_915 = valid_candles[0]
             
+        open_val = float(c_915[1])
         high = float(c_915[2])
         low = float(c_915[3])
         close = float(c_915[4])
         ts_val = c_915[0]
-        logger.info(f"✅ [{source}] Processed 1-Min Candle: High={high}, Low={low}, Close={close}")
-        return {"high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "1MIN"}
+        logger.info(f"✅ [{source}] Processed 1-Min Candle: Open={open_val}, High={high}, Low={low}, Close={close}")
+        return {"open": open_val, "high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "1MIN"}
         
     else: # timeframe == "5MIN"
         # Aggregate candles from 09:15 to 09:19
@@ -1040,12 +1045,13 @@ def process_candles_for_timeframe(candles, timeframe, source="AngelOne"):
         lows = [float(c[3]) for c in candles_5min]
         
         if highs and lows:
+            open_val = float(candles_5min[0][1])
             high = max(highs)
             low = min(lows)
             close = float(candles_5min[-1][4])
             ts_val = candles_5min[0][0]
-            logger.info(f"✅ [{source}] Processed 5-Min Candle: High={high}, Low={low}, Close={close}")
-            return {"high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "5MIN"}
+            logger.info(f"✅ [{source}] Processed 5-Min Candle: Open={open_val}, High={high}, Low={low}, Close={close}")
+            return {"open": open_val, "high": high, "low": low, "close": close, "timestamp": ts_val, "timeframe": "5MIN"}
         else:
             # Fallback to 1-min
             return process_candles_for_timeframe(candles, "1MIN", source=source)
@@ -1189,17 +1195,32 @@ def load_all_recorded_benchmarks():
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     for symbol in indices:
-        ohlc = get_recorded_index_915_ohlc(symbol)
-        if ohlc:
-            high, low = ohlc
+        symbol_upper = symbol.upper()
+        spot_key = f"{symbol_upper}_SPOT"
+        rec = recorded_data.get(symbol_upper, {}).get(spot_key)
+        if not rec:
+            rec = recorded_data.get(symbol_upper, {}).get("SPOT")
+        if not rec:
+            rec = recorded_data.get("NIFTY", {}).get(spot_key)
+        if not rec:
+            rec = recorded_data.get(spot_key)
+            
+        if rec and "high" in rec and "low" in rec:
+            high = float(rec["high"])
+            low = float(rec["low"])
+            open_val = float(rec.get("open", 0))
+            close_val = float(rec.get("close", 0))
+            
             shared_data.gvn_915_benchmark[symbol] = {
                 "high": high,
                 "low": low,
+                "open": open_val,
+                "close": close_val,
                 "captured": True,
                 "date": today_str,
                 "timeframe": timeframe
             }
-            logger.info(f"🎯 [BENCHMARK] Loaded recorded spot benchmark for {symbol}: High={high}, Low={low} ({timeframe})")
+            logger.info(f"🎯 [BENCHMARK] Loaded recorded spot benchmark for {symbol}: Open={open_val}, High={high}, Low={low}, Close={close_val} ({timeframe})")
             loaded_count += 1
             
     return loaded_count > 0
@@ -1220,12 +1241,16 @@ def retrieve_and_record_915_levels(timeframe="5MIN"):
             if candle and candle.get("high") and candle.get("low"):
                 high = float(candle["high"])
                 low = float(candle["low"])
+                open_val = float(candle.get("open", 0))
+                close_val = float(candle.get("close", 0))
                 actual_timeframe = candle.get("timeframe", timeframe)
                 
                 # Update in-memory benchmark
                 shared_data.gvn_915_benchmark[symbol] = {
                     "high": high,
                     "low": low,
+                    "open": open_val,
+                    "close": close_val,
                     "captured": True,
                     "date": today_str,
                     "timeframe": actual_timeframe
@@ -1233,7 +1258,7 @@ def retrieve_and_record_915_levels(timeframe="5MIN"):
                 
                 # Save to JSON
                 save_recorded_915_ohlc(f"{symbol}_SPOT", high, low, symbol=symbol, timeframe=actual_timeframe)
-                logger.info(f"✅ [RETRIEVER] Recorded spot for {symbol}: High={high}, Low={low} ({actual_timeframe})")
+                logger.info(f"✅ [RETRIEVER] Recorded spot for {symbol}: Open={open_val}, High={high}, Low={low}, Close={close_val} ({actual_timeframe})")
             else:
                 logger.warning(f"⚠️ [RETRIEVER] No candle data for {symbol} spot ({timeframe})")
                 if timeframe == "5MIN":
@@ -2697,6 +2722,58 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         if not session_params.get("enable_new_trades", True):
                             is_wind_aligned = False
                         
+                        # 🚀 GVN ADDITIONAL MORNING WICK CONFIRMATION FILTER
+                        is_morning_wick_aligned = True
+                        index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+                        if index_benchmark and index_benchmark.get("high", 0) > 0:
+                            idx_high = index_benchmark["high"]
+                            idx_low = index_benchmark["low"]
+                            idx_open = index_benchmark.get("open", 0)
+                            idx_close = index_benchmark.get("close", 0)
+                            
+                            idx_levels = calculate_gvn_levels(idx_high, idx_low)
+                            
+                            if idx_open > 0 and idx_close > 0:
+                                is_red_candle = idx_close < idx_open
+                                is_green_candle = idx_close >= idx_open
+                                
+                                if is_red_candle:
+                                    # 🔴 RED CANDLE SETUP: High wick retracement
+                                    # High should be between 0.618 (i3) and 0.5 (i5) level of index
+                                    i5_lvl = idx_levels.get("i5", 0)
+                                    i3_lvl = idx_levels.get("i3", 0)
+                                    lower_bound = min(i5_lvl, i3_lvl)
+                                    upper_bound = max(i5_lvl, i3_lvl)
+                                    
+                                    is_high_in_zone = lower_bound <= idx_high <= upper_bound
+                                    
+                                    # Red candle retracement should confirm Put (PE) and reject Call (CE)
+                                    if is_high_in_zone:
+                                        if opt_type == "CE":
+                                            is_morning_wick_aligned = False
+                                            logger.info(f"🚫 [MORNING WICK BLOCK] CE entry blocked: Red Candle High wick {idx_high:.2f} is in retracement zone ({lower_bound:.2f}-{upper_bound:.2f}).")
+                                        elif opt_type == "PE":
+                                            logger.info(f"🎯 [MORNING WICK CONFIRM] PE entry confirmed: Red Candle High wick {idx_high:.2f} is in retracement zone.")
+                                            
+                                elif is_green_candle:
+                                    # 🟢 GREEN CANDLE SETUP: Low wick retracement
+                                    # Low should touch or be close to 0.786 level (i2) or 0.7 level (i7 / Black Line)
+                                    i7_lvl = idx_levels.get("i7", 0)
+                                    i2_lvl = idx_levels.get("i2", 0)
+                                    
+                                    is_low_near_levels = abs(idx_low - i7_lvl) < 5.0 or abs(idx_low - i2_lvl) < 5.0
+                                    
+                                    # Green candle retracement should confirm Call (CE) and reject Put (PE)
+                                    if is_low_near_levels:
+                                        if opt_type == "PE":
+                                            is_morning_wick_aligned = False
+                                            logger.info(f"🚫 [MORNING WICK BLOCK] PE entry blocked: Green Candle Low wick {idx_low:.2f} is near support level ({i7_lvl:.2f} / {i2_lvl:.2f}).")
+                                        elif opt_type == "CE":
+                                            logger.info(f"🎯 [MORNING WICK CONFIRM] CE entry confirmed: Green Candle Low wick {idx_low:.2f} is near support level.")
+
+                        if not is_morning_wick_aligned:
+                            is_wind_aligned = False
+
                         if is_wind_aligned:
                             # 🚀 GVN MASTER ROBOT v2.5.2 Optimization:
                             # Only trigger standard level entry if price touches or crosses i5, i6, or i7 levels.
@@ -2947,6 +3024,58 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 if nifty50_trend in ["STRONG BULLISH", "MODERATE BULLISH"] and opt_type == "PE":
                                     is_wind_aligned = False
                                         
+                                # 🚀 GVN ADDITIONAL MORNING WICK CONFIRMATION FILTER (Z2H)
+                                is_morning_wick_aligned = True
+                                index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+                                if index_benchmark and index_benchmark.get("high", 0) > 0:
+                                    idx_high = index_benchmark["high"]
+                                    idx_low = index_benchmark["low"]
+                                    idx_open = index_benchmark.get("open", 0)
+                                    idx_close = index_benchmark.get("close", 0)
+                                    
+                                    idx_levels = calculate_gvn_levels(idx_high, idx_low)
+                                    
+                                    if idx_open > 0 and idx_close > 0:
+                                        is_red_candle = idx_close < idx_open
+                                        is_green_candle = idx_close >= idx_open
+                                        
+                                        if is_red_candle:
+                                            # 🔴 RED CANDLE SETUP: High wick retracement
+                                            # High should be between 0.618 (i3) and 0.5 (i5) level of index
+                                            i5_lvl = idx_levels.get("i5", 0)
+                                            i3_lvl = idx_levels.get("i3", 0)
+                                            lower_bound = min(i5_lvl, i3_lvl)
+                                            upper_bound = max(i5_lvl, i3_lvl)
+                                            
+                                            is_high_in_zone = lower_bound <= idx_high <= upper_bound
+                                            
+                                            # Red candle retracement should confirm Put (PE) and reject Call (CE)
+                                            if is_high_in_zone:
+                                                if opt_type == "CE":
+                                                    is_morning_wick_aligned = False
+                                                    logger.info(f"🚫 [MORNING WICK BLOCK (Z2H)] CE Z2H entry blocked: Red Candle High wick {idx_high:.2f} is in retracement zone ({lower_bound:.2f}-{upper_bound:.2f}).")
+                                                elif opt_type == "PE":
+                                                    logger.info(f"🎯 [MORNING WICK CONFIRM (Z2H)] PE Z2H entry confirmed: Red Candle High wick {idx_high:.2f} is in retracement zone.")
+                                                    
+                                        elif is_green_candle:
+                                            # 🟢 GREEN CANDLE SETUP: Low wick retracement
+                                            # Low should touch or be close to 0.786 level (i2) or 0.7 level (i7 / Black Line)
+                                            i7_lvl = idx_levels.get("i7", 0)
+                                            i2_lvl = idx_levels.get("i2", 0)
+                                            
+                                            is_low_near_levels = abs(idx_low - i7_lvl) < 5.0 or abs(idx_low - i2_lvl) < 5.0
+                                            
+                                            # Green candle retracement should confirm Call (CE) and reject Put (PE)
+                                            if is_low_near_levels:
+                                                if opt_type == "PE":
+                                                    is_morning_wick_aligned = False
+                                                    logger.info(f"🚫 [MORNING WICK BLOCK (Z2H)] PE Z2H entry blocked: Green Candle Low wick {idx_low:.2f} is near support level ({i7_lvl:.2f} / {i2_lvl:.2f}).")
+                                                elif opt_type == "CE":
+                                                    logger.info(f"🎯 [MORNING WICK CONFIRM (Z2H)] CE Z2H entry confirmed: Green Candle Low wick {idx_low:.2f} is near support level.")
+
+                                if not is_morning_wick_aligned:
+                                    is_wind_aligned = False
+                                    
                                 if abs(ltp - bottom_level) <= 3.0 and is_wind_aligned:
                                     existing_item["status"] = "ACTIVE"
                                     existing_item["entry_price"] = round(ltp, 2)

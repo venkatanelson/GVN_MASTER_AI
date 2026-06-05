@@ -16,8 +16,10 @@ class GVNAiWindEngine:
         self.vacuum_zones = []
         self.price_history = {} # Stores LTP history per symbol to detect patterns
         self.swing_history = {} # Stores (type, price) for highs and lows
+        self.prev_ltp = {} # Track previous LTP for deltaFlow
+        self.delta_flow_history = {} # Stores the history of signed volume delta
         
-    def calculate_wind_direction(self, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
+    def calculate_wind_direction(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
         """
         Calculates Institutional Market Direction based on the 5 Main Forces.
         """
@@ -36,35 +38,51 @@ class GVNAiWindEngine:
             # 🚀 MASTER WIND STRENGTH FORMULA
             wind_power = (delta_strength * gamma_strength * volume_strength * oi_strength) / theta_decay
             
+            # --- AI SMART MONEY FLOW (from Pine Script deltaFlow) ---
+            if symbol not in self.prev_ltp:
+                self.prev_ltp[symbol] = ltp
+            if symbol not in self.delta_flow_history:
+                self.delta_flow_history[symbol] = deque(maxlen=10)
+                
+            prev_price = self.prev_ltp[symbol]
+            self.prev_ltp[symbol] = ltp
+            price_change = ltp - prev_price
+            
+            # Signed volume delta flow based on spot price movement
+            delta_flow = (ce_vol + pe_vol) if price_change >= 0 else -(ce_vol + pe_vol)
+            self.delta_flow_history[symbol].append(delta_flow)
+            avg_delta = sum(self.delta_flow_history[symbol]) / len(self.delta_flow_history[symbol]) if self.delta_flow_history[symbol] else 0
+            flow_text = "BUYERS CONTROL 🟢" if avg_delta > 0 else "SELLERS CONTROL 🔴"
+            
             wind_state = "🟡 TRAP / SIDEWAYS"
             
-            # --- THE 5 INSTITUTIONAL WIND STATES ---
+            # --- THE 5 INSTITUTIONAL WIND STATES (with AI Flow Filter) ---
             
-            # 1. SHORT COVERING (Price ↑ + CE OI ↓)
-            if ltp > vwap and ce_coi < 0 and delta > 0:
+            # 1. SHORT COVERING (Price ↑ + CE OI ↓) - confirmed by Buyers Control
+            if ltp > vwap and ce_coi < 0 and delta > 0 and avg_delta > 0:
                 wind_state = "🚀 SHORT COVERING (Fast Upside)"
                 wind_power *= 1.5 # Boost power because shorts are trapped
                 
-            # 2. LONG UNWINDING (Price ↓ + PE OI ↓)
-            elif ltp < vwap and pe_coi < 0 and delta < 0:
+            # 2. LONG UNWINDING (Price ↓ + PE OI ↓) - confirmed by Sellers Control
+            elif ltp < vwap and pe_coi < 0 and delta < 0 and avg_delta < 0:
                 wind_state = "🩸 LONG UNWINDING (Fast Fall)"
                 wind_power *= 1.5 # Boost power because longs are trapped
                 
-            # 3. BULLISH WIND (UP WIND)
-            elif ltp > vwap and pe_coi > ce_coi and delta > 0.2 and gamma > 0.005:
+            # 3. BULLISH WIND (UP WIND) - confirmed by Buyers Control
+            elif ltp > vwap and pe_coi > ce_coi and delta > 0.2 and gamma > 0.005 and avg_delta > 0:
                 wind_state = "🟢 UP WIND (Bullish - PUT Writing)"
                 
-            # 4. BEARISH WIND (DOWN WIND)
-            elif ltp < vwap and ce_coi > pe_coi and delta < -0.2 and gamma > 0.005:
+            # 4. BEARISH WIND (DOWN WIND) - confirmed by Sellers Control
+            elif ltp < vwap and ce_coi > pe_coi and delta < -0.2 and gamma > 0.005 and avg_delta < 0:
                 wind_state = "🔴 DOWN WIND (Bearish - CALL Writing)"
                 
             # 5. THE SMALL SOLDIERS WAR (Micro-Trend Level-to-Level)
             # Elephants are fighting (Massive OI on both sides), but small COI shifts are pushing the price
             elif abs(ce_oi - pe_oi) < (min_oi * 0.30) and abs(delta) < 0.25:
-                if pe_coi > (ce_coi * 1.2) and ltp >= vwap:
+                if pe_coi > (ce_coi * 1.2) and ltp >= vwap and avg_delta > 0:
                     wind_state = "🟡 SLOW UP WIND (Level-to-Level)"
                     wind_power = max(wind_power, 1.0) # Enough power for level-to-level
-                elif ce_coi > (pe_coi * 1.2) and ltp <= vwap:
+                elif ce_coi > (pe_coi * 1.2) and ltp <= vwap and avg_delta < 0:
                     wind_state = "🟠 SLOW DOWN WIND (Level-to-Level)"
                     wind_power = max(wind_power, 1.0) # Enough power for level-to-level
                 else:
@@ -85,6 +103,8 @@ class GVNAiWindEngine:
                 "wind_state": wind_state,
                 "wind_power": round(wind_power, 2),
                 "trend_type": trend_type,
+                "flow_status": flow_text,
+                "avg_delta": round(avg_delta, 2),
                 "metrics": {
                     "delta_pressure": round(delta_strength, 2),
                     "gamma_acceleration": round(gamma_strength, 2),
@@ -215,16 +235,18 @@ class GVNAiWindEngine:
         """
         Returns full Market DNA Report (Smart Money Tracker)
         """
-        wind_data = self.calculate_wind_direction(ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta)
+        wind_data = self.calculate_wind_direction(symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta)
         
         # Smart Money Tracker
         smart_money = "WAITING"
         if "UP WIND" in wind_data["wind_state"] or "SHORT COVERING" in wind_data["wind_state"]:
-            smart_money = "🟢 INSTITUTIONS BUYING (PUT Writing + Positive Delta)"
+            smart_money = f"🟢 INSTITUTIONS BUYING (PUT Writing + Positive Delta) | {wind_data['flow_status']}"
         elif "DOWN WIND" in wind_data["wind_state"] or "LONG UNWINDING" in wind_data["wind_state"]:
-            smart_money = "🔴 INSTITUTIONS SELLING (CALL Writing + Negative Delta)"
+            smart_money = f"🔴 INSTITUTIONS SELLING (CALL Writing + Negative Delta) | {wind_data['flow_status']}"
         elif "PREMIUM EATING" in wind_data["wind_state"]:
-            smart_money = "⚫ OPTION WRITERS DOMINATING (Theta Decay Trap)"
+            smart_money = f"⚫ OPTION WRITERS DOMINATING (Theta Decay Trap) | {wind_data['flow_status']}"
+        else:
+            smart_money = f"🟡 SIDEWAYS / TRAP | {wind_data['flow_status']}"
             
         # Detect Price Action Pattern
         pattern = self.detect_price_pattern(symbol, ltp)
@@ -238,7 +260,7 @@ class GVNAiWindEngine:
             "smart_money_status": smart_money,
             "price_pattern": pattern,
             "battle_status": battle_status,
-            "insight": f"{pattern} | {battle_status}"
+            "insight": f"{pattern} | {battle_status} | {wind_data['flow_status']}"
         }
 
 # --- Quick Test ---
@@ -254,6 +276,7 @@ if __name__ == "__main__":
         delta=0.65, gamma=0.015, theta=-0.5
     )
     
-    print("\n🌪️ GVN OPTION CHAIN WIND ENGINE 🌪️")
+    print("\n=== GVN OPTION CHAIN WIND ENGINE ===")
     import json
-    print(json.dumps(test_result, indent=2))
+    # Use ascii safe representation for printing to windows console
+    print(json.dumps(test_result, indent=2, ensure_ascii=True))

@@ -48,25 +48,25 @@ with app.app_context():
         print(f"✅ Client ID: {config.client_id}")
         
         # Check Access Token
-        if config.encrypted_access_token:
+        if config.api_key:
             print("✅ Access Token (VC): SAVED")
-            vc = cipher.decrypt(config.encrypted_access_token).decode()
+            vc = config.api_key
         else:
             print("❌ Access Token (VC): MISSING")
             vc = ""
             
         # Check API Secret
-        if config.encrypted_client_secret:
+        if config.api_secret:
             print("✅ API Secret: SAVED")
-            sec = cipher.decrypt(config.encrypted_client_secret).decode()
+            sec = config.api_secret
         else:
             print("❌ API Secret: MISSING")
             sec = ""
 
         # Check TOTP Key
-        if config.encrypted_totp_key:
+        if config.totp_key:
             print("✅ TOTP Key: SAVED")
-            t_key = cipher.decrypt(config.encrypted_totp_key).decode()
+            t_key = config.totp_key
         else:
             print("❌ TOTP Key: MISSING")
             t_key = ""
@@ -79,32 +79,26 @@ with app.app_context():
             print("✅ Broker Password: USING DEFAULT (Gvn@12)")
             pwd = "Gvn@12"
 
-        # 🌟 SYNC TO SHOONYA ENGINE FOR TESTING
-        shoonya_live_feed.shoonya_master_config.update({
-            "client_id": config.client_id,
-            "access_token": vc,
-            "broker_password": pwd,
-            "client_secret": sec,
-            "totp_key": t_key,
-            "broker_name": config.broker_name,
-            "active": True
-        })
+        # 🌟 Sync to local feed test if needed (Bypassed in diagnostics)
+        pass
 
 # 3. TEST OPTION CHAIN DATA FETCHING
 print("\n[3] CHECKING OPTION CHAIN DATA (NSE ENGINE)...")
 try:
     print(f"📡 Requesting live NIFTY Option Chain data at {datetime.now().strftime('%H:%M:%S')}...")
-    shoonya_live_feed.analyze_and_update_gvn_scanner("NIFTY")
-    last_upd = shoonya_live_feed.gvn_scanner_data.get("last_updated")
+    import nse_option_chain
+    import shared_data
+    nse_option_chain.analyze_and_update_gvn_scanner("NIFTY")
+    last_upd = shared_data.gvn_scanner_data.get("last_updated")
     
     if last_upd:
         print(f"✅ DATA SUCCESS: Successfully fetched Option Chain data! Last Updated: {last_upd}")
-        sample = shoonya_live_feed.gvn_scanner_data.get("NIFTY", [])
+        sample = shared_data.gvn_scanner_data.get("NIFTY", [])
         if sample:
             print(f"📊 Live Market Pulse: Data found.")
     else:
-        print("❌ DATA FAILURE: The Shoonya Engine is not returning any data.")
-        print("💡 TIP: Check shoonya_feed_status.log for login errors.")
+        print("❌ DATA FAILURE: The NSE Engine is not returning any data.")
+        print("💡 TIP: Check nse_status.log for login/connection logs.")
 except Exception as e:
     print(f"❌ DATA CRASH: {e}")
 

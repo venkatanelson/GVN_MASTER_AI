@@ -203,3 +203,24 @@ def get_system_status():
 def add_system_error(error_msg):
     with _data_lock:
         system_status["errors"].append(error_msg)
+
+def reset_daily_stats():
+    """Resets daily stats for fresh start"""
+    with _data_lock:
+        global demo_logs, gvn_z2h_watchlist, last_touched_levels, last_pre_alerts
+        demo_logs.clear()
+        gvn_z2h_watchlist.clear()
+        last_touched_levels.clear()
+        last_pre_alerts.clear()
+        
+        # Reset gvn_915_benchmark
+        for symbol in gvn_915_benchmark:
+            gvn_915_benchmark[symbol] = {"high": 0, "low": 0, "captured": False, "date": None}
+            
+        # Reset paper trading stats
+        paper_trading_stats.update({
+            "total_trades": 0,
+            "winning": 0,
+            "losing": 0,
+            "pnl": 0.0
+        })
