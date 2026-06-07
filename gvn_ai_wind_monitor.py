@@ -93,16 +93,78 @@ def run_wind_monitor_cycle():
             # Setup references
             ref_price = spot # Fallback reference price
             
-            # Calculate mock delta for institutional DNA calculation
-            mock_delta = min(1.0, max(-1.0, (pcr - 1) * 2))
+            # --- DELTA-PREMIUM DIVERGENCE (DPD) DATA GATHERING ---
+            atm_strike = None
+            min_diff = float("inf")
+            ce_ltp = 0.0
+            pe_ltp = 0.0
+            ce_delta = 0.50
+            pe_delta = -0.50
             
+            # Find closest strike price (ATM)
+            for item in records.get("data", []):
+                strike_price = item.get("strikePrice") or item.get("strike", 0)
+                if strike_price > 0:
+                    diff = abs(strike_price - spot)
+                    if diff < min_diff:
+                        min_diff = diff
+                        atm_strike = strike_price
+            
+            # Extract ATM prices and deltas
+            if atm_strike is not None:
+                for item in records.get("data", []):
+                    strike_price = item.get("strikePrice") or item.get("strike", 0)
+                    if strike_price == atm_strike:
+                        if "CE" in item:
+                            ce = item["CE"]
+                            ce_ltp = ce.get("lastPrice") or ce.get("lastTradedPrice", 0.0) or 0.0
+                            ce_delta = ce.get("delta")
+                            if ce_delta is None or ce_delta == 0:
+                                try:
+                                    iv = ce.get("impliedVolatility", 16.5) or 16.5
+                                    sigma = iv / 100.0
+                                    today = datetime.datetime.now()
+                                    expiry_weekday = 4 if symbol == "SENSEX" else 3
+                                    days_to_expiry = max(1, (expiry_weekday - today.weekday()) % 7)
+                                    T = days_to_expiry / 365.0
+                                    r = 0.07
+                                    ce_delta = abs(nse_option_chain.calculate_delta(spot, strike_price, T, r, sigma, "CE"))
+                                except:
+                                    ce_delta = 0.5 - ((strike_price - spot) / spot)
+                            ce_delta = min(0.99, max(0.01, abs(ce_delta)))
+                            
+                        if "PE" in item:
+                            pe = item["PE"]
+                            pe_ltp = pe.get("lastPrice") or pe.get("lastTradedPrice", 0.0) or 0.0
+                            pe_delta = pe.get("delta")
+                            if pe_delta is None or pe_delta == 0:
+                                try:
+                                    iv = pe.get("impliedVolatility", 16.5) or 16.5
+                                    sigma = iv / 100.0
+                                    today = datetime.datetime.now()
+                                    expiry_weekday = 4 if symbol == "SENSEX" else 3
+                                    days_to_expiry = max(1, (expiry_weekday - today.weekday()) % 7)
+                                    T = days_to_expiry / 365.0
+                                    r = 0.07
+                                    pe_delta = -abs(nse_option_chain.calculate_delta(spot, strike_price, T, r, sigma, "PE"))
+                                except:
+                                    pe_delta = - (0.5 + ((strike_price - spot) / spot))
+                            if pe_delta > 0:
+                                pe_delta = -pe_delta
+                            pe_delta = max(-0.99, min(-0.01, pe_delta))
+                        break
+            
+            logger.info(f"🎯 ATM Strike for {symbol}: {atm_strike} | CE LTP: {ce_ltp} CE Delta: {ce_delta:.2f} | PE LTP: {pe_ltp} PE Delta: {pe_delta:.2f}")
+
             # Run Wind calculation
             dna = wind_engine.get_market_dna(
                 symbol=symbol, ltp=spot, vwap=ref_price, 
                 ce_oi=total_ce_oi, pe_oi=total_pe_oi,
                 ce_coi=ce_coi, pe_coi=pe_coi,
                 ce_vol=ce_vol, pe_vol=pe_vol,
-                delta=mock_delta, gamma=0.015, theta=-0.5
+                delta=ce_delta, gamma=0.015, theta=-0.5,
+                ce_ltp=ce_ltp, pe_ltp=pe_ltp,
+                ce_delta=ce_delta, pe_delta=pe_delta
             )
             
             wind_dir = dna["wind_engine"]["wind_state"]

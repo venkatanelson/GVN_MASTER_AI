@@ -18,8 +18,70 @@ class GVNAiWindEngine:
         self.swing_history = {} # Stores (type, price) for highs and lows
         self.prev_ltp = {} # Track previous LTP for deltaFlow
         self.delta_flow_history = {} # Stores the history of signed volume delta
+        self.prev_spot = {}
+        self.prev_ce_ltp = {}
+        self.prev_pe_ltp = {}
+        self.dpd_history = {}
         
-    def calculate_wind_direction(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
+    def calculate_delta_divergence(self, symbol, spot, ce_ltp, pe_ltp, ce_delta, pe_delta):
+        """
+        Calculates real-time Delta-Premium Divergence (DPD) to track premium efficiency.
+        """
+        if ce_ltp <= 0 or pe_ltp <= 0:
+            return {"ce_div": 0.0, "pe_div": 0.0, "state": "STABLE"}
+
+        if symbol not in self.prev_spot:
+            self.prev_spot[symbol] = spot
+            self.prev_ce_ltp[symbol] = ce_ltp
+            self.prev_pe_ltp[symbol] = pe_ltp
+            self.dpd_history[symbol] = deque(maxlen=5)
+            return {"ce_div": 0.0, "pe_div": 0.0, "state": "INITIALIZING"}
+            
+        prev_s = self.prev_spot[symbol]
+        prev_ce = self.prev_ce_ltp[symbol]
+        prev_pe = self.prev_pe_ltp[symbol]
+        
+        # Update cache
+        self.prev_spot[symbol] = spot
+        self.prev_ce_ltp[symbol] = ce_ltp
+        self.prev_pe_ltp[symbol] = pe_ltp
+        
+        # Spot change
+        d_spot = spot - prev_s
+        
+        # Actual option price changes
+        d_ce_actual = ce_ltp - prev_ce
+        d_pe_actual = pe_ltp - prev_pe
+        
+        # Expected changes based on Delta (PE Delta is negative)
+        ce_expected = ce_delta * d_spot
+        pe_expected = pe_delta * d_spot
+        
+        # Divergence
+        ce_div = d_ce_actual - ce_expected
+        pe_div = d_pe_actual - pe_expected
+        
+        self.dpd_history[symbol].append((ce_div, pe_div))
+        
+        # Calculate smoothed divergence
+        avg_ce_div = sum(x[0] for x in self.dpd_history[symbol]) / len(self.dpd_history[symbol])
+        avg_pe_div = sum(x[1] for x in self.dpd_history[symbol]) / len(self.dpd_history[symbol])
+        
+        state = "STABLE"
+        if avg_ce_div < -0.15 and avg_pe_div < -0.15:
+            state = "DECAY / IV CRUSH"
+        elif avg_ce_div > 0.1 and avg_pe_div < -0.1:
+            state = "BULLISH MOMENTUM"
+        elif avg_pe_div > 0.1 and avg_ce_div < -0.1:
+            state = "BEARISH MOMENTUM"
+            
+        return {
+            "ce_div": round(avg_ce_div, 3),
+            "pe_div": round(avg_pe_div, 3),
+            "state": state
+        }
+        
+    def calculate_wind_direction(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5):
         """
         Calculates Institutional Market Direction based on the 5 Main Forces.
         """
@@ -89,6 +151,26 @@ class GVNAiWindEngine:
                     wind_state = "⚫ PREMIUM EATING (Sideways Market)"
                     wind_power = min(wind_power, 0.7) # Force low power
             
+            # --- DELTA-PREMIUM DIVERGENCE (DPD) FILTER ---
+            dpd_metrics = {"ce_div": 0.0, "pe_div": 0.0, "state": "STABLE"}
+            if ce_ltp > 0 and pe_ltp > 0:
+                dpd_metrics = self.calculate_delta_divergence(symbol, ltp, ce_ltp, pe_ltp, ce_delta, pe_delta)
+                dpd_state = dpd_metrics.get("state", "STABLE")
+                
+                if dpd_state == "DECAY / IV CRUSH":
+                    wind_state = "⚫ PREMIUM EATING (Sideways Market)"
+                    wind_power = min(wind_power, 0.5) # Force low power to avoid buy entries
+                elif dpd_state == "BULLISH MOMENTUM":
+                    if "DOWN" not in wind_state and "UNWINDING" not in wind_state:
+                        if wind_state == "🟡 TRAP / SIDEWAYS":
+                            wind_state = "🟢 UP WIND (Bullish - DPD Confirmed)"
+                        wind_power = max(wind_power * 1.3, 1.3)
+                elif dpd_state == "BEARISH MOMENTUM":
+                    if "UP" not in wind_state and "COVERING" not in wind_state:
+                        if wind_state == "🟡 TRAP / SIDEWAYS":
+                            wind_state = "🔴 DOWN WIND (Bearish - DPD Confirmed)"
+                        wind_power = max(wind_power * 1.3, 1.3)
+            
             # --- MARKET STATES BASED ON WIND POWER ---
             if wind_power > 2.0:
                 trend_type = "🔥 Strong Trend (Gamma Explosion Possible)"
@@ -108,7 +190,10 @@ class GVNAiWindEngine:
                 "metrics": {
                     "delta_pressure": round(delta_strength, 2),
                     "gamma_acceleration": round(gamma_strength, 2),
-                    "theta_decay_rate": round(theta_decay, 2)
+                    "theta_decay_rate": round(theta_decay, 2),
+                    "ce_div": dpd_metrics.get("ce_div", 0.0),
+                    "pe_div": dpd_metrics.get("pe_div", 0.0),
+                    "dpd_state": dpd_metrics.get("state", "STABLE")
                 }
             }
         except Exception as e:
@@ -231,11 +316,11 @@ class GVNAiWindEngine:
                 
         return "⚖️ CONSOLIDATION"
 
-    def get_market_dna(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta):
+    def get_market_dna(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5):
         """
         Returns full Market DNA Report (Smart Money Tracker)
         """
-        wind_data = self.calculate_wind_direction(symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta)
+        wind_data = self.calculate_wind_direction(symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp, pe_ltp, ce_delta, pe_delta)
         
         # Smart Money Tracker
         smart_money = "WAITING"
@@ -248,12 +333,19 @@ class GVNAiWindEngine:
         else:
             smart_money = f"🟡 SIDEWAYS / TRAP | {wind_data['flow_status']}"
             
+        # Append DPD to smart_money if present
+        if ce_ltp > 0 and pe_ltp > 0:
+            dpd_state = wind_data.get("metrics", {}).get("dpd_state", "STABLE")
+            ce_div = wind_data.get("metrics", {}).get("ce_div", 0.0)
+            pe_div = wind_data.get("metrics", {}).get("pe_div", 0.0)
+            smart_money += f" | DPD: {dpd_state} (CE:{ce_div} PE:{pe_div})"
+
         # Detect Price Action Pattern
         pattern = self.detect_price_pattern(symbol, ltp)
         
         # Battle Zone (Support/Resistance Momentum)
         battle_status = self.analyze_battle_zone(ce_oi, pe_oi, ce_coi, pe_coi)
-
+ 
         return {
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "wind_engine": wind_data,
