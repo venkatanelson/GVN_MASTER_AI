@@ -397,19 +397,10 @@ class GVNAiDelta60Engine:
             
             is_exp = (datetime.now().weekday() == 3)
             
-            # Enforce Index Level Touch Check to avoid fake entries
-            # If no index benchmark is captured yet, we default to True for test compatibility
-            index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
-            has_benchmark = index_benchmark and index_benchmark.get("high", 0) > 0
-            
+            # Enforce Index Level Touch Check to avoid fake entries (Bypassed as per user request to trigger trades directly on option levels)
             is_idx_i5_touched = True
             is_idx_i6_touched = True
             is_idx_i7_touched = True
-            
-            if has_benchmark:
-                is_idx_i5_touched = "i5" in shared_data.touched_index_levels.get(symbol, set())
-                is_idx_i6_touched = "i6" in shared_data.touched_index_levels.get(symbol, set())
-                is_idx_i7_touched = "i7" in shared_data.touched_index_levels.get(symbol, set())
             
             # Check i5 (1st Entry)
             if i5_val > 0:

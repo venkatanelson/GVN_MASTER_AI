@@ -136,6 +136,40 @@ class AlertTemplates:
 """
     
     @staticmethod
+    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type):
+        """Wind Direction and Option Chain DNA Alert"""
+        # Determine dominant side emoji
+        side_emoji = "🟢" if "UP" in wind_dir or "SHORT" in wind_dir or "SLOW UP" in wind_dir else ("🔴" if "DOWN" in wind_dir or "LONG" in wind_dir or "SLOW DOWN" in wind_dir else "⚖️")
+        
+        return f"""
+🌪️ <b>GVN AI WIND & MARKET DNA UPDATE</b> 🌪️
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>Symbol:</b> {symbol}
+{side_emoji} <b>Wind Direction:</b> {wind_dir}
+⚡ <b>Wind Strength:</b>
+  • 🟢 <b>Call Side (Bullish):</b> {call_pct}%
+  • 🔴 <b>Put Side (Bearish):</b> {put_pct}%
+
+🛡️ <b>Key Levels (Support & Resistance):</b>
+  • 🟢 <b>Support Level:</b> {support}
+  • 🔴 <b>Resistance Level:</b> {resistance}
+
+⚔️ <b>Battle Zone Status:</b> {battle_status}
+📊 <b>Volume Flow:</b>
+  • 🟢 <b>Call Volume:</b> {ce_vol:,}
+  • 🔴 <b>Put Volume:</b> {pe_vol:,}
+  • ⚖️ <b>PCR (Put-Call Ratio):</b> {pcr:.2f}
+
+🧠 <b>Smart Money Status:</b>
+{smart_money}
+
+📈 <b>Trend Zone:</b> {trend_type}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏰ Sent at: {datetime.now().strftime('%H:%M:%S')}
+"""
+
+    
+    @staticmethod
     def system_status_alert(status, message):
         """System status alert"""
         if status == "CONNECTED":
@@ -305,6 +339,30 @@ class TelegramAlertManager:
         self.bot.send_message(msg)
         self.alert_history.append({"type": "SENTIMENT", "data": sentiment_analysis, "time": datetime.now()})
     
+    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type):
+        """Send Wind and Market DNA alert"""
+        if not self.should_send_alert("WIND", symbol):
+            return
+            
+        msg = AlertTemplates.wind_alert(
+            symbol=symbol,
+            wind_dir=wind_dir,
+            call_pct=call_pct,
+            put_pct=put_pct,
+            support=support,
+            resistance=resistance,
+            battle_status=battle_status,
+            ce_vol=ce_vol,
+            pe_vol=pe_vol,
+            pcr=pcr,
+            smart_money=smart_money,
+            trend_type=trend_type
+        )
+        
+        self.bot.send_message(msg)
+        self.alert_history.append({"type": "WIND", "symbol": symbol, "time": datetime.now()})
+
+    
     def alert_status(self, status, message):
         """Send system status"""
         msg = AlertTemplates.system_status_alert(status, message)
@@ -337,15 +395,33 @@ class TelegramAlertManager:
 # ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # This would need actual bot token and chat ID to test
-    # manager = TelegramAlertManager("YOUR_BOT_TOKEN", "YOUR_CHAT_ID")
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
     
-    # Test templates
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
     print("✅ Telegram Alert Engine Initialized")
-    print("\n📋 Entry Alert Sample:")
-    print(AlertTemplates.entry_alert(
-        symbol="NIFTY260421C24100",
-        entry_price=292.0,
-        target=354.39,
-        sl=276.63
-    ))
+    if bot_token and chat_id:
+        print(f"Testing with Token: {bot_token[:10]}... Chat ID: {chat_id}")
+        manager = TelegramAlertManager(bot_token, chat_id)
+        
+        # Test sending a mock wind alert
+        manager.alert_wind(
+            symbol="NIFTY",
+            wind_dir="🟢 UP WIND (Bullish - PUT Writing)",
+            call_pct=80,
+            put_pct=20,
+            support=23200,
+            resistance=23400,
+            battle_status="🚀 RESISTANCE BREAKING (Bears Retreating, Bulls Advancing)",
+            ce_vol=1250000,
+            pe_vol=850000,
+            pcr=1.25,
+            smart_money="🟢 INSTITUTIONS BUYING (PUT Writing + Positive Delta)",
+            trend_type="🔥 Strong Trend (Gamma Explosion Possible)"
+        )
+        print("Test wind alert sent.")
+    else:
+        print("⚠️ Bot token or Chat ID missing from environment.")

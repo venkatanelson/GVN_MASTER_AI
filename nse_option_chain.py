@@ -2269,7 +2269,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     ref_price = underlying_value
     benchmark = shared_data.gvn_915_benchmark.get(symbol)
     if benchmark and benchmark.get("high", 0) > 0 and benchmark.get("low", 0) > 0:
-        ref_price = (benchmark["high"] + benchmark["low"]) / 2
+        idx_levels = calculate_gvn_levels(benchmark["high"], benchmark["low"])
+        if idx_levels and "i5" in idx_levels:
+            ref_price = idx_levels["i5"]
+        else:
+            ref_price = (benchmark["high"] + benchmark["low"]) / 2
         
     ce_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "CE" in item["strike"])
     pe_vol = sum(item.get("volume", 0) for item in gvn_scanner_data.get(symbol, []) if "PE" in item["strike"])
@@ -2305,6 +2309,39 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         
     vacuum_status = wind_engine.detect_liquidity_vacuum(total_ce_oi, total_pe_oi, max_ce_oi, max_pe_oi)
     
+    # Calculate Wind Strength Percentage (Call Side vs Put Side) matching TV indicator logic
+    # Base wind starts at 50%
+    base_wind = 50.0
+    
+    # 1. volRatio proxy using option volumes
+    opt_vol_ratio = pe_vol / ce_vol if ce_vol > 0 else 1.0
+    
+    if opt_vol_ratio > 2.0:
+        base_wind = 85.0
+    elif opt_vol_ratio > 1.5:
+        base_wind = 75.0
+    elif opt_vol_ratio > 1.2:
+        base_wind = 65.0
+    elif opt_vol_ratio < 0.5:
+        base_wind = 15.0
+    elif opt_vol_ratio < 0.8:
+        base_wind = 35.0
+    elif opt_vol_ratio < 1.0:
+        base_wind = 45.0
+        
+    # 2. Adjust based on wind direction side (equivalent to avgDelta > 0)
+    wind_state = dna["wind_engine"]["wind_state"]
+    if any(w in wind_state for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+        base_wind = min(95.0, base_wind + 15.0)
+    elif any(w in wind_state for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+        base_wind = max(5.0, base_wind - 15.0)
+        
+    # Ensure clamp to [5%, 95%]
+    base_wind = max(5.0, min(95.0, base_wind))
+    
+    call_pct = round(base_wind)
+    put_pct = round(100 - base_wind)
+
     # Initialize symbol dictionary in market_pulse
     if symbol not in market_pulse:
         market_pulse[symbol] = {}
@@ -2321,6 +2358,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         "inst_activity": "HIGH" if pcr > 1.5 or pcr < 0.6 else "LOW",
         "wind_direction": dna["wind_engine"]["wind_state"],
         "wind_power": dna["wind_engine"]["wind_power"],
+        "call_pct": call_pct,
+        "put_pct": put_pct,
         "smart_money": dna["smart_money_status"],
         "trap_zone": dna["wind_engine"]["trend_type"],
         "vacuum_detected": "VACUUM" in vacuum_status
@@ -2340,6 +2379,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         "ai_insight": market_pulse[symbol]["ai_insight"],
         "wind_direction": market_pulse[symbol]["wind_direction"],
         "wind_power": market_pulse[symbol]["wind_power"],
+        "call_pct": call_pct,
+        "put_pct": put_pct,
         "smart_money": market_pulse[symbol]["smart_money"],
         "trap_zone": market_pulse[symbol]["trap_zone"],
         "last_updated": datetime.now().strftime("%H:%M:%S")
@@ -2347,6 +2388,81 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     
     shared_data.market_pulse["zone"] = f"SUP: {max_pe_strike} | RES: {max_ce_strike}"
     shared_data.market_pulse["priority"] = f"PCR: {shared_data.market_pulse['pcr']}"
+
+    # 🌪️ GVN TELEGRAM WIND ALERT TRIGGER
+    # Trigger alert only for the active dashboard symbol
+    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+    if symbol == active_sym:
+        now = datetime.now()
+        
+        # Initialize tracking variables on first run if needed
+        if not hasattr(shared_data, 'last_wind_alert_time'):
+            shared_data.last_wind_alert_time = {}
+        if not hasattr(shared_data, 'last_wind_direction_side'):
+            shared_data.last_wind_direction_side = {}
+        if not hasattr(shared_data, 'last_battle_status'):
+            shared_data.last_battle_status = {}
+            
+        last_alert_time = shared_data.last_wind_alert_time.get(symbol)
+        last_side = shared_data.last_wind_direction_side.get(symbol, "")
+        last_battle = shared_data.last_battle_status.get(symbol, "")
+        
+        # Determine current wind side
+        current_side = "NEUTRAL"
+        if any(w in wind_state for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+            current_side = "CALL"
+        elif any(w in wind_state for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+            current_side = "PUT"
+            
+        current_battle = dna.get("battle_status", "")
+        
+        is_market_hours = now.time() >= now.replace(hour=9, minute=15, second=0).time() and now.time() <= now.replace(hour=15, minute=30, second=0).time()
+        
+        should_alert = False
+        reason = ""
+        
+        if is_market_hours:
+            if last_alert_time is None:
+                should_alert = True
+                reason = "Initial session update"
+            elif (now - last_alert_time).total_seconds() >= 900:  # 15 mins
+                should_alert = True
+                reason = "Periodic market update"
+            elif current_side != last_side:
+                should_alert = True
+                reason = f"Wind direction trend shift: {last_side} ➔ {current_side}"
+            elif current_battle != last_battle and any(b in current_battle for b in ["🚨", "🚀"]):
+                should_alert = True
+                reason = f"Breakout alert: {current_battle}"
+                
+        if should_alert:
+            try:
+                from gvn_telegram_engine import TelegramAlertManager
+                import os
+                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                
+                tg.alert_wind(
+                    symbol=symbol,
+                    wind_dir=wind_state,
+                    call_pct=call_pct,
+                    put_pct=put_pct,
+                    support=max_pe_strike,
+                    resistance=max_ce_strike,
+                    battle_status=current_battle,
+                    ce_vol=ce_vol,
+                    pe_vol=pe_vol,
+                    pcr=pcr,
+                    smart_money=dna["smart_money_status"],
+                    trend_type=dna["wind_engine"]["trend_type"]
+                )
+                
+                shared_data.last_wind_alert_time[symbol] = now
+                shared_data.last_wind_direction_side[symbol] = current_side
+                shared_data.last_battle_status[symbol] = current_battle
+                
+                logger.info(f"🌪️ [WIND ALERT SENT] Sent Telegram wind alert for {symbol} due to: {reason}")
+            except Exception as tg_err:
+                logger.error(f"Error sending Telegram wind alert: {tg_err}")
     
     options_count = len(records.get("data", []))
     with open("nse_status.log", "a") as f:

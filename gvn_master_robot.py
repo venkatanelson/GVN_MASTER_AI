@@ -67,6 +67,45 @@ class GVNMasterRobot:
                         symbol = strike['symbol']
                         ltp = strike.get('ltp', 0)
                         delta = strike.get('delta', 0)
+                        option_type = strike.get('option_type', '')
+
+                        # 🌟 GVN SPECIAL: Index 9:15 Candle Closing Bias Filter 🌟
+                        benchmark = shared_data.gvn_915_benchmark.get(index_name)
+                        if benchmark and benchmark.get("captured") and benchmark.get("date") == datetime.datetime.now().strftime("%Y-%m-%d"):
+                            high_915 = benchmark.get("high", 0)
+                            low_915 = benchmark.get("low", 0)
+                            close_915 = benchmark.get("close", 0)
+                            
+                            # Calculate index GVN levels
+                            index_levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915, close_915)
+                            if index_levels and "i5" in index_levels and close_915 > 0:
+                                i5_level = index_levels["i5"]
+                                if close_915 >= i5_level:
+                                    market_bias = "CE"
+                                    bias_reason = f"Index 9:15 close ({close_915}) >= i5 level ({i5_level}) -> CALL SIDE BIAS"
+                                else:
+                                    market_bias = "PE"
+                                    bias_reason = f"Index 9:15 close ({close_915}) < i5 level ({i5_level}) -> PUT SIDE BIAS"
+                                
+                                # Log bias observation to AI memory if not logged yet for today
+                                if not hasattr(shared_data, "logged_today_bias") or shared_data.logged_today_bias != benchmark.get("date"):
+                                    observation = {
+                                        "timestamp": datetime.datetime.now().isoformat(),
+                                        "index": index_name,
+                                        "high_915": high_915,
+                                        "low_915": low_915,
+                                        "close_915": close_915,
+                                        "i5_level": i5_level,
+                                        "bias": market_bias,
+                                        "reason": bias_reason
+                                    }
+                                    shared_data.append_ai_memory(observation)
+                                    shared_data.logged_today_bias = benchmark.get("date")
+                                    logger.info(f"🧠 [AI MEMORY] Saved today's bias: {bias_reason}")
+                                
+                                # Apply filter: block opposite side trades
+                                if option_type != market_bias:
+                                    continue
                         
                         # 2. Get GVN Master Levels (5m 9:15 base)
                         levels = self.strike_level_cache.get(symbol)
