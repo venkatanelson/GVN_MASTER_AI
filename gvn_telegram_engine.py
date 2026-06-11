@@ -136,15 +136,34 @@ class AlertTemplates:
 """
     
     @staticmethod
-    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type):
+    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False):
         """Wind Direction and Option Chain DNA Alert"""
         # Determine dominant side emoji
         side_emoji = "🟢" if "UP" in wind_dir or "SHORT" in wind_dir or "SLOW UP" in wind_dir else ("🔴" if "DOWN" in wind_dir or "LONG" in wind_dir or "SLOW DOWN" in wind_dir else "⚖️")
         
+        expiry_header = ""
+        symbol_str = symbol
+        if is_expiry:
+            expiry_header = "🚨 <b>EXPIRY SPECIAL STRATEGY ACTIVE</b> 🚨\n"
+            symbol_str = f"{symbol} (EXPIRY DAY)"
+            
+        import shared_data
+        active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+        
+        algo_mode_str = "📊 DEMO/PAPER"
+        try:
+            from app import app, User
+            with app.app_context():
+                user = User.query.filter_by(username="Venkat").first() or User.query.get(1)
+                if user:
+                    algo_mode_str = "🟢 REAL/LIVE" if (user.user_type == 'LIVE' and user.is_approved) else "📊 DEMO/PAPER"
+        except Exception:
+            pass
+
         return f"""
 🌪️ <b>GVN AI WIND & MARKET DNA UPDATE</b> 🌪️
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 <b>Symbol:</b> {symbol}
+{expiry_header}━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>Symbol:</b> {symbol_str}
 {side_emoji} <b>Wind Direction:</b> {wind_dir}
 ⚡ <b>Wind Strength:</b>
   • 🟢 <b>Call Side (Bullish):</b> {call_pct}%
@@ -164,6 +183,9 @@ class AlertTemplates:
 {smart_money}
 
 📈 <b>Trend Zone:</b> {trend_type}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️ <b>Algo Mode:</b> {algo_mode_str}
+🎯 <b>Trade Symbol:</b> {active_sym} (Trades execute only on this symbol)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ Sent at: {datetime.now().strftime('%H:%M:%S')}
 """
@@ -339,7 +361,7 @@ class TelegramAlertManager:
         self.bot.send_message(msg)
         self.alert_history.append({"type": "SENTIMENT", "data": sentiment_analysis, "time": datetime.now()})
     
-    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type):
+    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False):
         """Send Wind and Market DNA alert"""
         if not self.should_send_alert("WIND", symbol):
             return
@@ -356,7 +378,8 @@ class TelegramAlertManager:
             pe_vol=pe_vol,
             pcr=pcr,
             smart_money=smart_money,
-            trend_type=trend_type
+            trend_type=trend_type,
+            is_expiry=is_expiry
         )
         
         self.bot.send_message(msg)

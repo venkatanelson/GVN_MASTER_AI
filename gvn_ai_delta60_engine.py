@@ -413,8 +413,8 @@ class GVNAiDelta60Engine:
                 if is_i5_triggered and is_idx_i5_touched:
                     triggered_level_name = "I5"
                     entry_level_val = i5_val
-                    # Target is i2 on expiry day, else i3
-                    target_lvl_name = "i2" if is_exp else "i3"
+                    # Target is i3 (same as normal days)
+                    target_lvl_name = "i3"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
                     sl_val = round(i5_val - 12.0, 2)
                     
@@ -429,8 +429,8 @@ class GVNAiDelta60Engine:
                 if is_i6_triggered and is_idx_i6_touched:
                     triggered_level_name = "I6"
                     entry_level_val = i6_val
-                    # Target is i3 on expiry day, else i5
-                    target_lvl_name = "i3" if is_exp else "i5"
+                    # Target is i5 (same as normal days)
+                    target_lvl_name = "i5"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
                     sl_val = round(i6_val - 12.0, 2)
                     
@@ -445,14 +445,14 @@ class GVNAiDelta60Engine:
                 if is_i7_triggered and is_idx_i7_touched:
                     triggered_level_name = "I7"
                     entry_level_val = i7_val
-                    # Target is i5 on expiry day, else i6
-                    target_lvl_name = "i5" if is_exp else "i6"
+                    # Target is i6 (same as normal days)
+                    target_lvl_name = "i6"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
                     sl_val = round(i7_val - 12.0, 2)
                     
             if triggered_level_name:
                 is_allowed = True
-                pref_level_val = levels["i1"] if is_exp else levels["i5"]
+                pref_level_val = levels["i5"] # Always i5 preference (same as normal days)
                 pref_key = f"{key}_pref_traded"
                 
                 # Force first morning entry to be near preference level

@@ -2390,9 +2390,9 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     shared_data.market_pulse["priority"] = f"PCR: {shared_data.market_pulse['pcr']}"
 
     # 🌪️ GVN TELEGRAM WIND ALERT TRIGGER
-    # Trigger alert only for the active dashboard symbol
+    # Trigger alert for the active dashboard symbol or on its expiry day
     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-    if symbol == active_sym:
+    if symbol == active_sym or is_expiry_day:
         now = datetime.now()
         
         # Initialize tracking variables on first run if needed
@@ -2453,7 +2453,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     pe_vol=pe_vol,
                     pcr=pcr,
                     smart_money=dna["smart_money_status"],
-                    trend_type=dna["wind_engine"]["trend_type"]
+                    trend_type=dna["wind_engine"]["trend_type"],
+                    is_expiry=is_expiry_day
                 )
                 
                 shared_data.last_wind_alert_time[symbol] = now
@@ -2769,20 +2770,26 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                             
                                     new_sl = last_tgt - 12.0 # Strict 12-point Stop Loss
                                     
-                                    shared_data.demo_trade = {
-                                        "active": True,
-                                        "symbol": full_sym,
-                                        "entry_price": ltp,
-                                        "target": new_tgt,
-                                        "sl": new_sl,
-                                        "qty": 50 if symbol == "NIFTY" else 15
-                                    }
-                                    
-                                    # Reset pullback flag for this strike
-                                    shared_data.target_pullback_flags[full_sym] = False
-                                    
-                                    logger.info(f"🔄 [GVN RE-ENTRY] {full_sym} re-entered at {ltp:.2f} (Target={new_tgt:.2f}, SL={new_sl:.2f})")
-                                    execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"GVN Re-entry near {last_tgt:.2f}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        shared_data.demo_trade = {
+                                            "active": True,
+                                            "symbol": full_sym,
+                                            "entry_price": ltp,
+                                            "target": new_tgt,
+                                            "sl": new_sl,
+                                            "qty": 50 if symbol == "NIFTY" else 15
+                                        }
+                                        
+                                        # Reset pullback flag for this strike
+                                        shared_data.target_pullback_flags[full_sym] = False
+                                        
+                                        logger.info(f"🔄 [GVN RE-ENTRY] {full_sym} re-entered at {ltp:.2f} (Target={new_tgt:.2f}, SL={new_sl:.2f})")
+                                        execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"GVN Re-entry near {last_tgt:.2f}")
+                                    else:
+                                        # Reset pullback flag anyway
+                                        shared_data.target_pullback_flags[full_sym] = False
+                                        logger.info(f"🔇 [TRADE MUTED] Muted GVN re-entry trade for {full_sym} because active dashboard symbol is {active_sym}")
                                     
                                     try:
                                         from gvn_telegram_engine import TelegramAlertManager
@@ -2979,28 +2986,32 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     manual_sl = round(i7_val - 12.0, 2)
                                     
                             if triggered_level_name:
-                                shared_data.demo_trade = {
-                                    "active": True,
-                                    "symbol": full_sym,
-                                    "entry_price": ltp,
-                                    "target": manual_tgt,
-                                    "sl": manual_sl,
-                                    "qty": 50 if symbol == "NIFTY" else 15
-                                }
-                                execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"Touch Entry near {triggered_level_name.upper()}")
-                                
-                                try:
-                                    from gvn_telegram_engine import TelegramAlertManager
-                                    tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                    
-                                    tg.alert_entry({
-                                        "symbol": full_sym, 
-                                        "entry_price": ltp, 
-                                        "target": manual_tgt, 
+                                active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                if symbol == active_sym:
+                                    shared_data.demo_trade = {
+                                        "active": True,
+                                        "symbol": full_sym,
+                                        "entry_price": ltp,
+                                        "target": manual_tgt,
                                         "sl": manual_sl,
-                                        "level": triggered_level_name.upper()
-                                    })
-                                except: pass
+                                        "qty": 50 if symbol == "NIFTY" else 15
+                                    }
+                                    execute_live_trade_for_active_users(full_sym, "BUY", ltp, f"Touch Entry near {triggered_level_name.upper()}")
+                                    
+                                    try:
+                                        from gvn_telegram_engine import TelegramAlertManager
+                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                        
+                                        tg.alert_entry({
+                                            "symbol": full_sym, 
+                                            "entry_price": ltp, 
+                                            "target": manual_tgt, 
+                                            "sl": manual_sl,
+                                            "level": triggered_level_name.upper()
+                                        })
+                                    except: pass
+                                else:
+                                    logger.info(f"🔇 [TRADE MUTED] Muted standard touch entry for {full_sym} because active dashboard symbol is {active_sym}")
                 
                 # ---- DEFAULT MOMENTUM LOGIC (For Non-Authorized Strikes) ----
                 # Disabled to enforce strict, institutional level-to-level discipline on Authorized Tracks
@@ -3207,22 +3218,26 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     is_wind_aligned = False
                                     
                                 if abs(ltp - bottom_level) <= 3.0 and is_wind_aligned:
-                                    existing_item["status"] = "ACTIVE"
-                                    existing_item["entry_price"] = round(ltp, 2)
-                                    existing_item["sl"] = round(ltp - 12.0, 2)
-                                    
-                                    # Execute automated BUY order
-                                    execute_live_trade_for_active_users(contract_key, "BUY", ltp, f"GVN Z2H entry near {bottom_level:.2f}")
-                                    
-                                    # Send Telegram entry alert
-                                    msg_text = f"🚀 <b>[GVN ZERO-TO-HERO ACTIVE]</b> 🚀\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Entry Price:</b> ₹{ltp:.2f}\n🎯 <b>T1 (i7):</b> ₹{target1:.2f}\n🎯 <b>T2 (i6):</b> ₹{target2:.2f}\n🎯 <b>T3 (i5):</b> ₹{target3:.2f}\n⛔ <b>SL:</b> ₹{ltp - 12.0:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
-                                    logger.info(f"🚀 [Z2H ENTRY TRIGGERED] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        existing_item["status"] = "ACTIVE"
+                                        existing_item["entry_price"] = round(ltp, 2)
+                                        existing_item["sl"] = round(ltp - 12.0, 2)
+                                        
+                                        # Execute automated BUY order
+                                        execute_live_trade_for_active_users(contract_key, "BUY", ltp, f"GVN Z2H entry near {bottom_level:.2f}")
+                                        
+                                        # Send Telegram entry alert
+                                        msg_text = f"🚀 <b>[GVN ZERO-TO-HERO ACTIVE]</b> 🚀\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Entry Price:</b> ₹{ltp:.2f}\n🎯 <b>T1 (i7):</b> ₹{target1:.2f}\n🎯 <b>T2 (i6):</b> ₹{target2:.2f}\n🎯 <b>T3 (i5):</b> ₹{target3:.2f}\n⛔ <b>SL:</b> ₹{ltp - 12.0:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
+                                        logger.info(f"🚀 [Z2H ENTRY TRIGGERED] {contract_key} at {ltp}")
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    else:
+                                        logger.info(f"🔇 [TRADE MUTED] Muted Z2H entry for {contract_key} because active dashboard symbol is {active_sym}")
                                         
                             elif status == "ACTIVE":
                                 sl_level = existing_item["sl"]
@@ -3232,23 +3247,27 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                                         
                                 elif ltp >= target1:
                                     existing_item["status"] = "T1 HIT"
                                     msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T1 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 1:</b> ₹{target1:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🎯 [Z2H T1 HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                                         
                             elif status == "T1 HIT":
                                 sl_level = existing_item["sl"]
@@ -3258,23 +3277,27 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                                         
                                 elif ltp >= target2:
                                     existing_item["status"] = "T2 HIT"
                                     msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T2 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 2:</b> ₹{target2:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🎯 [Z2H T2 HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                                         
                             elif status == "T2 HIT":
                                 sl_level = existing_item["sl"]
@@ -3284,12 +3307,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                                         
                                 elif ltp >= target3:
                                     existing_item["status"] = "T3 HIT"
@@ -3297,12 +3322,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                                     msg_text = f"🏆 <b>[GVN ZERO-TO-HERO T3 HIT - TARGET MET]</b> 🏆\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Gain:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🏆 [Z2H T3 HIT] {contract_key} at {ltp}")
-                                    try:
-                                        from gvn_telegram_engine import TelegramAlertManager
-                                        tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
-                                        tg.bot.send_message(msg_text)
-                                    except Exception as te:
-                                        logger.error(f"Failed to send Z2H Telegram alert: {te}")
+                                    active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+                                    if symbol == active_sym:
+                                        try:
+                                            from gvn_telegram_engine import TelegramAlertManager
+                                            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                                            tg.bot.send_message(msg_text)
+                                        except Exception as te:
+                                            logger.error(f"Failed to send Z2H Telegram alert: {te}")
                 
                 # Index-based Bias (for context)
                 index_levels = {}

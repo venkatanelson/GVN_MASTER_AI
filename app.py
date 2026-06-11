@@ -1111,8 +1111,34 @@ def bypass_levels():
 def set_active_symbol():
     """Sets the active dashboard symbol in shared memory"""
     symbol = request.args.get('symbol', 'NIFTY').upper()
+    old_symbol = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
     shared_data.active_dashboard_symbol = symbol
     print(f"🔄 Active dashboard symbol updated to: {symbol}")
+    
+    # Send Telegram notification if the symbol is switched
+    if symbol != old_symbol:
+        try:
+            # Query the database to find Venkat or user 1
+            user = User.query.filter_by(username="Venkat").first() or User.query.get(1)
+            if user:
+                from datetime import datetime
+                from gvn_telegram_engine import TelegramAlertManager
+                import os
+                tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                mode_str = "🟢 REAL/LIVE MODE" if (user.user_type == 'LIVE' and user.is_approved) else "📊 DEMO/PAPER MODE"
+                msg = (
+                    f"🔄 <b>[GVN ACTIVE SYMBOL SWITCHED]</b> 🔄\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🎯 <b>Active Symbol:</b> {symbol}\n"
+                    f"⚙️ <b>Trading Mode:</b> {mode_str}\n"
+                    f"🤖 <b>Algo Status:</b> {user.algo_status}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⏰ Sent at: {datetime.now().strftime('%H:%M:%S')}"
+                )
+                tg.bot.send_message(msg)
+        except Exception as e:
+            print(f"Error sending symbol switch telegram alert: {e}")
+            
     return jsonify({"status": "success", "active_symbol": symbol})
 
 @app.route('/api/gvn-scanner')
@@ -1285,6 +1311,29 @@ def toggle_algo(user_id):
         user.algo_status = "ON" if user.algo_status == "OFF" else "OFF"
         db.session.commit()
         shared_data.market_pulse["algo_status"] = user.algo_status
+        
+        # Send Telegram notification about status toggle
+        try:
+            from datetime import datetime
+            from gvn_telegram_engine import TelegramAlertManager
+            import os
+            tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+            mode_str = "🟢 REAL/LIVE MODE" if (user.user_type == 'LIVE' and user.is_approved) else "📊 DEMO/PAPER MODE"
+            active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+            msg = (
+                f"🤖 <b>[GVN ALGO TOGGLED]</b> 🤖\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 <b>User:</b> {user.username}\n"
+                f"⚡ <b>Algo Status:</b> {user.algo_status}\n"
+                f"⚙️ <b>Trading Mode:</b> {mode_str}\n"
+                f"🎯 <b>Selected Symbol:</b> {active_sym}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"⏰ Sent at: {datetime.now().strftime('%H:%M:%S')}"
+            )
+            tg.bot.send_message(msg)
+        except Exception as e:
+            print(f"Error sending toggle telegram alert: {e}")
+            
     return redirect(url_for('user_dashboard', user_id=user_id))
 
 @app.route('/toggle-auto-mode/<int:user_id>')
