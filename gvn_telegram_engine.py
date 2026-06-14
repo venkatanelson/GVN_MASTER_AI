@@ -136,7 +136,7 @@ class AlertTemplates:
 """
     
     @staticmethod
-    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False):
+    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None):
         """Wind Direction and Option Chain DNA Alert"""
         # Determine dominant side emoji
         side_emoji = "🟢" if "UP" in wind_dir or "SHORT" in wind_dir or "SLOW UP" in wind_dir else ("🔴" if "DOWN" in wind_dir or "LONG" in wind_dir or "SLOW DOWN" in wind_dir else "⚖️")
@@ -160,6 +160,21 @@ class AlertTemplates:
         except Exception:
             pass
 
+        # Fallback generation for direction details if not provided
+        if direction_details is None:
+            wind_dir_upper = str(wind_dir).upper()
+            direction_val = "UP 🟢" if any(w in wind_dir_upper for w in ["UP", "SHORT", "SLOW UP"]) else ("DOWN 🔴" if any(w in wind_dir_upper for w in ["DOWN", "LONG", "SLOW DOWN"]) else "SIDEWAYS / NEUTRAL 🟡")
+            oi_growth_val = "Put Writing (PE) is increasing more 🟢" if "UP" in direction_val else ("Call Writing (CE) is increasing more 🔴" if "DOWN" in direction_val else "Balanced ⚖️")
+            strength_val = "Bulls (Put Writers) are gaining strength 💪" if "UP" in direction_val else ("Bears (Call Writers) are gaining strength 💪" if "DOWN" in direction_val else "Balanced / Neutral ⚖️")
+            sr_val = "Support is increasing 🟢" if "UP" in direction_val else ("Resistance is increasing 🔴" if "DOWN" in direction_val else "Both Support & Resistance are decreasing ⚖️")
+            
+            direction_details = {
+                "direction": direction_val,
+                "oi_growth": oi_growth_val,
+                "strength_side": strength_val,
+                "sr_movement": sr_val
+            }
+
         return f"""
 🌪️ <b>GVN AI WIND & MARKET DNA UPDATE</b> 🌪️
 {expiry_header}━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -181,6 +196,12 @@ class AlertTemplates:
 
 🧠 <b>Smart Money Status:</b>
 {smart_money}
+
+🧭 <b>Market Direction & Strength (DNA):</b>
+  • 🧭 <b>Wind Direction Mode:</b> {direction_details.get('direction')}
+  • 📈 <b>OI Growth:</b> {direction_details.get('oi_growth')}
+  • 💪 <b>Dominant Strength:</b> {direction_details.get('strength_side')}
+  • 🛡️ <b>S/R Movement:</b> {direction_details.get('sr_movement')}
 
 📈 <b>Trend Zone:</b> {trend_type}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -361,7 +382,7 @@ class TelegramAlertManager:
         self.bot.send_message(msg)
         self.alert_history.append({"type": "SENTIMENT", "data": sentiment_analysis, "time": datetime.now()})
     
-    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False):
+    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None):
         """Send Wind and Market DNA alert"""
         if not self.should_send_alert("WIND", symbol):
             return
@@ -379,7 +400,8 @@ class TelegramAlertManager:
             pcr=pcr,
             smart_money=smart_money,
             trend_type=trend_type,
-            is_expiry=is_expiry
+            is_expiry=is_expiry,
+            direction_details=direction_details
         )
         
         self.bot.send_message(msg)

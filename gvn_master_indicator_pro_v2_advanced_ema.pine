@@ -1,5 +1,5 @@
 //@version=5
-indicator("GVN MASTER Indicator 2026 PRO v2 + Advanced EMA", overlay=true, max_lines_count=500, max_labels_count=500)
+indicator("GVN Master 1 copy", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ==========================================
 // 🌟 MARKET MODE SELECTOR (ONE-CLICK SETUP)
@@ -38,7 +38,7 @@ lbl_opt_gvn0   = input.string("0.1", "Option Mode Gvn=i0 (Bottom) Label", group=
 // =====================
 in_showMainLines = input.bool(false, "Main Market Only (1 Click Show All)", group="Main Lines Settings")
 lineStyleInput = input.string("Solid", "Main Market Lines Style", options=["Solid", "Circles", "Cross", "Step Line"], group="Main Lines Settings")
-mLineStyle = lineStyleInput == "Circles" ? plot.style_circles : lineStyleInput == "Cross" ? plot.style_cross : lineStyleInput == "Step Line" ? plot.style_stepline : plot.style_line
+mLineStyle = lineStyleInput == "Circles" ? plot.style_circles : lineStyleInput == "Cross" ? plot.style_cross : lineStyleInput == "Step Line" ? plot.style_stepline : plot.style_linebr
 
 in_showCP = input.bool(false, "Show CP Level", group="Main Lines Settings")
 in_showBarColor = input.bool(true, "Color Bars (Open=Low / Open=High)", group="Main Lines Settings")
@@ -69,7 +69,14 @@ in_showOverallWind = input.bool(true, "Show Wind in AI Dashboard", group="AI Das
 // 📈 ADVANCED EMA (Raw Inputs & Color Customization)
 // ==========================================
 in_show200EMA = input.bool(true, "Show Advanced 200 EMA", group="200 EMA Settings")
-emaColor = input.color(color.white, "200 EMA Color", group="200 EMA Settings")
+emaColor = input.color(color.black, "200 EMA Color", group="200 EMA Settings")
+
+// ==========================================
+// 🛡️ DYNAMIC ATR-BASED STOP LOSS SETTINGS
+// ==========================================
+in_useDynamicSL = input.bool(true, "Use Dynamic ATR-based Stop Loss", group="Dynamic SL Settings")
+in_atrLength    = input.int(14, "ATR Length for Stop Loss", minval=1, group="Dynamic SL Settings")
+in_atrMult      = input.float(0.7, "ATR Multiplier for Stop Loss", minval=0.1, step=0.1, group="Dynamic SL Settings")
 
 
 // ==========================================
@@ -92,7 +99,7 @@ color_i7     = input.color(color.black, "Gvn=i7 Color", group="GVN & Option Leve
 // VWAP, Hcl, CP Colors
 color_vwap = input.color(color.rgb(137, 35, 233), "VWAP Color", group="Other Indicators Colors")
 color_hcl  = input.color(color.red, "Hcl Color", group="Other Indicators Colors")
-color_cp   = input.color(color.rgb(255, 253, 231), "CP Color", group="Other Indicators Colors")
+color_cp   = input.color(color.black, "CP Color", group="Other Indicators Colors")
 
 
 // ==========================================
@@ -102,16 +109,16 @@ showTable1          = (marketMode == "Main Market") ? false : (marketMode == "Op
 showTable2          = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showTable2
 showTable3          = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showTable3
 
-showSLLabels        = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showSLLabels
+showSLLabels        = in_showSLLabels
 showGVNLabel        = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showGVNLabel
-showFibLabels       = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showFibLabels
-showBuySellConf     = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showBuySellConf
-showAlgoSignals     = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showAlgoSignals
-showMomentumFlashes = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showMomentumFlashes
-showGVNS            = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showGVNS
+showFibLabels       = in_showFibLabels
+showBuySellConf     = in_showBuySellConf
+showAlgoSignals     = in_showAlgoSignals
+showMomentumFlashes = in_showMomentumFlashes
+showGVNS            = in_showGVNS
 
 showMainLines       = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? false : in_showMainLines
-showCP              = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showCP
+showCP              = (marketMode == "Option Market") ? true : in_showCP
 showBarColor        = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showBarColor
 showTradeBoxes      = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showTradeBoxes
 showInstZones       = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showInstZones
@@ -139,12 +146,8 @@ baseMid  = baseDiff / 2
 N1 = baseHigh + baseMid
 N2 = baseLow  + baseMid
 
-plot(showMainLines ? N1 : na, "Main Market 1", color=color_N1, linewidth=2, style=mLineStyle)
-plot(showMainLines ? N2 : na, "Main Market 2", color=color_N2, linewidth=2, style=mLineStyle)
-
 // Center Level
 C1 = (N1 + N2) / 2
-plot(showMainLines ? C1 : na, "Main Market 3", color=color_C1, linewidth=1, style=mLineStyle)
 
 // ==========================================
 // GVN Levels & Setup Mode Calculations
@@ -170,13 +173,32 @@ float i5 = gvn0 + 0.5   * gvnR
 float i6 = gvn0 + 0.382 * gvnR
 float i7 = gvn0 + (isIndexMode ? 0.236 : 0.220) * gvnR
 
-plot(gvn0,   title="Gvn=i0",   color=color.new(color_gvn0, isIndexMode ? 100 : 0), linewidth=1)
-plot(gvn100, title="Gvn=i1",   color=color.new(color_gvn100, isIndexMode ? 100 : 0), linewidth=1)
-plot(i2, "Gvn=i2", color=color.new(color_i2, isIndexMode ? 100 : 0))
-plot(i3, "Gvn=i3", color=color.new(color_i3, isIndexMode ? 100 : 0))
-plot(i5, "Gvn=i5", color=color.new(color_i5, isIndexMode ? 100 : 0), linewidth=1)
-plot(i6, "Gvn=i6", color=color.new(color_i6, isIndexMode ? 100 : 0))
-plot(i7, "Gvn=i7", color=color.new(color_i7, isIndexMode ? 100 : 0))
+// Check if it is the first bar of the day to prevent vertical connecting lines
+isFirstBar = (hour(time) == 9 and minute(time) == 15)
+
+plot_N1 = isFirstBar ? na : N1
+plot_N2 = isFirstBar ? na : N2
+plot_C1 = isFirstBar ? na : C1
+
+plot_gvn0   = isFirstBar ? na : gvn0
+plot_gvn100 = isFirstBar ? na : gvn100
+plot_i2     = isFirstBar ? na : i2
+plot_i3     = isFirstBar ? na : i3
+plot_i5     = isFirstBar ? na : i5
+plot_i6     = isFirstBar ? na : i6
+plot_i7     = isFirstBar ? na : i7
+
+plot(showMainLines ? plot_N1 : na, "Main Market 1", color=color_N1, linewidth=2, style=mLineStyle)
+plot(showMainLines ? plot_N2 : na, "Main Market 2", color=color_N2, linewidth=2, style=mLineStyle)
+plot(showMainLines ? plot_C1 : na, "Main Market 3", color=color_C1, linewidth=1, style=mLineStyle)
+
+plot(plot_gvn0,   title="Gvn=i0",   color=color.new(color_gvn0, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_gvn100, title="Gvn=i1",   color=color.new(color_gvn100, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_i2, "Gvn=i2", color=color.new(color_i2, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i3, "Gvn=i3", color=color.new(color_i3, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i5, "Gvn=i5", color=color.new(color_i5, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_i6, "Gvn=i6", color=color.new(color_i6, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i7, "Gvn=i7", color=color.new(color_i7, isIndexMode ? 100 : 0), style=plot.style_linebr)
 
 // ==========================================
 // SEEDA FIB & EXTENSIONS (Main Market Only)
@@ -227,6 +249,12 @@ var label lb_ext_up = na
 var line ln_ext_dn = na
 var label lb_ext_dn = na
 
+// Split lines variables for Main Index mode (half-half color)
+var line ln_i3_left = na
+var line ln_i3_right = na
+var line ln_i5_left = na
+var line ln_i5_right = na
+
 // Helper function to update a line
 update_line(ln_ref, start_time, end_time, price, line_color, is_dashed, line_width) =>
     line.delete(ln_ref)
@@ -236,15 +264,29 @@ update_line(ln_ref, start_time, end_time, price, line_color, is_dashed, line_wid
         new_ln := line.new(start_time, price, end_time, price, xloc=xloc.bar_time, color=line_color, style=line_style, width=line_width)
     new_ln
 
-// Helper function to update a label (With Left-Side Offset logic for dashed lines)
-update_label(lb_ref, price, ratio_text, line_color, start_time, end_time, label_align, show_label) =>
+// Helper function to update split lines (for left/right halves with different colors/styles)
+update_split_line(ln_ref_left, ln_ref_right, start_time, end_time, price, color_left, is_dashed_left, width_left, color_right, is_dashed_right, width_right) =>
+    line.delete(ln_ref_left)
+    line.delete(ln_ref_right)
+    line new_ln_left = na
+    line new_ln_right = na
+    if not na(price)
+        mid_time = start_time + math.round((end_time - start_time) / 2)
+        style_left = is_dashed_left ? line.style_dashed : line.style_solid
+        style_right = is_dashed_right ? line.style_dashed : line.style_solid
+        new_ln_left := line.new(start_time, price, mid_time, price, xloc=xloc.bar_time, color=color_left, style=style_left, width=width_left)
+        new_ln_right := line.new(mid_time, price, end_time, price, xloc=xloc.bar_time, color=color_right, style=style_right, width=width_right)
+    [new_ln_left, new_ln_right]
+
+// Helper function to update a label (With Left-Side Offset logic for dashed lines and custom text suffixes)
+update_label(lb_ref, price, ratio_text, line_color, start_time, end_time, label_align, show_label, suff_text) =>
     label.delete(lb_ref)
     label new_lb = na
     if not na(price) and show_label
         // Shift left labels 4 hours (14400000 ms) to the left to place them in the overnight gap
         label_x = (label_align == "left") ? (start_time - 14400000) : end_time
         label_style = (label_align == "left") ? label.style_label_right : label.style_label_left
-        new_lb := label.new(label_x, price, ratio_text + " (" + str.tostring(price, "#.##") + ")", xloc=xloc.bar_time, color=color.new(color.white, 100), textcolor=line_color, style=label_style, size=size.small)
+        new_lb := label.new(label_x, price, ratio_text + " (" + str.tostring(price, "#.##") + ")" + suff_text, xloc=xloc.bar_time, color=color.new(color.white, 100), textcolor=line_color, style=label_style, size=size.small)
     new_lb
 
 // Track the 9:15 start time of the latest day
@@ -259,10 +301,12 @@ bool shouldDrawGVN = isIndexMode or (marketMode == "Option Market") or (marketMo
 if shouldDrawGVN and barstate.islast and not na(startT)
     int endT = startT + 22500000 
     
+    // Detect option call vs put
+    isCall = str.contains(syminfo.ticker, "CE") or str.contains(syminfo.ticker, "CALL") or str.contains(syminfo.ticker, "C")
+
     // Resolve dynamic top level label (0.0 for Calls, 0.1 for Puts based on ticker)
     string opt_gvn100_lbl = lbl_opt_gvn100
     if lbl_opt_gvn100 == "Auto"
-        isCall = str.contains(syminfo.ticker, "CE") or str.contains(syminfo.ticker, "CALL") or str.contains(syminfo.ticker, "C")
         opt_gvn100_lbl := isCall ? "0.0" : "0.1"
 
     // GVN Levels & Labels (Solid Lines - Right aligned, close to price scale)
@@ -274,55 +318,134 @@ if shouldDrawGVN and barstate.islast and not na(startT)
     string i7_ratio     = isIndexMode ? "0.236" : lbl_opt_i7
     string gvn0_ratio   = isIndexMode ? "0"     : lbl_opt_gvn0
     
+    // Suffix texts for labels based on market mode
+    string suff_gvn100      = ""
+    string suff_i2          = ""
+    string suff_i3          = ""
+    string suff_i5          = ""
+    string suff_i6          = ""
+    string suff_i7          = ""
+    string suff_gvn0        = ""
+    string suff_seeda_0     = ""
+    string suff_seeda_236   = ""
+    string suff_seeda_382   = ""
+    string suff_seeda_500   = ""
+    string suff_seeda_618   = ""
+    string suff_seeda_786   = ""
+    string suff_seeda_1000  = ""
+    string suff_ext_up      = ""
+    string suff_ext_dn      = ""
+
+    if isIndexMode
+        suff_gvn100      := " put buy expiry day"
+        suff_i2          := " put buy"
+        suff_i3          := " put buy"
+        suff_seeda_500   := " ce buy"
+        suff_seeda_618   := " ce buy"
+        suff_i5          := " put buy"
+        suff_seeda_786   := " ce buy"
+        suff_i6          := " target 1"
+        suff_i7          := " target 2"
+        suff_seeda_236   := " target 2"
+        suff_seeda_382   := " target"
+        suff_seeda_1000  := " ce expiry day buy"
+    else
+        opt_suffix = isCall ? "ce" : "pe"
+        suff_i2          := " target 2"
+        suff_i3          := " target"
+        suff_i5          := " " + opt_suffix + " buy"
+        suff_i6          := " " + opt_suffix + " buy"
+        suff_i7          := " " + opt_suffix + " buy"
+        suff_gvn0        := " " + opt_suffix + " expiry day buy"
+    
     ln_gvn0 := update_line(ln_gvn0, startT, endT, gvn0, color_gvn0, false, 1)
-    lb_gvn0 := update_label(lb_gvn0, gvn0, gvn0_ratio, color_gvn0, startT, endT, "right", showFibLabels)
+    lb_gvn0 := update_label(lb_gvn0, gvn0, gvn0_ratio, color_gvn0, startT, endT, "right", showFibLabels, suff_gvn0)
     
     ln_gvn100 := update_line(ln_gvn100, startT, endT, gvn100, color_gvn100, false, 1)
-    lb_gvn100 := update_label(lb_gvn100, gvn100, gvn100_ratio, color_gvn100, startT, endT, "right", showFibLabels)
+    lb_gvn100 := update_label(lb_gvn100, gvn100, gvn100_ratio, color_gvn100, startT, endT, "right", showFibLabels, suff_gvn100)
     
-    ln_i2 := update_line(ln_i2, startT, endT, i2, color_i2, false, 2)
-    lb_i2 := update_label(lb_i2, i2, i2_ratio, color_i2, startT, endT, "right", showFibLabels)
+    // 0.786 level is Black in Main Index mode
+    color_i2_eff = isIndexMode ? color.black : color_i2
+    ln_i2 := update_line(ln_i2, startT, endT, i2, color_i2_eff, false, 2)
+    lb_i2 := update_label(lb_i2, i2, i2_ratio, color_i2_eff, startT, endT, "right", showFibLabels, suff_i2)
     
-    ln_i3 := update_line(ln_i3, startT, endT, i3, color_i3, false, 2)
-    lb_i3 := update_label(lb_i3, i3, i3_ratio, color_i3, startT, endT, "right", showFibLabels)
-    
-    ln_i5 := update_line(ln_i5, startT, endT, i5, color_i5, false, 2)
-    lb_i5 := update_label(lb_i5, i5, i5_ratio, color_i5, startT, endT, "right", showFibLabels)
+    // i3/seeda_500 split logic (23481.43)
+    if isIndexMode
+        [ln_i3_left_new, ln_i3_right_new] = update_split_line(ln_i3_left, ln_i3_right, startT, endT, i3, color_i5, true, 1, color_i6, false, 2)
+        ln_i3_left := ln_i3_left_new
+        ln_i3_right := ln_i3_right_new
+        line.delete(ln_i3)
+        ln_i3 := na
+        lb_i3 := update_label(lb_i3, i3, i3_ratio, color_i6, startT, endT, "right", showFibLabels, suff_i3)
+    else
+        line.delete(ln_i3_left)
+        line.delete(ln_i3_right)
+        ln_i3_left := na
+        ln_i3_right := na
+        ln_i3 := update_line(ln_i3, startT, endT, i3, color_i3, false, 2)
+        lb_i3 := update_label(lb_i3, i3, i3_ratio, color_i3, startT, endT, "right", showFibLabels, suff_i3)
+        
+    // i5/seeda_618 split logic (23430.48)
+    if isIndexMode
+        [ln_i5_left_new, ln_i5_right_new] = update_split_line(ln_i5_left, ln_i5_right, startT, endT, i5, color_i6, true, 1, color_i5, false, 2)
+        ln_i5_left := ln_i5_left_new
+        ln_i5_right := ln_i5_right_new
+        line.delete(ln_i5)
+        ln_i5 := na
+        lb_i5 := update_label(lb_i5, i5, i5_ratio, color_i5, startT, endT, "right", showFibLabels, suff_i5)
+    else
+        line.delete(ln_i5_left)
+        line.delete(ln_i5_right)
+        ln_i5_left := na
+        ln_i5_right := na
+        ln_i5 := update_line(ln_i5, startT, endT, i5, color_i5, false, 2)
+        lb_i5 := update_label(lb_i5, i5, i5_ratio, color_i5, startT, endT, "right", showFibLabels, suff_i5)
     
     ln_i6 := update_line(ln_i6, startT, endT, i6, color_i6, false, 2)
-    lb_i6 := update_label(lb_i6, i6, i6_ratio, color_i6, startT, endT, "right", showFibLabels)
+    lb_i6 := update_label(lb_i6, i6, i6_ratio, color_i6, startT, endT, "right", showFibLabels, suff_i6)
     
     ln_i7 := update_line(ln_i7, startT, endT, i7, color_i7, false, 2)
-    lb_i7 := update_label(lb_i7, i7, i7_ratio, color_i7, startT, endT, "right", showFibLabels)
+    lb_i7 := update_label(lb_i7, i7, i7_ratio, color_i7, startT, endT, "right", showFibLabels, suff_i7)
     
     // SEEDA Levels & Labels (Dashed Lines - Left aligned, in the overnight gap)
     ln_seeda_0 := update_line(ln_seeda_0, startT, endT, seeda_0, color.gray, true, 1)
-    lb_seeda_0 := update_label(lb_seeda_0, seeda_0, "0", color.gray, startT, endT, "left", showFibLabels)
+    lb_seeda_0 := update_label(lb_seeda_0, seeda_0, "0", color.gray, startT, endT, "left", showFibLabels, suff_seeda_0)
     
     ln_seeda_236 := update_line(ln_seeda_236, startT, endT, seeda_236, #ff9800, true, 1)
-    lb_seeda_236 := update_label(lb_seeda_236, seeda_236, "0.236", #ff9800, startT, endT, "left", showFibLabels)
+    lb_seeda_236 := update_label(lb_seeda_236, seeda_236, "0.236", #ff9800, startT, endT, "left", showFibLabels, suff_seeda_236)
     
     ln_seeda_382 := update_line(ln_seeda_382, startT, endT, seeda_382, #009688, true, 1)
-    lb_seeda_382 := update_label(lb_seeda_382, seeda_382, "0.382", #009688, startT, endT, "left", showFibLabels)
+    lb_seeda_382 := update_label(lb_seeda_382, seeda_382, "0.382", #009688, startT, endT, "left", showFibLabels, suff_seeda_382)
     
-    ln_seeda_500 := update_line(ln_seeda_500, startT, endT, seeda_500, color.green, true, 1)
-    lb_seeda_500 := update_label(lb_seeda_500, seeda_500, "0.5", color.green, startT, endT, "left", showFibLabels)
-    
-    ln_seeda_618 := update_line(ln_seeda_618, startT, endT, seeda_618, color.rgb(0, 150, 136), true, 1)
-    lb_seeda_618 := update_label(lb_seeda_618, seeda_618, "0.618", color.rgb(0, 150, 136), startT, endT, "left", showFibLabels)
-    
-    ln_seeda_786 := update_line(ln_seeda_786, startT, endT, seeda_786, #e91e63, true, 1)
-    lb_seeda_786 := update_label(lb_seeda_786, seeda_786, "0.786", #e91e63, startT, endT, "left", showFibLabels)
+    if isIndexMode
+        line.delete(ln_seeda_500)
+        ln_seeda_500 := na
+        lb_seeda_500 := update_label(lb_seeda_500, i3, "0.5", color_i5, startT, endT, "left", showFibLabels, suff_seeda_500)
+    else
+        ln_seeda_500 := update_line(ln_seeda_500, startT, endT, seeda_500, color.green, true, 1)
+        lb_seeda_500 := update_label(lb_seeda_500, seeda_500, "0.5", color.green, startT, endT, "left", showFibLabels, suff_seeda_500)
+        
+    if isIndexMode
+        line.delete(ln_seeda_618)
+        ln_seeda_618 := na
+        lb_seeda_618 := update_label(lb_seeda_618, i5, "0.618", color_i6, startT, endT, "left", showFibLabels, suff_seeda_618)
+    else
+        ln_seeda_618 := update_line(ln_seeda_618, startT, endT, seeda_618, color.rgb(0, 150, 136), true, 1)
+        lb_seeda_618 := update_label(lb_seeda_618, seeda_618, "0.618", color.rgb(0, 150, 136), startT, endT, "left", showFibLabels, suff_seeda_618)
+        
+    color_seeda_786_eff = isIndexMode ? color.black : #e91e63
+    ln_seeda_786 := update_line(ln_seeda_786, startT, endT, seeda_786, color_seeda_786_eff, true, 1)
+    lb_seeda_786 := update_label(lb_seeda_786, seeda_786, "0.786", color_seeda_786_eff, startT, endT, "left", showFibLabels, suff_seeda_786)
     
     ln_seeda_1000 := update_line(ln_seeda_1000, startT, endT, seeda_1000, color.gray, true, 1)
-    lb_seeda_1000 := update_label(lb_seeda_1000, seeda_1000, "1", color.gray, startT, endT, "left", showFibLabels)
+    lb_seeda_1000 := update_label(lb_seeda_1000, seeda_1000, "1", color.gray, startT, endT, "left", showFibLabels, suff_seeda_1000)
     
     // Extensions (Solid Lines - Right aligned, close to price scale)
     ln_ext_up := update_line(ln_ext_up, startT, endT, ext_up_1618_ulta, color.rgb(33, 150, 243), false, 2)
-    lb_ext_up := update_label(lb_ext_up, ext_up_1618_ulta, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels)
+    lb_ext_up := update_label(lb_ext_up, ext_up_1618_ulta, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels, suff_ext_up)
     
     ln_ext_dn := update_line(ln_ext_dn, startT, endT, ext_dn_1618_seeda, color.rgb(33, 150, 243), false, 2)
-    lb_ext_dn := update_label(lb_ext_dn, ext_dn_1618_seeda, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels)
+    lb_ext_dn := update_label(lb_ext_dn, ext_dn_1618_seeda, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels, suff_ext_dn)
 else if barstate.islast
     // Clear all if Index/Option Mode drawings are disabled
     line.delete(ln_gvn0)
@@ -341,13 +464,21 @@ else if barstate.islast
     lb_i2 := na
     
     line.delete(ln_i3)
+    line.delete(ln_i3_left)
+    line.delete(ln_i3_right)
     label.delete(lb_i3)
     ln_i3 := na
+    ln_i3_left := na
+    ln_i3_right := na
     lb_i3 := na
     
     line.delete(ln_i5)
+    line.delete(ln_i5_left)
+    line.delete(ln_i5_right)
     label.delete(lb_i5)
     ln_i5 := na
+    ln_i5_left := na
+    ln_i5_right := na
     lb_i5 := na
     
     line.delete(ln_i6)
@@ -406,12 +537,18 @@ else if barstate.islast
     lb_ext_dn := na
 
 // ==========================================
+// 🛡️ ATR-based Dynamic Stop Loss Calculation
+// ==========================================
+atrVal = ta.atr(in_atrLength)
+float slOffset = in_useDynamicSL ? (na(atrVal) ? 12.0 : atrVal * in_atrMult) : 12.0
+
+// ==========================================
 // 📈 1st BUY ENTRY calculations
 // ==========================================
 buyEntry = i5
 buyT1    = i3
 buyT2    = i2
-buySL    = buyEntry - 12
+buySL    = buyEntry - slOffset
 
 var bool buyActive = false
 
@@ -433,7 +570,7 @@ if buyActive and (close >= buyT2 or close <= buySL)
 sellEntry = i7
 sellT1    = i6
 sellT2    = i5
-sellSL    = sellEntry - 12
+sellSL    = sellEntry - slOffset
 
 var bool sellActive = false
 
@@ -456,7 +593,7 @@ thirdEntry = gvn0
 thirdT1 = i7
 thirdT2 = i6
 thirdT3 = i5
-thirdSL = thirdEntry - 12
+thirdSL = thirdEntry - slOffset
 
 var bool thirdActive = false
 
@@ -525,7 +662,7 @@ plot(hcl3_52, color=color_hcl, title="Hcl", style=plot.style_stepline, linewidth
 pivotCandle = (high[1] + low[1] + close[1]) / 3
 touchedCandle = high >= pivotCandle and low <= pivotCandle
 colorCandle = touchedCandle ? color.new(color_cp, 100) : color_cp
-plot(showCP ? pivotCandle : na, title="cp", color=colorCandle, linewidth=1)
+plot(showCP ? pivotCandle : na, title="cp", color=colorCandle, linewidth=1, style=plot.style_stepline)
 
 openLowCandle = (open == low)
 openHighCandle = (open == high)
@@ -790,7 +927,7 @@ if showAI and barstate.islast
     aiTable := table.new(aiPosConvert(aiBoxPos), 1, rows_count, border_width=2, border_color=color.black, frame_color=color.black, frame_width=2)
     
     table.cell(aiTable, 0, 0, "🤖 GVN AI ANALYSIS" + mtfDots, bgcolor=color.black, text_color=color.white, text_size=aiFontSize)
-    table.cell(aiTable, 0, 1, "Mode: " + aiMode + "\nVol Ratio: " + str.tostring(volRatio, "#.##"), bgcolor=aiColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 1, "Mode: " + aiMode + "\nVol Ratio: " + str.tostring(volRatio, "#.##") + "\nATR SL: " + str.tostring(slOffset, "#.#"), bgcolor=aiColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
     table.cell(aiTable, 0, 2, "Zone: " + timeZoneStatus, bgcolor=tzColor, text_color=color.white, text_size=aiFontSize, text_halign=text.align_left)
     table.cell(aiTable, 0, 3, "Inst: " + instText, bgcolor=instColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
     table.cell(aiTable, 0, 4, "Flow: " + flowText, bgcolor=flowColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)

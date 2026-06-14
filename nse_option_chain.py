@@ -2362,7 +2362,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         "put_pct": put_pct,
         "smart_money": dna["smart_money_status"],
         "trap_zone": dna["wind_engine"]["trend_type"],
-        "vacuum_detected": "VACUUM" in vacuum_status
+        "vacuum_detected": "VACUUM" in vacuum_status,
+        "wind_direction_only": dna.get("direction_details", {}).get("direction", "SIDEWAYS / NEUTRAL 🟡"),
+        "oi_growth": dna.get("direction_details", {}).get("oi_growth", "Balanced ⚖️"),
+        "strength_side": dna.get("direction_details", {}).get("strength_side", "Balanced ⚖️"),
+        "sr_movement": dna.get("direction_details", {}).get("sr_movement", "Both Support & Resistance are decreasing ⚖️")
     })
     
     # Update global shared state
@@ -2383,6 +2387,10 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         "put_pct": put_pct,
         "smart_money": market_pulse[symbol]["smart_money"],
         "trap_zone": market_pulse[symbol]["trap_zone"],
+        "wind_direction_only": market_pulse[symbol]["wind_direction_only"],
+        "oi_growth": market_pulse[symbol]["oi_growth"],
+        "strength_side": market_pulse[symbol]["strength_side"],
+        "sr_movement": market_pulse[symbol]["sr_movement"],
         "last_updated": datetime.now().strftime("%H:%M:%S")
     })
     
@@ -2454,7 +2462,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                     pcr=pcr,
                     smart_money=dna["smart_money_status"],
                     trend_type=dna["wind_engine"]["trend_type"],
-                    is_expiry=is_expiry_day
+                    is_expiry=is_expiry_day,
+                    direction_details=dna.get("direction_details")
                 )
                 
                 shared_data.last_wind_alert_time[symbol] = now

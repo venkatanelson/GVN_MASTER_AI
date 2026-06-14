@@ -1196,7 +1196,11 @@ def get_gvn_scanner():
             "wind_power": flat_pulse.get("wind_power", "NORMAL"),
             "smart_money": flat_pulse.get("smart_money", "LOW"),
             "trap_zone": flat_pulse.get("trap_zone", "SAFE"),
-            "vacuum_detected": flat_pulse.get("vacuum_detected", False)
+            "vacuum_detected": flat_pulse.get("vacuum_detected", False),
+            "wind_direction_only": flat_pulse.get("wind_direction_only", "SIDEWAYS / NEUTRAL 🟡"),
+            "oi_growth": flat_pulse.get("oi_growth", "Balanced ⚖️"),
+            "strength_side": flat_pulse.get("strength_side", "Balanced ⚖️"),
+            "sr_movement": flat_pulse.get("sr_movement", "Both Support & Resistance are decreasing ⚖️")
         }
         
     return jsonify({

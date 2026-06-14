@@ -345,6 +345,48 @@ class GVNAiWindEngine:
         
         # Battle Zone (Support/Resistance Momentum)
         battle_status = self.analyze_battle_zone(ce_oi, pe_oi, ce_coi, pe_coi)
+
+        # --- DIRECTION DETAILS (DNA EXTRACTION) ---
+        wind_state_upper = wind_data["wind_state"].upper()
+        if any(w in wind_state_upper for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+            direction = "UP 🟢"
+        elif any(w in wind_state_upper for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+            direction = "DOWN 🔴"
+        else:
+            direction = "SIDEWAYS / NEUTRAL 🟡"
+
+        # Compare Change in OI (COI)
+        if pe_coi > ce_coi:
+            oi_growth = "Put Writing (PE) is increasing more 🟢"
+            strength_side = "Bulls (Put Writers) are gaining strength 💪"
+        elif ce_coi > pe_coi:
+            oi_growth = "Call Writing (CE) is increasing more 🔴"
+            strength_side = "Bears (Call Writers) are gaining strength 💪"
+        else:
+            oi_growth = "Call and Put writing increasing equally ⚖️"
+            strength_side = "Balanced / Neutral ⚖️"
+
+        # Support vs Resistance movement based on Change in OI
+        if pe_coi > 0 and ce_coi > 0:
+            if pe_coi > ce_coi:
+                sr_movement = "Support is increasing more than Resistance (Put Writing Dominant) 🟢"
+            elif ce_coi > pe_coi:
+                sr_movement = "Resistance is increasing more than Support (Call Writing Dominant) 🔴"
+            else:
+                sr_movement = "Both Support & Resistance are increasing equally ⚖️"
+        elif pe_coi > 0 and ce_coi <= 0:
+            sr_movement = "Support is increasing 🟢 (Resistance is decreasing/unwinding)"
+        elif ce_coi > 0 and pe_coi <= 0:
+            sr_movement = "Resistance is increasing 🔴 (Support is decreasing/unwinding)"
+        else:
+            sr_movement = "Both Support & Resistance are decreasing (Option Unwinding) ⚖️"
+            
+        direction_details = {
+            "direction": direction,
+            "oi_growth": oi_growth,
+            "strength_side": strength_side,
+            "sr_movement": sr_movement
+        }
  
         return {
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
@@ -352,7 +394,8 @@ class GVNAiWindEngine:
             "smart_money_status": smart_money,
             "price_pattern": pattern,
             "battle_status": battle_status,
-            "insight": f"{pattern} | {battle_status} | {wind_data['flow_status']}"
+            "insight": f"{pattern} | {battle_status} | {wind_data['flow_status']}",
+            "direction_details": direction_details
         }
 
 # --- Quick Test ---
