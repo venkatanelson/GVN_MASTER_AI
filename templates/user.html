@@ -897,6 +897,119 @@
         <div style="text-align: center; margin: 20px 0;">
             <a href="/history" class="btn-premium" style="background: var(--secondary);">📄 Download Full P&L Statement (PDF)</a>
         </div>
+        <!-- 🎙️ GVN AI PREMIUM VOICE ASSISTANT -->
+        <div class="premium-card" style="border-left: 5px solid #a855f7; margin-bottom: 25px; padding: 25px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(15, 23, 42, 0.95)); position: relative; border-radius: 16px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); border: 1px solid rgba(168, 85, 247, 0.2); overflow: hidden; backdrop-filter: blur(12px);">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(8px); z-index: 10; display: flex; align-items: center; justify-content: center;">
+                <div style="text-align: center; background: rgba(30, 41, 59, 0.9); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); max-width: 280px;">
+                    <span style="font-size: 32px;">🔒</span>
+                    <h4 style="color: #fff; margin: 10px 0 5px 0; font-size: 14px;">Voice Assistant Locked</h4>
+                    <p style="color: var(--text-dim); font-size: 11px; margin-bottom: 12px;">Unlock Premium to interact with GVN Voice Brain.</p>
+                    <button onclick="document.getElementById('paymentModal').style.display='flex'" class="btn-premium" style="width: 100%; background: #10b981; font-size: 11px; padding: 6px;">Unlock Now</button>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}" style="position: relative; z-index: 1;">
+                <!-- Glowing Accent -->
+                <div style="position: absolute; top: -50px; right: -50px; width: 120px; height: 120px; background: rgba(168, 85, 247, 0.3); filter: blur(40px); border-radius: 50%;"></div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; position: relative; z-index: 2;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <!-- Animated Mic Icon Container -->
+                        <div id="voice-avatar-container" style="position: relative; width: 50px; height: 50px; border-radius: 50%; background: rgba(168, 85, 247, 0.15); display: flex; align-items: center; justify-content: center; border: 2px solid rgba(168, 85, 247, 0.3); transition: all 0.3s ease;">
+                            <span id="voice-mic-icon" style="font-size: 22px; transition: transform 0.3s ease;">🎙️</span>
+                            <!-- Audio Wave Pulse Waves -->
+                            <div class="voice-wave" style="position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #a855f7; opacity: 0; transform: scale(1); pointer-events: none;"></div>
+                            <div class="voice-wave" style="position: absolute; inset: -8px; border-radius: 50%; border: 2px solid #818cf8; opacity: 0; transform: scale(1); pointer-events: none;"></div>
+                        </div>
+                        <div>
+                            <h4 style="margin: 0; color: #fff; font-size: 18px; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">GVN AI Talking Assistant (వాయిస్ సహాయకుడు)</h4>
+                            <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.4;">Real-time operator trap scanner & GVN level analysis. Ask your doubts in Telugu/English.</p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <!-- Voice Toggle Button -->
+                        <button id="btn-toggle-voice" onclick="toggleVoiceAssistant()" style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; padding: 8px 16px; border-radius: 30px; font-weight: 800; font-size: 12px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.1); display: flex; align-items: center; gap: 8px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444;" id="voice-status-dot"></span>
+                            <span id="voice-toggle-text">Voice: OFF</span>
+                        </button>
+                        <!-- Talk Button -->
+                        <button id="btn-voice-chat" onclick="startVoiceRecognition()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white; padding: 8px 18px; border-radius: 30px; font-weight: 800; font-size: 12px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); display: flex; align-items: center; gap: 6px;" disabled>
+                            <span>🎤 Talk to AI</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Expanding voice options panel -->
+                <div id="voice-assistant-panel" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 20px; display: none; transition: all 0.3s ease;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <label style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;">Voice Engine Speed</label>
+                            <select id="voice-speed" style="background: rgba(15, 23, 42, 0.8); color: white; border-radius: 8px; padding: 8px; font-size: 12px; width: 100%; border: 1px solid rgba(255,255,255,0.1); outline: none; cursor: pointer;">
+                                <option value="0.8">Slow (0.8x)</option>
+                                <option value="1.0" selected>Normal (1.0x)</option>
+                                <option value="1.2">Fast (1.2x)</option>
+                                <option value="1.4">Super Fast (1.4x)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;">Language Mode</label>
+                            <select id="voice-lang" style="background: rgba(15, 23, 42, 0.8); color: white; border-radius: 8px; padding: 8px; font-size: 12px; width: 100%; border: 1px solid rgba(255,255,255,0.1); outline: none; cursor: pointer;">
+                                <option value="te-IN" selected>Telugu (తెలుగు)</option>
+                                <option value="en-US">English</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Waveform Visualizer -->
+                    <div id="voice-waveform" style="display: none; height: 30px; align-items: center; justify-content: center; gap: 4px; margin-bottom: 12px;">
+                        <span class="wave-bar" style="display: block; width: 3px; height: 10px; background: #a855f7; border-radius: 3px; animation: soundwave 1.2s ease-in-out infinite;"></span>
+                        <span class="wave-bar" style="display: block; width: 3px; height: 20px; background: #818cf8; border-radius: 3px; animation: soundwave 0.8s ease-in-out infinite;"></span>
+                        <span class="wave-bar" style="display: block; width: 3px; height: 28px; background: #60a5fa; border-radius: 3px; animation: soundwave 1.1s ease-in-out infinite;"></span>
+                        <span class="wave-bar" style="display: block; width: 3px; height: 16px; background: #818cf8; border-radius: 3px; animation: soundwave 0.7s ease-in-out infinite;"></span>
+                        <span class="wave-bar" style="display: block; width: 3px; height: 8px; background: #a855f7; border-radius: 3px; animation: soundwave 0.9s ease-in-out infinite;"></span>
+                    </div>
+                    
+                    <div style="background: rgba(0, 0, 0, 0.4); padding: 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); font-family: 'Outfit', sans-serif;">
+                        <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 6px; letter-spacing: 0.5px; font-weight: 700; text-transform: uppercase;">Last Spoken Alert / Response:</div>
+                        <div id="voice-log" style="color: #c084fc; font-weight: 800; font-size: 13px; line-height: 1.5; transition: color 0.3s ease;">Assistant ready. Click 'Voice: OFF' to turn it ON.</div>
+                    </div>
+                    
+                    <!-- Sleek Text Chat Input fallback -->
+                    <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center; background: rgba(0,0,0,0.3); padding: 5px 5px 5px 12px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);">
+                        <button onclick="startVoiceRecognition()" id="btn-input-mic" style="background: transparent; border: none; color: #a855f7; font-size: 16px; cursor: pointer; padding: 4px 8px; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center;" title="Talk to AI (1 minute)">
+                            🎙️
+                        </button>
+                        <input id="voice-text-input" type="text" placeholder="మార్కెట్ గురించి ఇక్కడ టైప్ చేసి అడగండి... (Type here and ask...)" style="flex: 1; background: transparent; border: none; outline: none; color: #fff; font-size: 13px; font-family: 'Outfit', sans-serif;" onkeydown="if(event.key === 'Enter') sendTextChatMessage()">
+                        <button onclick="sendTextChatMessage()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; color: white; padding: 8px 18px; border-radius: 20px; font-weight: 800; font-size: 11px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2); display: flex; align-items: center; gap: 4px;">
+                            <span>Ask ➔</span>
+                        </button>
+                    </div>
+
+                    <!-- Insecure Origin Microphone Guide (Shows when accessing via IP on mobile) -->
+                    <div id="mic-ip-warning" style="display: none; margin-top: 15px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 10px; font-size: 11px; color: #fca5a5; line-height: 1.5; font-family: 'Outfit', sans-serif;">
+                        <strong>⚠️ Mobile Mic access:</strong><br>
+                        మొబైల్ IP ద్వారా మైక్ పనిచేయడానికి: Chrome లో <code style="background:rgba(0,0,0,0.5); padding: 2px 4px; border-radius: 3px; color:#fff;">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> ఓపెన్ చేసి, <code id="insecure-ip-display" style="background:rgba(0,0,0,0.5); padding: 2px 4px; border-radius: 3px; color:#fff;">http://192.168...</code> ని 'Enable' లిస్ట్ లో యాడ్ చేయండి.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            @keyframes soundwave {
+                0%, 100% { transform: scaleY(0.3); }
+                50% { transform: scaleY(1); }
+            }
+            .voice-avatar-glow {
+                animation: mic-glow 1.5s ease-in-out infinite alternate !important;
+            }
+            @keyframes mic-glow {
+                0% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.4), inset 0 0 5px rgba(168, 85, 247, 0.2); }
+                100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.8), inset 0 0 10px rgba(168, 85, 247, 0.4); }
+            }
+        </style>
 
         <!-- 🤖 GVN AI MASTER PULSE -->
         <div class="premium-card" style="border-top: 6px solid var(--primary); position: relative;">
@@ -997,6 +1110,135 @@
                         </div>
                     </div>
                 </div>
+
+        <!-- 📊 LIVE INSTITUTIONAL ORDER FLOW ANALYZER -->
+        <div class="premium-card" style="border-left: 5px solid #00c49f; margin-top: 25px; padding: 25px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9)); position: relative;">
+            {% if user.is_locked %}
+            <div style="position: absolute; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 10; border-radius: 16px;"></div>
+            {% endif %}
+            
+            <div class="{% if user.is_locked %}locked-blur{% endif %}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px; margin-bottom: 25px;">
+                    <div>
+                        <h3 style="color: var(--text-dim); font-size: 11px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">📊 Live Institutional Order Flow Analyzer</h3>
+                        <p style="font-size: 14px; color: var(--text-dim); margin: 0; max-width: 700px; line-height: 1.5;">
+                            Aggressive market orders hitting passive limit orders. Imbalance ratios ≥ 3.0x show high-conviction institutional block entries.
+                        </p>
+                    </div>
+                    <span style="font-size: 10px; font-weight: 900; color: #00c49f; border: 1px solid #00c49f; background: rgba(0, 196, 159, 0.1); padding: 4px 12px; border-radius: 50px;">
+                        ● LIVE DEPTH STREAMING
+                    </span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; margin-bottom: 20px;">
+                    <!-- 23900 CE Card -->
+                    <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <span style="font-size: 14px; font-weight: 900; color: #fff; background: rgba(16, 185, 129, 0.15); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">NIFTY 23900 CE (Call)</span>
+                            <span id="uof-ce-ltp" style="font-size: 20px; font-weight: 900; color: var(--secondary);">₹0.00</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 11px; color: var(--text-dim);">
+                            <div>Bid Price: <span id="uof-ce-bid" style="font-weight: bold; color: var(--danger); font-size: 12px;">-</span></div>
+                            <div style="text-align: right;">Ask Price: <span id="uof-ce-ask" style="font-weight: bold; color: var(--secondary); font-size: 12px;">-</span></div>
+                        </div>
+
+                        <!-- Bid/Ask Volume Bar -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; margin-bottom: 6px;">
+                                <span style="color: var(--danger);">Agg Sell (Bid): <span id="uof-ce-sell-label">0</span></span>
+                                <span style="color: var(--secondary);">Agg Buy (Ask): <span id="uof-ce-buy-label">0</span></span>
+                            </div>
+                            <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.05); width: 100%;">
+                                <div id="uof-ce-sell-bar" style="width: 50%; background: var(--danger); transition: width 0.4s ease;"></div>
+                                <div id="uof-ce-buy-bar" style="width: 50%; background: var(--secondary); transition: width 0.4s ease;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Delta Info -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 15px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; color: #fff;">
+                            <div>Tick Delta: <span id="uof-ce-delta" style="font-weight: 900;">0</span></div>
+                            <div>Cumulative Delta: <span id="uof-ce-cumdelta" style="font-weight: 900;">0</span></div>
+                        </div>
+
+                        <!-- Imbalance Alert -->
+                        <div id="uof-ce-imbalance" style="text-align: center; font-size: 11px; font-weight: 900; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.03); color: var(--text-dim); border: 1px solid var(--glass-border);">
+                            Scanning Imbalances...
+                        </div>
+
+                        <!-- Footprint Table -->
+                        <div style="margin-top: 20px;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Recent Ticks</h4>
+                            <table style="width: 100%; font-size: 10px; border-collapse: collapse; text-align: center; color: var(--text-dim);">
+                                <thead>
+                                    <tr style="background: rgba(255,255,255,0.02); color: #fff; border-bottom: 1px solid var(--glass-border);">
+                                        <th style="padding: 6px;">Time</th>
+                                        <th style="padding: 6px;">Price</th>
+                                        <th style="padding: 6px;">Bid (S) | Ask (B)</th>
+                                        <th style="padding: 6px;">Delta</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="uof-ce-footprint">
+                                    <tr><td colspan="4" style="padding: 12px; color: var(--text-dim);">No data received yet</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 24050 PE Card -->
+                    <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <span style="font-size: 14px; font-weight: 900; color: #fff; background: rgba(239, 68, 68, 0.15); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.2);">NIFTY 24050 PE (Put)</span>
+                            <span id="uof-pe-ltp" style="font-size: 20px; font-weight: 900; color: var(--danger);">₹0.00</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 11px; color: var(--text-dim);">
+                            <div>Bid Price: <span id="uof-pe-bid" style="font-weight: bold; color: var(--danger); font-size: 12px;">-</span></div>
+                            <div style="text-align: right;">Ask Price: <span id="uof-pe-ask" style="font-weight: bold; color: var(--secondary); font-size: 12px;">-</span></div>
+                        </div>
+
+                        <!-- Bid/Ask Volume Bar -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; margin-bottom: 6px;">
+                                <span style="color: var(--danger);">Agg Sell (Bid): <span id="uof-pe-sell-label">0</span></span>
+                                <span style="color: var(--secondary);">Agg Buy (Ask): <span id="uof-pe-buy-label">0</span></span>
+                            </div>
+                            <div style="display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.05); width: 100%;">
+                                <div id="uof-pe-sell-bar" style="width: 50%; background: var(--danger); transition: width 0.4s ease;"></div>
+                                <div id="uof-pe-buy-bar" style="width: 50%; background: var(--secondary); transition: width 0.4s ease;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Delta Info -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 15px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px; color: #fff;">
+                            <div>Tick Delta: <span id="uof-pe-delta" style="font-weight: 900;">0</span></div>
+                            <div>Cumulative Delta: <span id="uof-pe-cumdelta" style="font-weight: 900;">0</span></div>
+                        </div>
+
+                        <!-- Imbalance Alert -->
+                        <div id="uof-pe-imbalance" style="text-align: center; font-size: 11px; font-weight: 900; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.03); color: var(--text-dim); border: 1px solid var(--glass-border);">
+                            Scanning Imbalances...
+                        </div>
+
+                        <!-- Footprint Table -->
+                        <div style="margin-top: 20px;">
+                            <h4 style="margin: 0 0 10px 0; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Recent Ticks</h4>
+                            <table style="width: 100%; font-size: 10px; border-collapse: collapse; text-align: center; color: var(--text-dim);">
+                                <thead>
+                                    <tr style="background: rgba(255,255,255,0.02); color: #fff; border-bottom: 1px solid var(--glass-border);">
+                                        <th style="padding: 6px;">Time</th>
+                                        <th style="padding: 6px;">Price</th>
+                                        <th style="padding: 6px;">Bid (S) | Ask (B)</th>
+                                        <th style="padding: 6px;">Delta</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="uof-pe-footprint">
+                                    <tr><td colspan="4" style="padding: 12px; color: var(--text-dim);">No data received yet</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
                 <!-- 🧠 14-STRIKE ALPHA GRID TABLE -->
                 <div style="overflow-x: auto; background: rgba(0,0,0,0.3); border-radius: 16px; border: 1px solid var(--glass-border);">
@@ -1712,8 +1954,525 @@
 
         setInterval(updateScanner, 5000);
         setInterval(updateLivePnL, 3000);
+
+        function updateOrderFlow() {
+            fetch('/api/order-flow')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || !data.strikes) return;
+                    
+                    // CE Data
+                    const ce = data.strikes['23900 CE'];
+                    if (ce) {
+                        const ltpEl = document.getElementById('uof-ce-ltp');
+                        if (ltpEl) ltpEl.innerText = '₹' + ce.ltp.toFixed(2);
+                        
+                        const bidEl = document.getElementById('uof-ce-bid');
+                        if (bidEl) bidEl.innerText = '₹' + ce.bid_price.toFixed(2);
+                        
+                        const askEl = document.getElementById('uof-ce-ask');
+                        if (askEl) askEl.innerText = '₹' + ce.ask_price.toFixed(2);
+                        
+                        const sellLbl = document.getElementById('uof-ce-sell-label');
+                        if (sellLbl) sellLbl.innerText = ce.tick_sell_vol;
+                        
+                        const buyLbl = document.getElementById('uof-ce-buy-label');
+                        if (buyLbl) buyLbl.innerText = ce.tick_buy_vol;
+                        
+                        const total_ce_tick_vol = ce.tick_sell_vol + ce.tick_buy_vol;
+                        const ce_sell_pct = total_ce_tick_vol > 0 ? (ce.tick_sell_vol / total_ce_tick_vol) * 100 : 50;
+                        const ce_buy_pct = total_ce_tick_vol > 0 ? (ce.tick_buy_vol / total_ce_tick_vol) * 100 : 50;
+                        
+                        const sellBar = document.getElementById('uof-ce-sell-bar');
+                        if (sellBar) sellBar.style.width = ce_sell_pct + '%';
+                        
+                        const buyBar = document.getElementById('uof-ce-buy-bar');
+                        if (buyBar) buyBar.style.width = ce_buy_pct + '%';
+                        
+                        const ce_delta_el = document.getElementById('uof-ce-delta');
+                        if (ce_delta_el) {
+                            ce_delta_el.innerText = (ce.delta > 0 ? '+' : '') + ce.delta;
+                            ce_delta_el.style.color = ce.delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                        }
+                        
+                        const ce_cum_el = document.getElementById('uof-ce-cumdelta');
+                        if (ce_cum_el) {
+                            ce_cum_el.innerText = (ce.cum_delta > 0 ? '+' : '') + ce.cum_delta;
+                            ce_cum_el.style.color = ce.cum_delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                        }
+                        
+                        const ce_imb_el = document.getElementById('uof-ce-imbalance');
+                        if (ce_imb_el) {
+                            if (ce.imbalance === 'BULLISH_BUY_IMBALANCE') {
+                                ce_imb_el.innerHTML = '🚀 BULLISH BUY IMBALANCE: ' + ce.imbalance_ratio + 'x';
+                                ce_imb_el.style.background = 'rgba(16, 185, 129, 0.1)';
+                                ce_imb_el.style.color = 'var(--secondary)';
+                                ce_imb_el.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                            } else if (ce.imbalance === 'BEARISH_SELL_IMBALANCE') {
+                                ce_imb_el.innerHTML = '⚠️ BEARISH SELL IMBALANCE: ' + ce.imbalance_ratio + 'x';
+                                ce_imb_el.style.background = 'rgba(239, 68, 68, 0.1)';
+                                ce_imb_el.style.color = 'var(--danger)';
+                                ce_imb_el.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                            } else {
+                                ce_imb_el.innerHTML = 'Balanced Order Flow (Neutral)';
+                                ce_imb_el.style.background = 'rgba(255,255,255,0.02)';
+                                ce_imb_el.style.color = 'var(--text-dim)';
+                                ce_imb_el.style.border = '1px solid var(--glass-border)';
+                            }
+                        }
+                        
+                        // History table
+                        const footprintBody = document.getElementById('uof-ce-footprint');
+                        if (footprintBody && ce.history && ce.history.length > 0) {
+                            let html = '';
+                            ce.history.slice().reverse().forEach(row => {
+                                const row_delta_color = row.delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                                const row_imb_bg = row.imbalance === 'BULLISH_BUY_IMBALANCE' ? 'background: rgba(16, 185, 129, 0.08); font-weight: bold; color: var(--secondary);' : 
+                                                   (row.imbalance === 'BEARISH_SELL_IMBALANCE' ? 'background: rgba(239, 68, 68, 0.08); font-weight: bold; color: var(--danger);' : '');
+                                html += `<tr style="${row_imb_bg}">
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border);">${row.time}</td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border); font-weight: bold; color: #fff;">₹${row.ltp.toFixed(2)}</td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border);">
+                                        <span style="color: var(--danger);">${row.bid_vol}</span> | <span style="color: var(--secondary);">${row.ask_vol}</span>
+                                    </td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border); color: ${row_delta_color}; font-weight: bold;">
+                                        ${(row.delta > 0 ? '+' : '') + row.delta}
+                                    </td>
+                                </tr>`;
+                            });
+                            footprintBody.innerHTML = html;
+                        }
+                    }
+                    
+                    // PE Data
+                    const pe = data.strikes['24050 PE'];
+                    if (pe) {
+                        const ltpEl = document.getElementById('uof-pe-ltp');
+                        if (ltpEl) ltpEl.innerText = '₹' + pe.ltp.toFixed(2);
+                        
+                        const bidEl = document.getElementById('uof-pe-bid');
+                        if (bidEl) bidEl.innerText = '₹' + pe.bid_price.toFixed(2);
+                        
+                        const askEl = document.getElementById('uof-pe-ask');
+                        if (askEl) askEl.innerText = '₹' + pe.ask_price.toFixed(2);
+                        
+                        const sellLbl = document.getElementById('uof-pe-sell-label');
+                        if (sellLbl) sellLbl.innerText = pe.tick_sell_vol;
+                        
+                        const buyLbl = document.getElementById('uof-pe-buy-label');
+                        if (buyLbl) buyLbl.innerText = pe.tick_buy_vol;
+                        
+                        const total_pe_tick_vol = pe.tick_sell_vol + pe.tick_buy_vol;
+                        const pe_sell_pct = total_pe_tick_vol > 0 ? (pe.tick_sell_vol / total_pe_tick_vol) * 100 : 50;
+                        const pe_buy_pct = total_pe_tick_vol > 0 ? (pe.tick_buy_vol / total_pe_tick_vol) * 100 : 50;
+                        
+                        const sellBar = document.getElementById('uof-pe-sell-bar');
+                        if (sellBar) sellBar.style.width = pe_sell_pct + '%';
+                        
+                        const buyBar = document.getElementById('uof-pe-buy-bar');
+                        if (buyBar) buyBar.style.width = pe_buy_pct + '%';
+                        
+                        const pe_delta_el = document.getElementById('uof-pe-delta');
+                        if (pe_delta_el) {
+                            pe_delta_el.innerText = (pe.delta > 0 ? '+' : '') + pe.delta;
+                            pe_delta_el.style.color = pe.delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                        }
+                        
+                        const pe_cum_el = document.getElementById('uof-pe-cumdelta');
+                        if (pe_cum_el) {
+                            pe_cum_el.innerText = (pe.cum_delta > 0 ? '+' : '') + pe.cum_delta;
+                            pe_cum_el.style.color = pe.cum_delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                        }
+                        
+                        const pe_imb_el = document.getElementById('uof-pe-imbalance');
+                        if (pe_imb_el) {
+                            if (pe.imbalance === 'BULLISH_BUY_IMBALANCE') {
+                                pe_imb_el.innerHTML = '🚀 BULLISH BUY IMBALANCE: ' + pe.imbalance_ratio + 'x';
+                                pe_imb_el.style.background = 'rgba(16, 185, 129, 0.1)';
+                                pe_imb_el.style.color = 'var(--secondary)';
+                                pe_imb_el.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                            } else if (pe.imbalance === 'BEARISH_SELL_IMBALANCE') {
+                                pe_imb_el.innerHTML = '⚠️ BEARISH SELL IMBALANCE: ' + pe.imbalance_ratio + 'x';
+                                pe_imb_el.style.background = 'rgba(239, 68, 68, 0.1)';
+                                pe_imb_el.style.color = 'var(--danger)';
+                                pe_imb_el.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                            } else {
+                                pe_imb_el.innerHTML = 'Balanced Order Flow (Neutral)';
+                                pe_imb_el.style.background = 'rgba(255,255,255,0.02)';
+                                pe_imb_el.style.color = 'var(--text-dim)';
+                                pe_imb_el.style.border = '1px solid var(--glass-border)';
+                            }
+                        }
+                        
+                        // History table
+                        const footprintBody = document.getElementById('uof-pe-footprint');
+                        if (footprintBody && pe.history && pe.history.length > 0) {
+                            let html = '';
+                            pe.history.slice().reverse().forEach(row => {
+                                const row_delta_color = row.delta >= 0 ? 'var(--secondary)' : 'var(--danger)';
+                                const row_imb_bg = row.imbalance === 'BULLISH_BUY_IMBALANCE' ? 'background: rgba(16, 185, 129, 0.08); font-weight: bold; color: var(--secondary);' : 
+                                                   (row.imbalance === 'BEARISH_SELL_IMBALANCE' ? 'background: rgba(239, 68, 68, 0.08); font-weight: bold; color: var(--danger);' : '');
+                                html += `<tr style="${row_imb_bg}">
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border);">${row.time}</td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border); font-weight: bold; color: #fff;">₹${row.ltp.toFixed(2)}</td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border);">
+                                        <span style="color: var(--danger);">${row.bid_vol}</span> | <span style="color: var(--secondary);">${row.ask_vol}</span>
+                                    </td>
+                                    <td style="padding: 6px; border-bottom: 1px solid var(--glass-border); color: ${row_delta_color}; font-weight: bold;">
+                                        ${(row.delta > 0 ? '+' : '') + row.delta}
+                                    </td>
+                                </tr>`;
+                            });
+                            footprintBody.innerHTML = html;
+                        }
+                    }
+                });
+        }
+        updateOrderFlow();
+        setInterval(updateOrderFlow, 1500);
+        setInterval(updateScanner, 5000);
+        setInterval(updateLivePnL, 3000);
         updateScanner();
         
+        // 🎙️ GVN AI PREMIUM VOICE ASSISTANT SPEECH ENGINE
+        let voiceAssistantActive = false;
+        let speechQueue = [];
+        let isSpeaking = false;
+        let lastSpokenText = "";
+        let recognitionInstance = null;
+        let recognitionTimer = null;
+        let isListening = false;
+
+        function formatLogText(text) {
+            if (!text) return "";
+            let formatted = text;
+            // Highlight Support with Green
+            formatted = formatted.replace(/(సపోర్ట్|Support|support)/gi, '<span style="color: #10b981; font-weight: 800; text-shadow: 0 0 5px rgba(16,185,129,0.3);">$1</span>');
+            // Highlight Resistance with Red
+            formatted = formatted.replace(/(రెసిస్టెన్స్|Resistance|resistance)/gi, '<span style="color: #f87171; font-weight: 800; text-shadow: 0 0 5px rgba(248,113,113,0.3);">$1</span>');
+            return formatted;
+        }
+
+        function sendTextChatMessage() {
+            const inputEl = document.getElementById('voice-text-input');
+            const userText = inputEl.value.trim();
+            if (!userText) return;
+            
+            inputEl.value = '';
+            
+            const logEl = document.getElementById('voice-log');
+            logEl.innerHTML = `You: "${formatLogText(userText)}"`;
+            
+            if (!voiceAssistantActive) {
+                toggleVoiceAssistant();
+            }
+            
+            fetch('/api/ai-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: userText })
+            })
+            .then(res => res.json())
+            .then(data => {
+                speakAlert(data.reply);
+            })
+            .catch(err => {
+                speakAlert("సార్, సర్వర్ లోడింగ్ లో సాంకేతిక లోపం వచ్చింది.");
+            });
+        }
+
+        function toggleVoiceAssistant() {
+            voiceAssistantActive = !voiceAssistantActive;
+            const btn = document.getElementById('btn-toggle-voice');
+            const toggleText = document.getElementById('voice-toggle-text');
+            const dot = document.getElementById('voice-status-dot');
+            const panel = document.getElementById('voice-assistant-panel');
+            const chatBtn = document.getElementById('btn-voice-chat');
+            const avatar = document.getElementById('voice-avatar-container');
+            
+            if (voiceAssistantActive) {
+                // UI Activated State
+                btn.style.background = "rgba(16, 185, 129, 0.15)";
+                btn.style.borderColor = "rgba(16, 185, 129, 0.4)";
+                btn.style.color = "#10b981";
+                toggleText.innerText = "Voice: ON";
+                dot.style.background = "#10b981";
+                dot.style.boxShadow = "0 0 10px #10b981";
+                
+                panel.style.display = "block";
+                chatBtn.disabled = false;
+                avatar.classList.add('voice-avatar-glow');
+                
+                // Welcome Speech
+                speakAlert("వోయిస్ అసిస్టెంట్ ఆన్ చేయబడింది. నమస్తే సార్, నేను మీ GVN మార్కెట్ సహాయకుడిని. చెప్పండి సార్, ఈరోజు మార్కెట్ గురించి మీకు ఎలాంటి సమాచారం కావాలి?");
+            } else {
+                // UI Deactivated State
+                btn.style.background = "rgba(168, 85, 247, 0.15)";
+                btn.style.borderColor = "rgba(168, 85, 247, 0.4)";
+                btn.style.color = "#c084fc";
+                toggleText.innerText = "Voice: OFF";
+                dot.style.background = "#ef4444";
+                dot.style.boxShadow = "0 0 8px #ef4444";
+                
+                panel.style.display = "none";
+                chatBtn.disabled = true;
+                avatar.classList.remove('voice-avatar-glow');
+                
+                // Cancel active speech
+                window.speechSynthesis.cancel();
+                speechQueue = [];
+                isSpeaking = false;
+                if (recognitionInstance) {
+                    recognitionInstance.stop();
+                }
+            }
+        }
+
+        function speakAlert(text) {
+            if (!voiceAssistantActive) return;
+            if (text === lastSpokenText) return;
+            lastSpokenText = text;
+            
+            // Clean up emojis and weird symbols from text to speed up speech synthesis
+            const cleanText = text.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "");
+            
+            document.getElementById('voice-log').innerHTML = formatLogText(text);
+            speechQueue.push(cleanText);
+            processSpeechQueue();
+        }
+
+        function processSpeechQueue() {
+            if (isSpeaking || speechQueue.length === 0) return;
+            
+            isSpeaking = true;
+            let text = speechQueue.shift();
+            let utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = parseFloat(document.getElementById('voice-speed').value) || 1.0;
+            
+            const langVal = document.getElementById('voice-lang').value;
+            utterance.lang = langVal;
+            
+            let voices = window.speechSynthesis.getVoices();
+            let matchingVoice = null;
+            if (langVal.includes("te")) {
+                // Prioritize pleasant female Telugu voices
+                matchingVoice = voices.find(v => v.lang.includes("te") && (
+                    v.name.includes("Google") || 
+                    v.name.includes("Swara") || 
+                    v.name.includes("Heera") || 
+                    v.name.includes("female") || 
+                    v.name.includes("Female") ||
+                    v.name.includes("Microsoft")
+                ));
+                if (!matchingVoice) {
+                    matchingVoice = voices.find(v => v.lang.includes("te"));
+                }
+            } else {
+                // Prioritize female English voices
+                matchingVoice = voices.find(v => v.lang.includes(langVal) && (
+                    v.name.includes("Zira") || 
+                    v.name.includes("Google US English") || 
+                    v.name.includes("female") || 
+                    v.name.includes("Female") || 
+                    v.name.includes("Samantha") ||
+                    v.name.includes("Hazel")
+                ));
+                if (!matchingVoice) {
+                    matchingVoice = voices.find(v => v.lang.includes(langVal));
+                }
+            }
+            
+            if (matchingVoice) {
+                utterance.voice = matchingVoice;
+            }
+            
+            utterance.onstart = function() {
+                document.getElementById('voice-avatar-container').style.borderColor = "#60a5fa";
+            };
+            
+            utterance.onend = function() {
+                isSpeaking = false;
+                document.getElementById('voice-avatar-container').style.borderColor = voiceAssistantActive ? "rgba(16, 185, 129, 0.4)" : "rgba(168, 85, 247, 0.3)";
+                setTimeout(processSpeechQueue, 300);
+            };
+            
+            utterance.onerror = function() {
+                isSpeaking = false;
+                document.getElementById('voice-avatar-container').style.borderColor = voiceAssistantActive ? "rgba(16, 185, 129, 0.4)" : "rgba(168, 85, 247, 0.3)";
+                setTimeout(processSpeechQueue, 300);
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function startVoiceRecognition() {
+            if (isListening) {
+                if (recognitionInstance) {
+                    recognitionInstance.stop();
+                }
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
+                return;
+            }
+            
+            window.speechSynthesis.cancel();
+            isSpeaking = false;
+            isListening = true;
+            
+            const recognition = new SpeechRecognition();
+            recognitionInstance = recognition;
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            recognition.accumulatedText = "";
+            
+            const langVal = document.getElementById('voice-lang').value;
+            recognition.lang = langVal;
+            
+            const logEl = document.getElementById('voice-log');
+            const waveform = document.getElementById('voice-waveform');
+            const talkBtn = document.getElementById('btn-voice-chat');
+            const micIcon = document.getElementById('voice-mic-icon');
+            const inputMic = document.getElementById('btn-input-mic');
+            
+            let secondsLeft = 60;
+            
+            recognition.onstart = function() {
+                logEl.innerHTML = `Listening... (${secondsLeft}s remaining)`;
+                waveform.style.display = "flex";
+                talkBtn.innerHTML = `<span>🛑 Stop (${secondsLeft}s)</span>`;
+                talkBtn.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
+                if (micIcon) micIcon.innerText = "🌀";
+                if (inputMic) {
+                    inputMic.innerText = "🌀";
+                    inputMic.style.color = "#ef4444";
+                }
+                
+                recognitionTimer = setInterval(() => {
+                    secondsLeft--;
+                    if (secondsLeft <= 0) {
+                        clearInterval(recognitionTimer);
+                        recognition.stop();
+                    } else {
+                        logEl.innerHTML = `Listening... (${secondsLeft}s remaining)`;
+                        talkBtn.innerHTML = `<span>🛑 Stop (${secondsLeft}s)</span>`;
+                    }
+                }, 1000);
+            };
+            
+            recognition.onend = function() {
+                isListening = false;
+                if (recognitionTimer) clearInterval(recognitionTimer);
+                waveform.style.display = "none";
+                talkBtn.innerHTML = "<span>🎤 Talk to AI</span>";
+                talkBtn.style.background = "linear-gradient(135deg, #3b82f6, #2563eb)";
+                if (micIcon) micIcon.innerText = "🎙️";
+                if (inputMic) {
+                    inputMic.innerText = "🎙️";
+                    inputMic.style.color = "#a855f7";
+                }
+                
+                const textToSend = recognition.accumulatedText.trim();
+                if (textToSend) {
+                    fetch('/api/ai-chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: textToSend })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        speakAlert(data.reply);
+                    })
+                    .catch(err => {
+                        speakAlert("సార్, సర్వర్ లోడింగ్ లో సాంకేతిక లోపం వచ్చింది.");
+                    });
+                }
+            };
+            
+            recognition.onresult = function(event) {
+                let finalTranscript = "";
+                let interimTranscript = "";
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + " ";
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                const combined = (finalTranscript + interimTranscript).trim();
+                if (combined) {
+                    logEl.innerHTML = `You (speaking...): "${formatLogText(combined)}"`;
+                    recognition.accumulatedText = combined;
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                isListening = false;
+                if (recognitionTimer) clearInterval(recognitionTimer);
+                if (event.error === 'not-allowed') {
+                    logEl.innerHTML = `<span style="color:#fca5a5;">🎤 Microphone Blocked! Browser URL బార్ లోని లాక్/మైక్ ఐకాన్ క్లిక్ చేసి 'Allow' చేయండి. (గమనిక: HTTP ఐపి ప్రసారాల కొరకు క్రింది గైడ్ చూడండి).</span>`;
+                    alert("⚠️ మైక్రోఫోన్ బ్లాక్ చేయబడింది!\n\nబ్రౌజర్ అడ్రస్ బార్‌లోని 'లాక్' (🔒) లేదా 'మైక్' బటన్ క్లిక్ చేసి మైక్రోఫోన్ అనుమతించండి (Allow Microphone).");
+                } else {
+                    logEl.innerHTML = `<span style="color:#fca5a5;">Error: ${event.error}</span>`;
+                }
+                waveform.style.display = "none";
+            };
+            
+            recognition.start();
+        }
+
+        function checkMarketForVoiceAlerts(data) {
+            if (!voiceAssistantActive || !data) return;
+            
+            const activeSymbol = currentActiveIndex || 'NIFTY';
+            const pulse = data.market_pulse && data.market_pulse[activeSymbol];
+            if (!pulse) return;
+            
+            if (pulse.pcr < 0.6) {
+                speakAlert(`సార్, ${activeSymbol} పిసిఆర్ చాలా నెగటివ్ గా ఉంది. పుట్ బై ఇంబా బ్యాలెన్స్ అయ్యే అవకాశం ఉంది.`);
+            } else if (pulse.pcr > 1.6) {
+                speakAlert(`సార్, ${activeSymbol} పిసిఆర్ చాలా బుల్లిష్ గా ఉంది. కాల్ రైటర్లు కవర్ చేసుకుంటున్నారు.`);
+            }
+            
+            if (pulse.trap_zone === "DANGER" || pulse.trap_zone === "TRAP") {
+                speakAlert(`హెచ్చరిక సార్! ${activeSymbol} ప్రస్తుతం ట్రాప్ జోన్ లో ఉంది. ఆపరేటర్లు ఇరువైపులా ప్రీమియంలు తింటున్నారు.`);
+            }
+            
+            if (data.alpha_grid && data.alpha_grid.length > 0) {
+                const activeCE = data.alpha_grid.find(x => x.strike && x.strike.includes("CE"));
+                const activePE = data.alpha_grid.find(x => x.strike && x.strike.includes("PE"));
+                
+                if (activeCE && activeCE.imbalance === "BULLISH_BUY_IMBALANCE" && activeCE.imbalance_ratio >= 3.0) {
+                    speakAlert(`సార్, కాల్ ఆప్షన్ లో ఇన్స్టిట్యూషనల్ బయింగ్ వచ్చింది. రిస్క్ SL లెవెల్ 12 పాయింట్లుగా ఉంచండి.`);
+                } else if (activePE && activePE.imbalance === "BEARISH_SELL_IMBALANCE" && activePE.imbalance_ratio >= 3.0) {
+                    speakAlert(`సార్, పుట్ ఆప్షన్ లో సెల్లింగ్ ఇంబాలెన్స్ కనిపించింది. రివర్సల్ పాయింట్స్ చెక్ చేయండి.`);
+                }
+            }
+        }
+
+        // Hook checkMarketForVoiceAlerts into updateScanner
+        const originalUpdateScanner = updateScanner;
+        updateScanner = function() {
+            fetch('/api/gvn-scanner?symbol=' + currentActiveIndex)
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    if (voiceAssistantActive) {
+                        checkMarketForVoiceAlerts(data);
+                    }
+                }
+            });
+            originalUpdateScanner();
+        };
+
+        window.speechSynthesis.onvoiceschanged = function() {
+            window.speechSynthesis.getVoices();
+        };
+
         // Initial Chart Load
         setTimeout(() => changeTVSymbol(currentActiveIndex), 2000);
     </script>
@@ -1898,6 +2657,18 @@
                 alert(`🎬 Playback for ${symbol} started at ${speed}x speed! Check console/scanner.`);
             }
         }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const isSecure = window.location.protocol === 'https:';
+            if (!isLocal && !isSecure) {
+                const warningEl = document.getElementById('mic-ip-warning');
+                if (warningEl) {
+                    warningEl.style.display = 'block';
+                    document.getElementById('insecure-ip-display').innerText = `${window.location.protocol}//${window.location.host}`;
+                }
+            }
+        });
     </script>
     <!-- 🛡️ GVN SCREENSHOT PROTECTION & KEY LOCK SHIELD -->
     {% if not is_bypassed %}

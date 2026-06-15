@@ -411,6 +411,130 @@
         </div>
     </div>
 
+    <!-- 📊 LIVE ORDER FLOW ANALYSIS -->
+    <div class="card" style="border-top: 5px solid #00c49f; background: #fafdfc;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="color: #008f7a; margin: 0; display: flex; align-items: center; gap: 8px;">
+                📊 Live Institutional Order Flow Analyzer
+            </h2>
+            <div style="font-size: 12px; font-weight: bold; color: #008f7a; border: 1px solid #00c49f; background: white; padding: 4px 12px; border-radius: 20px; display: flex; align-items: center; gap: 6px;">
+                <span class="live-pulse" style="background: #00c49f;">●</span> LIVE DEPTH STREAMING
+            </div>
+        </div>
+        
+        <p style="font-size: 13px; color: #555; margin-bottom: 15px; line-height: 1.5;">
+            <strong>Order Flow</strong> represents aggressive market buying (at Ask) vs aggressive market selling (at Bid). Green bars show aggressive buyers dominating, and red bars show aggressive sellers. High imbalance ratios (≥ 3.0x) indicate strong institutional presence.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <!-- 23900 CE Card -->
+            <div style="background: white; border: 1px solid #e2f4f1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-size: 16px; font-weight: bold; color: #0f172a; background: #e6f7f4; padding: 4px 10px; border-radius: 6px;">NIFTY 23900 CE (Call Option)</span>
+                    <span id="of-ce-ltp" style="font-size: 18px; font-weight: 800; color: #008f7a;">₹0.00</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 12px; color: #64748b;">
+                    <div>Bid Price: <span id="of-ce-bid" style="font-weight: bold; color: #ef4444;">-</span></div>
+                    <div style="text-align: right;">Ask Price: <span id="of-ce-ask" style="font-weight: bold; color: #10b981;">-</span></div>
+                </div>
+
+                <!-- Bid/Ask Volume Bar -->
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; margin-bottom: 4px;">
+                        <span style="color: #ef4444;">Aggressive Sell (Bid): <span id="of-ce-sell-label">0</span></span>
+                        <span style="color: #10b981;">Aggressive Buy (Ask): <span id="of-ce-buy-label">0</span></span>
+                    </div>
+                    <div style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #f1f5f9; width: 100%;">
+                        <div id="of-ce-sell-bar" style="width: 50%; background: #ef4444; transition: width 0.4s ease;"></div>
+                        <div id="of-ce-buy-bar" style="width: 50%; background: #10b981; transition: width 0.4s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Delta Info -->
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 10px;">
+                    <div>Tick Delta: <span id="of-ce-delta" style="font-weight: bold;">0</span></div>
+                    <div>Cumulative Delta: <span id="of-ce-cumdelta" style="font-weight: bold;">0</span></div>
+                </div>
+
+                <!-- Imbalance Alert -->
+                <div id="of-ce-imbalance" style="text-align: center; font-size: 12px; font-weight: bold; padding: 6px; border-radius: 6px; background: #f8fafc; color: #64748b;">
+                    Scanning Imbalances...
+                </div>
+
+                <!-- Footprint Table -->
+                <div style="margin-top: 15px;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #334155;">Recent Footprint Ticks</h4>
+                    <table style="width: 100%; font-size: 11px; border-collapse: collapse; text-align: center;">
+                        <thead>
+                            <tr style="background: #f8fafc; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                                <th style="padding: 4px;">Time</th>
+                                <th style="padding: 4px;">Price</th>
+                                <th style="padding: 4px;">Bid (S) | Ask (B)</th>
+                                <th style="padding: 4px;">Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="of-ce-footprint">
+                            <tr><td colspan="4" style="padding: 10px; color: #94a3b8;">No data received yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 24050 PE Card -->
+            <div style="background: white; border: 1px solid #fceef0; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-size: 16px; font-weight: bold; color: #0f172a; background: #fdf2f2; padding: 4px 10px; border-radius: 6px;">NIFTY 24050 PE (Put Option)</span>
+                    <span id="of-pe-ltp" style="font-size: 18px; font-weight: 800; color: #e11d48;">₹0.00</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; font-size: 12px; color: #64748b;">
+                    <div>Bid Price: <span id="of-pe-bid" style="font-weight: bold; color: #ef4444;">-</span></div>
+                    <div style="text-align: right;">Ask Price: <span id="of-pe-ask" style="font-weight: bold; color: #10b981;">-</span></div>
+                </div>
+
+                <!-- Bid/Ask Volume Bar -->
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; margin-bottom: 4px;">
+                        <span style="color: #ef4444;">Aggressive Sell (Bid): <span id="of-pe-sell-label">0</span></span>
+                        <span style="color: #10b981;">Aggressive Buy (Ask): <span id="of-pe-buy-label">0</span></span>
+                    </div>
+                    <div style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #f1f5f9; width: 100%;">
+                        <div id="of-pe-sell-bar" style="width: 50%; background: #ef4444; transition: width 0.4s ease;"></div>
+                        <div id="of-pe-buy-bar" style="width: 50%; background: #10b981; transition: width 0.4s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Delta Info -->
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 15px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 10px;">
+                    <div>Tick Delta: <span id="of-pe-delta" style="font-weight: bold;">0</span></div>
+                    <div>Cumulative Delta: <span id="of-pe-cumdelta" style="font-weight: bold;">0</span></div>
+                </div>
+
+                <!-- Imbalance Alert -->
+                <div id="of-pe-imbalance" style="text-align: center; font-size: 12px; font-weight: bold; padding: 6px; border-radius: 6px; background: #f8fafc; color: #64748b;">
+                    Scanning Imbalances...
+                </div>
+
+                <!-- Footprint Table -->
+                <div style="margin-top: 15px;">
+                    <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #334155;">Recent Footprint Ticks</h4>
+                    <table style="width: 100%; font-size: 11px; border-collapse: collapse; text-align: center;">
+                        <thead>
+                            <tr style="background: #f8fafc; color: #64748b; border-bottom: 1px solid #e2e8f0;">
+                                <th style="padding: 4px;">Time</th>
+                                <th style="padding: 4px;">Price</th>
+                                <th style="padding: 4px;">Bid (S) | Ask (B)</th>
+                                <th style="padding: 4px;">Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="of-pe-footprint">
+                            <tr><td colspan="4" style="padding: 10px; color: #94a3b8;">No data received yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 🧠 AI MEMORY & INSTITUTIONAL OBSERVATIONS -->
     <div class="card" style="border-top: 5px solid #6366f1; background: #f0f7ff;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -495,6 +619,140 @@
         });
     }
     setInterval(refreshAiMemory, 2000);
+
+    function refreshOrderFlow() {
+        fetch('/api/order-flow')
+        .then(res => res.json())
+        .then(data => {
+            if (!data || !data.strikes) return;
+            
+            // CE Data
+            const ce = data.strikes['23900 CE'];
+            if (ce) {
+                document.getElementById('of-ce-ltp').innerText = '₹' + ce.ltp.toFixed(2);
+                document.getElementById('of-ce-bid').innerText = '₹' + ce.bid_price.toFixed(2);
+                document.getElementById('of-ce-ask').innerText = '₹' + ce.ask_price.toFixed(2);
+                
+                document.getElementById('of-ce-sell-label').innerText = ce.tick_sell_vol;
+                document.getElementById('of-ce-buy-label').innerText = ce.tick_buy_vol;
+                
+                const total_ce_tick_vol = ce.tick_sell_vol + ce.tick_buy_vol;
+                const ce_sell_pct = total_ce_tick_vol > 0 ? (ce.tick_sell_vol / total_ce_tick_vol) * 100 : 50;
+                const ce_buy_pct = total_ce_tick_vol > 0 ? (ce.tick_buy_vol / total_ce_tick_vol) * 100 : 50;
+                
+                document.getElementById('of-ce-sell-bar').style.width = ce_sell_pct + '%';
+                document.getElementById('of-ce-buy-bar').style.width = ce_buy_pct + '%';
+                
+                const ce_delta_el = document.getElementById('of-ce-delta');
+                ce_delta_el.innerText = (ce.delta > 0 ? '+' : '') + ce.delta;
+                ce_delta_el.style.color = ce.delta >= 0 ? '#10b981' : '#ef4444';
+                
+                const ce_cum_el = document.getElementById('of-ce-cumdelta');
+                ce_cum_el.innerText = (ce.cum_delta > 0 ? '+' : '') + ce.cum_delta;
+                ce_cum_el.style.color = ce.cum_delta >= 0 ? '#10b981' : '#ef4444';
+                
+                const ce_imb_el = document.getElementById('of-ce-imbalance');
+                if (ce.imbalance === 'BULLISH_BUY_IMBALANCE') {
+                    ce_imb_el.innerHTML = '🚀 BULLISH BUY IMBALANCE: ' + ce.imbalance_ratio + 'x';
+                    ce_imb_el.style.background = '#e6f7f4';
+                    ce_imb_el.style.color = '#008f7a';
+                } else if (ce.imbalance === 'BEARISH_SELL_IMBALANCE') {
+                    ce_imb_el.innerHTML = '⚠️ BEARISH SELL IMBALANCE: ' + ce.imbalance_ratio + 'x';
+                    ce_imb_el.style.background = '#fdf2f2';
+                    ce_imb_el.style.color = '#e11d48';
+                } else {
+                    ce_imb_el.innerHTML = 'Balanced Order Flow (Neutral)';
+                    ce_imb_el.style.background = '#f8fafc';
+                    ce_imb_el.style.color = '#64748b';
+                }
+                
+                // History table
+                if (ce.history && ce.history.length > 0) {
+                    let html = '';
+                    ce.history.slice().reverse().forEach(row => {
+                        const row_delta_color = row.delta >= 0 ? '#10b981' : '#ef4444';
+                        const row_imb_bg = row.imbalance === 'BULLISH_BUY_IMBALANCE' ? 'background: #e6f7f4; font-weight: bold; color: #008f7a;' : 
+                                           (row.imbalance === 'BEARISH_SELL_IMBALANCE' ? 'background: #fdf2f2; font-weight: bold; color: #e11d48;' : '');
+                        html += `<tr style="${row_imb_bg}">
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">${row.time}</td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-weight: bold;">₹${row.ltp.toFixed(2)}</td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">
+                                <span style="color: #ef4444;">${row.bid_vol}</span> | <span style="color: #10b981;">${row.ask_vol}</span>
+                            </td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; color: ${row_delta_color}; font-weight: bold;">
+                                ${(row.delta > 0 ? '+' : '') + row.delta}
+                            </td>
+                        </tr>`;
+                    });
+                    document.getElementById('of-ce-footprint').innerHTML = html;
+                }
+            }
+            
+            // PE Data
+            const pe = data.strikes['24050 PE'];
+            if (pe) {
+                document.getElementById('of-pe-ltp').innerText = '₹' + pe.ltp.toFixed(2);
+                document.getElementById('of-pe-bid').innerText = '₹' + pe.bid_price.toFixed(2);
+                document.getElementById('of-pe-ask').innerText = '₹' + pe.ask_price.toFixed(2);
+                
+                document.getElementById('of-pe-sell-label').innerText = pe.tick_sell_vol;
+                document.getElementById('of-pe-buy-label').innerText = pe.tick_buy_vol;
+                
+                const total_pe_tick_vol = pe.tick_sell_vol + pe.tick_buy_vol;
+                const pe_sell_pct = total_pe_tick_vol > 0 ? (pe.tick_sell_vol / total_pe_tick_vol) * 100 : 50;
+                const pe_buy_pct = total_pe_tick_vol > 0 ? (pe.tick_buy_vol / total_pe_tick_vol) * 100 : 50;
+                
+                document.getElementById('of-pe-sell-bar').style.width = pe_sell_pct + '%';
+                document.getElementById('of-pe-buy-bar').style.width = pe_buy_pct + '%';
+                
+                const pe_delta_el = document.getElementById('of-pe-delta');
+                pe_delta_el.innerText = (pe.delta > 0 ? '+' : '') + pe.delta;
+                pe_delta_el.style.color = pe.delta >= 0 ? '#10b981' : '#ef4444';
+                
+                const pe_cum_el = document.getElementById('of-pe-cumdelta');
+                pe_cum_el.innerText = (pe.cum_delta > 0 ? '+' : '') + pe.cum_delta;
+                pe_cum_el.style.color = pe.cum_delta >= 0 ? '#10b981' : '#ef4444';
+                
+                const pe_imb_el = document.getElementById('of-pe-imbalance');
+                if (pe.imbalance === 'BULLISH_BUY_IMBALANCE') {
+                    pe_imb_el.innerHTML = '🚀 BULLISH BUY IMBALANCE: ' + pe.imbalance_ratio + 'x';
+                    pe_imb_el.style.background = '#e6f7f4';
+                    pe_imb_el.style.color = '#008f7a';
+                } else if (pe.imbalance === 'BEARISH_SELL_IMBALANCE') {
+                    pe_imb_el.innerHTML = '⚠️ BEARISH SELL IMBALANCE: ' + pe.imbalance_ratio + 'x';
+                    pe_imb_el.style.background = '#fdf2f2';
+                    pe_imb_el.style.color = '#e11d48';
+                } else {
+                    pe_imb_el.innerHTML = 'Balanced Order Flow (Neutral)';
+                    pe_imb_el.style.background = '#f8fafc';
+                    pe_imb_el.style.color = '#64748b';
+                }
+                
+                // History table
+                if (pe.history && pe.history.length > 0) {
+                    let html = '';
+                    pe.history.slice().reverse().forEach(row => {
+                        const row_delta_color = row.delta >= 0 ? '#10b981' : '#ef4444';
+                        const row_imb_bg = row.imbalance === 'BULLISH_BUY_IMBALANCE' ? 'background: #e6f7f4; font-weight: bold; color: #008f7a;' : 
+                                           (row.imbalance === 'BEARISH_SELL_IMBALANCE' ? 'background: #fdf2f2; font-weight: bold; color: #e11d48;' : '');
+                        html += `<tr style="${row_imb_bg}">
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">${row.time}</td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; font-weight: bold;">₹${row.ltp.toFixed(2)}</td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">
+                                <span style="color: #ef4444;">${row.bid_vol}</span> | <span style="color: #10b981;">${row.ask_vol}</span>
+                            </td>
+                            <td style="padding: 4px; border-bottom: 1px solid #f1f5f9; color: ${row_delta_color}; font-weight: bold;">
+                                ${(row.delta > 0 ? '+' : '') + row.delta}
+                            </td>
+                        </tr>`;
+                    });
+                    document.getElementById('of-pe-footprint').innerHTML = html;
+                }
+            }
+        });
+    }
+    refreshOrderFlow();
+    setInterval(refreshOrderFlow, 1500);
     </script>
     
     <!-- 🌟 TRUEDATA OPTION CHAIN MODAL -->

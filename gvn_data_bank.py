@@ -49,6 +49,14 @@ def init_db():
             underlying_value FLOAT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ai_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            role TEXT,
+            message TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
     logger.info("✅ GVN Data Bank initialized.")
@@ -222,5 +230,56 @@ def get_latest_wind_status(symbol):
         logger.error(f"❌ Error fetching latest wind status: {e}")
     return None
 
+def save_ai_message(role, message):
+    """Saves a message in the rolling AI memory"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute('''
+            INSERT INTO ai_memory (timestamp, role, message)
+            VALUES (?, ?, ?)
+        ''', (ts, role, message))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"❌ Error saving AI message: {e}")
+
+def get_ai_history(limit=30):
+    """Retrieves chat history from SQLite"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # Retrieve latest messages
+        cursor.execute('''
+            SELECT role, message FROM ai_memory
+            ORDER BY timestamp DESC LIMIT ?
+        ''', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        # Return in chronological order
+        return list(reversed(rows))
+    except Exception as e:
+        logger.error(f"❌ Error retrieving AI history: {e}")
+        return []
+
+def purge_old_ai_memory(days=1):
+    """Deletes AI memory records before today's date"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cutoff = datetime.now().strftime('%Y-%m-%d 00:00:00')
+        cursor.execute("DELETE FROM ai_memory WHERE timestamp < ?", (cutoff,))
+        conn.commit()
+        count = cursor.rowcount
+        conn.close()
+        if count > 0:
+            logger.info(f"🧹 AI Memory Purged: Removed {count} messages before today.")
+        return count
+    except Exception as e:
+        logger.error(f"❌ Error purging old AI memory: {e}")
+        return 0
+
 if __name__ == "__main__":
     init_db()
+    purge_old_ai_memory()
