@@ -1497,6 +1497,35 @@ def ai_chat():
                     scanner_items = m_data.get("scanner", {}).get(active_symbol, [])
             except:
                 pass
+
+        # Load Delta 60 strikes from morning_locked_strikes.json
+        d60_ce = 0
+        d60_pe = 0
+        try:
+            if os.path.exists("morning_locked_strikes.json"):
+                with open("morning_locked_strikes.json", "r") as f:
+                    lock_data = json.load(f)
+                d60_ce = lock_data.get(active_symbol, {}).get("CE", 0)
+                d60_pe = lock_data.get(active_symbol, {}).get("PE", 0)
+                
+            # If still 0, try fallback (look for any symbol data)
+            if d60_ce == 0 and os.path.exists("morning_locked_strikes.json"):
+                with open("morning_locked_strikes.json", "r") as f:
+                    lock_data = json.load(f)
+                d60_ce = lock_data.get("NIFTY", {}).get("CE", 0)
+                d60_pe = lock_data.get("NIFTY", {}).get("PE", 0)
+        except:
+            pass
+
+        # Smart defaults based on current spot
+        if d60_ce == 0:
+            try:
+                base_strike = round(nifty_spot / 100) * 100
+                d60_ce = int(base_strike)
+                d60_pe = int(base_strike)
+            except:
+                d60_ce = 23800
+                d60_pe = 23800
                 
         # 4. Fetch rolling conversation memory
         chat_history = gvn_data_bank.get_ai_history(8)
@@ -1550,6 +1579,41 @@ def ai_chat():
             extension_target = str(int(strong_resistance) + 50)
         except:
             extension_target = "23950"
+
+        # 3c. High-priority Option Chain specific queries (delta 60, highest OI, gap opening, market direction)
+        if any(x in user_msg_lower for x in ["delta 60", "డెల్టా 60", "delta"]):
+            reply = f"సార్, ఈరోజు డెల్టా 60 కాల్ స్ట్రైక్ ధర ₹{d60_ce} మరియు పుట్ స్ట్రైక్ ధర ₹{d60_pe} గా ఉన్నాయి. ప్రస్తుత నిఫ్టీ స్పాట్ ధర {nifty_spot:.2f}."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+            
+        if any(x in user_msg_lower for x in ["gap up", "gap down", "గ్యాప్", "గ్యాప్ అప్", "గ్యాప్ డౌన్", "tomorrow", "opening", "రేపు"]):
+            if pcr > 1.15:
+                reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} బుల్లిష్ గా ఉంది. కాబట్టి రేపు మార్కెట్ గ్యాప్-అప్ లేదా పాజిటివ్ ఓపెనింగ్ అయ్యే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+            elif pcr < 0.85:
+                reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} బేరిష్ గా ఉంది. కాబట్టి రేపు మార్కెట్ గ్యాప్-డౌన్ లేదా బలహీనంగా ఓపెన్ అయ్యే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+            else:
+                reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} తటస్థంగా ఉంది. కాబట్టి రేపు మార్కెట్ ఫ్లాట్ లేదా చిన్న గ్యాప్ తో ఓపెన్ కావచ్చు సార్."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+            
+        if any(x in user_msg_lower for x in ["highest oi", "highest open interest", "హైయెస్ట్", "ఓ ఐ"]) or re.search(r'\boi\b', user_msg_lower):
+            reply = f"సార్, ఆప్షన్ చైన్ ఓపెన్ ఇంట్రెస్ట్ ప్రకారం, అత్యధిక కాల్ ఓఐ ₹{strong_resistance} వద్ద మరియు అత్యధిక పుట్ ఓఐ ₹{strong_support} వద్ద ఉంది. ఇది మార్కెట్ కి ముఖ్యమైన రేంజ్."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+            
+        if any(x in user_msg_lower for x in ["upside", "downside", "direction", "ఎటు", "వెళ్తుంది", "పైకి", "కిందకి", "వాట్ అబౌట్", "what about"]):
+            if pcr > 1.15 or trend == "BULLISH":
+                reply = f"సార్, మార్కెట్ ప్రస్తుతం బుల్లిష్ గా ఉంది. ఆప్షన్ చైన్ వాల్యూమ్స్ మరియు పిసిఆర్ ({pcr:.3f}) ఆధారంగా మార్కెట్ పైకి (upside) వెళ్ళే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+            elif pcr < 0.85 or trend == "BEARISH":
+                reply = f"సార్, మార్కెట్ ప్రస్తుతం బేరిష్ గా ఉంది. కాల్ రైటింగ్ అధికంగా ఉండటం వల్ల మార్కెట్ కిందకి (downside) వెళ్ళే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+            else:
+                reply = f"సార్, మార్కెట్ ప్రస్తుతం సైడ్‌వేస్ లేదా కన్సాలిడేషన్ లో ఉంది. ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} వద్ద రేంజ్-బౌండ్ గా ఉంది సార్."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
 
         # 4a. Check if user asks about today's trades/experience
         if any(x in user_msg_lower for x in ["ఈరోజు", "today", "ట్రేడ్స్", "trades", "అనుభవం", "experience", "ఏం జరిగింది", "what happened"]):
@@ -1658,22 +1722,6 @@ def ai_chat():
                 gvn_data_bank.save_ai_message("assistant", reply)
                 return jsonify({"reply": reply})
 
-        # 4d. Check if user asks about support, resistance, where market can go (ఎంతవరకు)
-        if any(x in user_msg_lower for x in ["support", "resistance", "సపోర్ట్", "రెసిస్టెన్స్", "ఎంతవరకు", "టార్గెట్", "target", "ఎక్కడికి", "వెళ్తుంది", "levels"]):
-            reply = (
-                f"సార్, ఆప్షన్ చైన్ వాల్యూమ్ విశ్లేషణ ప్రకారం:\n"
-                f"1. నిఫ్టీ లో బలమైన సపోర్ట్ ₹{strong_support} వద్ద ఉంది (పుట్ వాల్యూమ్: {support_vol:,}).\n"
-                f"2. బలమైన రెసిస్టెన్స్ ₹{strong_resistance} వద్ద ఉంది (కాల్ వాల్యూమ్: {resistance_vol:,}).\n"
-                f"సార్, ఒకవేళ ₹{strong_support} సపోర్ట్ గనుక స్ట్రాంగ్ గా నిలబడితే, మార్కెట్ ₹{strong_resistance} వరకు వెళ్ళవచ్చు. "
-                f"రెసిస్టెన్స్ ఇక్కడ తక్కువగా ఉంటే, మార్కెట్ మరింత ఎక్స్టెండ్ అయి ₹{extension_target} వరకు వెళ్ళే అవకాశం ఉంది.\n"
-                f"ప్రస్తుత విండ్ డైరెక్షన్: {trend} ({sentiment}). పిసిఆర్ విలువ {pcr:.3f} గా ఉంది. "
-                f"విండ్ డైరెక్షన్ సపోర్ట్ పెరిగితే కాల్ సైడ్ ఉండడం ఉత్తమం సార్.\n"
-                f"డిస్క్లైమర్: మార్కెట్ కదలికలు యాదృచ్చికం, నాది ఎలాంటి బాధ్యత లేదు సార్."
-            )
-            gvn_data_bank.save_ai_message("user", user_msg)
-            gvn_data_bank.save_ai_message("assistant", reply)
-            return jsonify({"reply": reply})
-        
         # 5. Check if LLM API is available (Groq)
         api_key = os.getenv("GROQ_API_KEY", "").strip()
         if api_key:
@@ -1689,8 +1737,13 @@ def ai_chat():
                     "If the data is loading or missing at market open (9:15 AM), tell the user to wait a moment ('కొంచెం సేపు ఆగండి సార్, డేటా లోడ్ అవుతోంది').\n\n"
                     f"LIVE SNAPSHOT - Symbol: {active_symbol}, Spot: {nifty_spot:.2f}, Trend: {trend}, "
                     f"Sentiment: {sentiment}, PCR: {pcr:.3f}, Smart Money: {smart_money}, Trap: {trap_zone}.\n"
-                    f"Strong Support Strike: {strong_support} (Volume: {support_vol}), Strong Resistance Strike: {strong_resistance} (Volume: {resistance_vol}), "
+                    f"Strong Support Strike (Put highest OI): {strong_support} (Volume: {support_vol}), Strong Resistance Strike (Call highest OI): {strong_resistance} (Volume: {resistance_vol}), "
                     f"Extension Target: {extension_target}.\n"
+                    f"Delta 60 Strike Price of the day: CE is {d60_ce}, PE is {d60_pe}.\n"
+                    f"Highest Option Open Interest (OI) / Volume: Calls highest OI is at {strong_resistance}, Puts highest OI is at {strong_support}.\n"
+                    f"Market Direction Prediction (Upside/Downside): Current trend is {trend} and PCR is {pcr:.3f}. "
+                    f"If user asks where market is going (upside/downside), tell them it is likely to go {'upside (పైకి)' if (pcr > 1.15 or trend == 'BULLISH') else 'downside (కిందకి)' if (pcr < 0.85 or trend == 'BEARISH') else 'sideways (సైడ్‌వేస్/కన్సాలిడేషన్)'}.\n"
+                    f"Tomorrow Market Gap-Up/Gap-Down Prediction: Based on PCR {pcr:.3f}, tomorrow opening probability is {'Gap-Up (గ్యాప్-అప్)' if pcr > 1.15 else 'Gap-Down (గ్యాప్-డౌన్)' if pcr < 0.85 else 'Flat/Neutral (ఫ్లాట్)'}.\n"
                     f"GVN i-Levels: {json.dumps(gvn_levels)}.\n"
                     f"Active Option Strikes: {json.dumps(scanner_items[:5])}.\n"
                     "Disclaimer: Always include or imply that options trading involves risk, and market movements are random."
@@ -1717,20 +1770,39 @@ def ai_chat():
                 pass
 
         # 6. Advanced Fallback Dynamic Rule Engine (Zero-dependency Local AI)
-        is_telugu = any(x in user_msg_lower for x in ["మార్కెట్", "పెరుగు", "తగ్గు", "ట్రాప్", "లెవెల్", "ఏమైంది", "ఏంటి", "పుట్", "కాల్", "నిఫ్టీ", "చెప్పు", "ఎలా", "హెవీ", "వాల్యూ", "డౌన్", "సపోర్ట్", "రెసిస్టెన్స్"])
+        is_telugu = any(x in user_msg_lower for x in ["మార్కెట్", "పెరుగు", "తగ్గు", "ట్రాప్", "లెవెల్", "ఏమైంది", "ఏంటి", "పుట్", "కాల్", "నిఫ్టీ", "చెప్పు", "ఎలా", "హెవీ", "వాల్యూ", "డౌన్", "సపోర్ట్", "రెసిస్టెన్స్", "డెల్టా", "గ్యాప్", "రేపు", "ఓఐ", "ఎటు", "వెళ్తుంది", "పైకి", "కిందకి"])
         reply = ""
         
         if is_telugu:
-            if any(x in user_msg_lower for x in ["పెరుగు", "కాల్", "ce", "పైకి"]):
-                ce_data = next((x for x in scanner_items if "23800 CE" in x.get("strike", "")), None)
+            # Check for specific questions first
+            if any(x in user_msg_lower for x in ["delta 60", "డెల్టా 60", "delta"]):
+                reply = f"సార్, ఈరోజు డెల్టా 60 కాల్ స్ట్రైక్ ధర ₹{d60_ce} మరియు పుట్ స్ట్రైక్ ధర ₹{d60_pe} గా ఉన్నాయి. ప్రస్తుత నిఫ్టీ స్పాట్ ధర {nifty_spot:.2f}."
+            elif any(x in user_msg_lower for x in ["gap up", "gap down", "గ్యాప్", "గ్యాప్ అప్", "గ్యాప్ డౌన్", "tomorrow", "రేపు"]):
+                if pcr > 1.15:
+                    reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} బుల్లిష్ గా ఉంది. కాబట్టి రేపు మార్కెట్ గ్యాప్-అప్ లేదా పాజిటివ్ ఓపెనింగ్ అయ్యే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+                elif pcr < 0.85:
+                    reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} బేరిష్ గా ఉంది. కాబట్టి రేపు మార్కెట్ గ్యాప్-డౌన్ లేదా బలహీనంగా ఓపెన్ అయ్యే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+                else:
+                    reply = f"సార్, ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} తటస్థంగా ఉంది. కాబట్టి రేపు మార్కెట్ ఫ్లాట్ లేదా చిన్న గ్యాప్ తో ఓపెన్ కావచ్చు సార్."
+            elif any(x in user_msg_lower for x in ["highest oi", "హైయెస్ట్", "oi", "ఓ ఐ"]):
+                reply = f"సార్, ఆప్షన్ చైన్ ఓపెన్ ఇంట్రెస్ట్ ప్రకారం, అత్యధిక కాల్ ఓఐ ₹{strong_resistance} వద్ద మరియు అత్యధిక పుట్ ఓఐ ₹{strong_support} వద్ద ఉంది. ఇది మార్కెట్ కి ముఖ్యమైన రేంజ్."
+            elif any(x in user_msg_lower for x in ["upside", "downside", "direction", "ఎటు", "వెళ్తుంది", "పైకి", "కిందకి", "వాట్ అబౌట్", "what about"]):
+                if pcr > 1.15 or trend == "BULLISH":
+                    reply = f"సార్, మార్కెట్ ప్రస్తుతం బుల్లిష్ గా ఉంది. ఆప్షన్ చైన్ వాల్యూమ్స్ మరియు పిసిఆర్ ({pcr:.3f}) ఆధారంగా మార్కెట్ పైకి (upside) వెళ్ళే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+                elif pcr < 0.85 or trend == "BEARISH":
+                    reply = f"సార్, మార్కెట్ ప్రస్తుతం బేరిష్ గా ఉంది. కాల్ రైటింగ్ అధికంగా ఉండటం వల్ల మార్కెట్ కిందకి (downside) వెళ్ళే అవకాశాలు ఎక్కువగా ఉన్నాయి సార్."
+                else:
+                    reply = f"సార్, మార్కెట్ ప్రస్తుతం సైడ్‌വേస్ లేదా కన్సాలిడేషన్ లో ఉంది. ప్రస్తుత పిసిఆర్ విలువ {pcr:.3f} వద్ద రేంజ్-బౌండ్ గా ఉంది సార్."
+            elif any(x in user_msg_lower for x in ["పెరుగు", "కాల్", "ce", "పైకి"]):
+                ce_data = next((x for x in scanner_items if f"{d60_ce} CE" in x.get("strike", "")), None)
                 if not ce_data and ce_strikes:
                     ce_data = ce_strikes[0]
                 if ce_data:
                     reply = f"సార్, {ce_data.get('strike')} కాల్ ఆప్షన్ యొక్క ప్రస్తుత ధర ₹{ce_data.get('ltp')}. దీని వాల్యూమ్ {ce_data.get('volume', 0):,} గా ఉంది. సిగ్నల్ {ce_data.get('ai_signal')} గా ఉంది."
                 else:
-                    reply = f"సార్, నిఫ్టీ స్పాట్ ధర {nifty_spot:.2f} వద్ద ఉంది. కాల్స్ లో బలమైన కొనుగోలు ఇంకా కనిపించడం లేదు. పిసిఆర్ విలువ {pcr:.3f} గా ఉంది. కాల్ రైటర్లు ఇంకా ఆధిపత్యం వహిస్తున్నారు."
+                    reply = f"సార్, నిఫ్టీ స్పాట్ ధర {nifty_spot:.2f} వద్ద ఉంది. కాల్స్ లో బలమైన కొనుగోలు ఇంకా కనిపించడం లేదు. పిసిఆర్ విలువ {pcr:.3f} గా ఉంది."
             elif any(x in user_msg_lower for x in ["తగ్గు", "పుట్", "pe", "కిందకి"]):
-                pe_data = next((x for x in scanner_items if "23900 PE" in x.get("strike", "")), None)
+                pe_data = next((x for x in scanner_items if f"{d60_pe} PE" in x.get("strike", "")), None)
                 if not pe_data and pe_strikes:
                     pe_data = pe_strikes[0]
                 if pe_data:
@@ -1749,7 +1821,7 @@ def ai_chat():
             elif any(x in user_msg_lower for x in ["లెవెల్", "level"]):
                 i5_val = gvn_levels.get("i5", "N/A")
                 i7_val = gvn_levels.get("i7", "N/A")
-                reply = f"సార్, నిఫ్టీ 9:15 క్యాండిల్ ప్రకారం లెవెಲ್ 5 (i5) ₹{i5_val} మరియు లెవెల్ 7 (i7) ₹{i7_val} గా ఉన్నాయి. ధర ఈ లెవెల్స్ ని బ్రేక్ చేసినప్పుడు మాత్రమే ట్రేడ్ ప్లాన్ చేయండి."
+                reply = f"సార్, నిఫ్టీ 9:15 క్యాండిల్ ప్రకారం లెవెల్ 5 (i5) ₹{i5_val} మరియు లెవెల్ 7 (i7) ₹{i7_val} గా ఉన్నాయి. ధర ఈ లెవెల్స్ ని బ్రేక్ చేసినప్పుడు మాత్రమే ట్రేడ్ ప్లాన్ చేయండి."
             elif "9:15" in user_msg_lower:
                 h_915 = gvn_levels.get("high_915", "N/A")
                 l_915 = gvn_levels.get("low_915", "N/A")
@@ -1761,8 +1833,26 @@ def ai_chat():
                     f"మార్కెట్ ట్రెండ్ {trend} మరియు సెంట్రిమెంట్ {sentiment} గా ఉంది. పిసిఆర్ విలువ {pcr:.3f} వద్ద ఉంది."
                 )
         else:
-            # English Fallback
-            if "nifty" in user_msg_lower or "spot" in user_msg_lower or "trend" in user_msg_lower:
+            # English Fallback specific questions
+            if any(x in user_msg_lower for x in ["delta 60", "delta"]):
+                reply = f"Sir, today's Delta 60 Call Strike is at {d60_ce} and Put Strike is at {d60_pe}. Spot is currently {nifty_spot:.2f}."
+            elif any(x in user_msg_lower for x in ["gap up", "gap down", "tomorrow", "opening"]):
+                if pcr > 1.15:
+                    reply = f"Sir, PCR is {pcr:.3f} (Bullish). There is a high probability of tomorrow opening with a Gap-Up or positive start."
+                elif pcr < 0.85:
+                    reply = f"Sir, PCR is {pcr:.3f} (Bearish). There is a high probability of tomorrow opening with a Gap-Down or weak start."
+                else:
+                    reply = f"Sir, PCR is {pcr:.3f} (Neutral). Market is likely to open Flat or with a very minor gap tomorrow."
+            elif any(x in user_msg_lower for x in ["highest oi", "highest open interest", "oi"]):
+                reply = f"Sir, Calls highest OI/Volume is at {strong_resistance} and Puts highest OI/Volume is at {strong_support}."
+            elif any(x in user_msg_lower for x in ["upside", "downside", "direction", "where", "go", "what about"]):
+                if pcr > 1.15 or trend == "BULLISH":
+                    reply = f"Sir, market is currently bullish with PCR {pcr:.3f}. Option chain indicates an upside target towards {strong_resistance}."
+                elif pcr < 0.85 or trend == "BEARISH":
+                    reply = f"Sir, market is currently bearish with PCR {pcr:.3f}. Call writers are strong, suggesting a downside move towards {strong_support}."
+                else:
+                    reply = f"Sir, market is range-bound and consolidating sideways (PCR: {pcr:.3f}). No clear direction yet."
+            elif "nifty" in user_msg_lower or "spot" in user_msg_lower or "trend" in user_msg_lower:
                 reply = f"Sir, Nifty spot is at {nifty_spot:.2f}. Support is at {strong_support} and Resistance is at {strong_resistance}. Trend is {trend}."
             elif "level" in user_msg_lower or "levels" in user_msg_lower:
                 reply = f"Sir, current GVN i5 level is at {gvn_levels.get('i5', 'N/A')} and i7 is at {gvn_levels.get('i7', 'N/A')}."
