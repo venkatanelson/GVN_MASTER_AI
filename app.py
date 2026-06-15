@@ -1674,8 +1674,76 @@ def ai_chat():
             gvn_data_bank.save_ai_message("assistant", reply)
             return jsonify({"reply": reply})
 
-        # 4c. Check if user mentioned any strike price
-        strike_match = re.search(r'(\d{5})', user_msg_lower)
+        # 4c. Greeks Analysis (Theta / Gamma / IV / Volume surge) - NEW
+        # Calculate CE and PE Greeks averages from scanner_items
+        ce_deltas, ce_gammas, ce_thetas, ce_ivs = [], [], [], []
+        pe_deltas, pe_gammas, pe_thetas, pe_ivs = [], [], [], []
+        for _item in scanner_items:
+            _s = _item.get("strike", "")
+            try: _d = float(_item["delta"]) if _item.get("delta") is not None else None
+            except: _d = None
+            try: _g = float(_item.get("gamma", 0))
+            except: _g = 0.0
+            try: _t = float(_item.get("theta", 0))
+            except: _t = 0.0
+            try: _iv = float(_item.get("iv", 0))
+            except: _iv = 0.0
+            if "CE" in _s:
+                if _d is not None: ce_deltas.append(_d)
+                if _g > 0: ce_gammas.append(_g)
+                if _t != 0: ce_thetas.append(_t)
+                if _iv > 0: ce_ivs.append(_iv)
+            elif "PE" in _s:
+                if _d is not None: pe_deltas.append(_d)
+                if _g > 0: pe_gammas.append(_g)
+                if _t != 0: pe_thetas.append(_t)
+                if _iv > 0: pe_ivs.append(_iv)
+        avg_ce_theta = sum(ce_thetas)/len(ce_thetas) if ce_thetas else -0.5
+        avg_pe_theta = sum(pe_thetas)/len(pe_thetas) if pe_thetas else -0.5
+        avg_ce_gamma = sum(ce_gammas)/len(ce_gammas) if ce_gammas else 0.0015
+        avg_pe_gamma = sum(pe_gammas)/len(pe_gammas) if pe_gammas else 0.0015
+        avg_ce_iv    = sum(ce_ivs)/len(ce_ivs) if ce_ivs else 15.0
+        avg_pe_iv    = sum(pe_ivs)/len(pe_ivs) if pe_ivs else 15.0
+
+        # Theta / Decay queries
+        if any(x in user_msg_lower for x in ["theta", "తీటా", "decay", "కరుగుతుంది", "కరుగు", "ప్రీమియం కరుగు"]):
+            if avg_ce_theta < avg_pe_theta:
+                reply = f"సార్, కాల్స్ వైపు తీటా ({avg_ce_theta:.3f}) ఎక్కువగా ఉంది. కాల్ ఆప్షన్స్ లో ప్రీమియం వేగంగా కరుగుతుంది సార్. ప్రస్తుత మార్కెట్ ట్రెండ్ {trend}."
+            else:
+                reply = f"సార్, పుట్స్ వైపు తీటా ({avg_pe_theta:.3f}) ఎక్కువగా ఉంది. పుట్ ఆప్షన్స్ లో ప్రీమియం వేగంగా కరుగుతుంది సార్. ప్రస్తుత మార్కెట్ ట్రెండ్ {trend}."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+
+        # Gamma queries
+        if any(x in user_msg_lower for x in ["gamma", "గామా", "speed", "స్పీడ్", "పెరుగుతుంది"]):
+            if avg_ce_gamma > avg_pe_gamma:
+                reply = f"సార్, కాల్స్ వైపు గామా ({avg_ce_gamma:.4f}) ఎక్కువగా ఉంది. మార్కెట్ పెరిగినప్పుడు కాల్స్ ప్రీమియం చాలా స్పీడ్ గా పెరుగుతుంది సార్. ట్రెండ్: {trend}."
+            else:
+                reply = f"సార్, పుట్స్ వైపు గామా ({avg_pe_gamma:.4f}) ఎక్కువగా ఉంది. మార్కెట్ పడినప్పుడు పుట్స్ ప్రీమియం చాలా స్పీడ్ గా పెరుగుతుంది సార్. ట్రెండ్: {trend}."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+
+        # Implied Volatility queries
+        if any(x in user_msg_lower for x in ["volatility", "వోలటాలిటీ", " iv ", "ఐవీ", "implied"]):
+            iv_dir = "CE ఎక్కువ" if avg_ce_iv > avg_pe_iv else "PE ఎక్కువ"
+            reply = f"సార్, కాల్స్ ఐవీ {avg_ce_iv:.1f}% మరియు పుట్స్ ఐవీ {avg_pe_iv:.1f}% గా ఉంది ({iv_dir}). ఐవీ ఎక్కువగా ఉంటే ప్రీమియం వేగంగా పెరగడానికి, తక్కువగా ఉంటే పడటానికి అవకాశం ఉంటుంది సార్."
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+
+        # Volume/IV surge warning queries
+        if any(x in user_msg_lower for x in ["వాయిస్ ఇంక్రీజ్", "వాల్యూమ్ ఇంక్రీజ్", "వాయిస్ పెరి", "వాల్యూమ్ పెరి", "volume increase", "ఐవీ పెరి"]):
+            reply = (f"సార్, వాల్యూమ్ లేదా ఐవీ పెరిగినప్పుడు మార్కెట్ లో హెవీ వోలటాలిటీ వస్తుంది. "
+                     f"రెసిస్టెన్స్ లెవెల్ ₹{strong_resistance} వద్ద పెరిగితే మార్కెట్ కిందకి పడటానికి అవకాశం ఉంది, "
+                     f"అదే సపోర్ట్ ₹{strong_support} వద్ద పెరిగితే పైకి బౌన్స్ అవుతుంది సార్.")
+            gvn_data_bank.save_ai_message("user", user_msg)
+            gvn_data_bank.save_ai_message("assistant", reply)
+            return jsonify({"reply": reply})
+
+        # 4d. Trade Advisor: Check if user mentioned any specific strike price with buy intent
+        strike_match = re.search(r'\b(\d{5})\b', user_msg_lower)
         if strike_match:
             strike_num = strike_match.group(1)
             opt_type = ""
@@ -1683,41 +1751,91 @@ def ai_chat():
                 opt_type = "CE"
             elif any(x in user_msg_lower for x in ["pe", "పుట్", "put"]):
                 opt_type = "PE"
-                
-            matches = []
-            for item in scanner_items:
-                strike_str = item.get("strike", "")
-                if strike_num in strike_str:
-                    if opt_type and opt_type not in strike_str:
+
+            # Parse buy/entry price: find any number (5-1000) that is NOT the strike
+            all_nums = re.findall(r'\b\d+\b', user_msg_lower)
+            buy_price = None
+            for _num_str in all_nums:
+                if _num_str != strike_num:
+                    try:
+                        _v = int(_num_str)
+                        if 5 <= _v <= 1000:
+                            buy_price = _v
+                            break
+                    except:
+                        pass
+
+            # Find the target strike in scanner
+            target_item = None
+            for _item in scanner_items:
+                _s_name = _item.get("strike", "")
+                if strike_num in _s_name:
+                    if opt_type and opt_type not in _s_name:
                         continue
-                    matches.append(item)
-            
-            if matches:
-                replies = []
-                for item in matches:
-                    strike_name = item.get("strike")
-                    ltp = item.get("ltp")
-                    vol = item.get("volume", 0)
-                    sig = item.get("ai_signal", "HOLD")
-                    levels = item.get("levels", {})
-                    
-                    levels_str = ""
-                    if levels:
-                        parts = []
-                        for k in ["i3", "i5", "i6", "i7"]:
-                            if k in levels and levels[k]:
-                                parts.append(f"{k}: ₹{levels[k]}")
-                        if parts:
-                            levels_str = " | GVN లెవెల్స్: " + ", ".join(parts)
-                            
-                    replies.append(
-                        f"సార్, {strike_name} యొక్క ప్రస్తుత ధర ₹{ltp}. "
-                        f"దీని వాల్యూమ్ {vol:,} మరియు సిగ్నల్ {sig}.{levels_str}"
+                    target_item = _item
+                    break
+
+            if target_item:
+                _levels = target_item.get("levels", {})
+                _ltp    = target_item.get("ltp", 0.0) or 0.0
+                try: _ltp = float(_ltp)
+                except: _ltp = 0.0
+                _strike_name = target_item.get("strike", "")
+                _sig         = target_item.get("ai_signal", "HOLD")
+
+                _i7 = float(_levels.get("i7") or 0.0)
+                _i5 = float(_levels.get("i5") or 0.0)
+                _i3 = float(_levels.get("i3") or 0.0)
+
+                # Use buy_price if given, else use LTP
+                ref_price = float(buy_price) if buy_price is not None else _ltp
+
+                # Feasibility decision
+                feasibility_te = "మొమెంటం ఆధారంగా తక్కువ క్వాంటిటీ తో కొనవచ్చు సార్."
+                if _i7 > 0:
+                    if ref_price <= _i7 * 1.15:
+                        feasibility_te = f"కొనడం చాలా మంచిది సార్. బలమైన సపోర్ట్ లెవెల్ i7 (₹{_i7:.1f}) కి దగ్గరగా ఉంది, బౌన్స్ లేదా రివర్సల్ వచ్చే అవకాశం ఉంది."
+                    elif ref_price >= _i3 * 0.95 and _i3 > 0:
+                        feasibility_te = f"ఇక్కడ కొనడం చాలా రిస్క్ సార్! రెసిస్టెన్స్ లెవెల్ i3 (₹{_i3:.1f}) కి దగ్గరగా ఉంది, ఆపరేటర్లు ట్రాప్ చేసే అవకాశం ఉంది."
+                    elif _i7 < ref_price <= _i5 * 1.05 and _i5 > 0:
+                        feasibility_te = f"కొనవచ్చు సార్. i5 మొమెంటం సపోర్ట్ లెవెల్ (₹{_i5:.1f}) వద్ద ఉంది."
+
+                # Stop Loss and Target
+                _sl     = max(1.0, ref_price - 12.0)
+                _target = ref_price + 30.0
+                if _i3 > 0 and _i3 > ref_price:
+                    _target = _i3
+
+                # Is user asking to buy?
+                is_buy_query = any(x in user_msg_lower for x in ["కొనవచ్చా", "కొనుగోలు", "buy", "కొనాలా", "entry"])
+
+                if is_buy_query:
+                    reply = (
+                        f"సార్, {_strike_name} ను ₹{ref_price:.1f} వద్ద → {feasibility_te} "
+                        f"స్టాప్ లాస్: ₹{_sl:.1f} (12 పాయింట్లు SL). టార్గెట్: ₹{_target:.1f}. "
+                        f"ప్రస్తుత సిగ్నల్: {_sig}. మార్కెట్ ట్రెండ్: {trend} సార్."
                     )
-                
-                reply = "\n".join(replies)
-                reply += "\nగమనిక: మార్కెట్ కదలికలు యాదృచ్చికం, నాది ఎలాంటి బాధ్యత లేదు సార్."
-                
+                else:
+                    # General strike info with levels
+                    _levels_str = ""
+                    _parts = []
+                    for _k in ["i7", "i5", "i3"]:
+                        if _levels.get(_k):
+                            _parts.append(f"{_k}: ₹{_levels[_k]}")
+                    if _parts:
+                        _levels_str = " | GVN లెవెల్స్: " + ", ".join(_parts)
+                    reply = (
+                        f"సార్, {_strike_name} ప్రస్తుత ధర ₹{_ltp:.1f}. "
+                        f"సిగ్నల్ {_sig}.{_levels_str} "
+                        f"SL ₹{_sl:.1f} | టార్గెట్ ₹{_target:.1f}. ట్రెండ్: {trend} సార్."
+                    )
+                reply += "\nగమనిక: మార్కెట్ కదలికలు యాదృచ్చికం, ఎలాంటి బాధ్యత లేదు సార్."
+                gvn_data_bank.save_ai_message("user", user_msg)
+                gvn_data_bank.save_ai_message("assistant", reply)
+                return jsonify({"reply": reply})
+            else:
+                # Strike not found in scanner, return basic info
+                reply = f"సార్, {strike_num} {opt_type} స్ట్రైక్ డేటా ఇప్పుడు అందుబాటులో లేదు. మార్కెట్ తెరుచుకున్న తర్వాత రీఫ్రెష్ చేయండి."
                 gvn_data_bank.save_ai_message("user", user_msg)
                 gvn_data_bank.save_ai_message("assistant", reply)
                 return jsonify({"reply": reply})
@@ -1744,6 +1862,12 @@ def ai_chat():
                     f"Market Direction Prediction (Upside/Downside): Current trend is {trend} and PCR is {pcr:.3f}. "
                     f"If user asks where market is going (upside/downside), tell them it is likely to go {'upside (పైకి)' if (pcr > 1.15 or trend == 'BULLISH') else 'downside (కిందకి)' if (pcr < 0.85 or trend == 'BEARISH') else 'sideways (సైడ్‌వేస్/కన్సాలిడేషన్)'}.\n"
                     f"Tomorrow Market Gap-Up/Gap-Down Prediction: Based on PCR {pcr:.3f}, tomorrow opening probability is {'Gap-Up (గ్యాప్-అప్)' if pcr > 1.15 else 'Gap-Down (గ్యాప్-డౌన్)' if pcr < 0.85 else 'Flat/Neutral (ఫ్లాట్)'}.\n"
+                    f"OPTION GREEKS ANALYSIS (Live): CE Avg Theta={avg_ce_theta:.3f}, PE Avg Theta={avg_pe_theta:.3f}. "
+                    f"CE Avg Gamma={avg_ce_gamma:.4f}, PE Avg Gamma={avg_pe_gamma:.4f}. "
+                    f"CE Avg IV={avg_ce_iv:.1f}%, PE Avg IV={avg_pe_iv:.1f}%. "
+                    f"Theta Decay is faster on {'CALLS (CE)' if avg_ce_theta < avg_pe_theta else 'PUTS (PE)'}. "
+                    f"Gamma is higher on {'CALLS (CE)' if avg_ce_gamma > avg_pe_gamma else 'PUTS (PE)'} - premiums will expand faster in that direction.\n"
+                    f"TRADE ADVISOR RULE: If user asks about buying a specific strike (e.g. 24050 CE buy at 100), provide: 1) Feasibility (compare vs i7/i5/i3 GVN levels), 2) SL = entry_price - 12, 3) Target = next i-level or entry_price + 30. Always respond in Telugu.\n"
                     f"GVN i-Levels: {json.dumps(gvn_levels)}.\n"
                     f"Active Option Strikes: {json.dumps(scanner_items[:5])}.\n"
                     "Disclaimer: Always include or imply that options trading involves risk, and market movements are random."
