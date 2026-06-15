@@ -2147,6 +2147,7 @@
         let recognitionInstance = null;
         let recognitionTimer = null;
         let isListening = false;
+        let shouldAutoListen = false;
 
         function formatLogText(text) {
             if (!text) return "";
@@ -2158,7 +2159,22 @@
             return formatted;
         }
 
+        // Unlock speech synthesis engine on mobile browsers on user gesture
+        function unlockMobileSpeech() {
+            if (window.speechSynthesis) {
+                try {
+                    const dummy = new SpeechSynthesisUtterance(" ");
+                    dummy.volume = 0;
+                    window.speechSynthesis.speak(dummy);
+                } catch (e) {
+                    console.warn("SpeechSynthesis unlock error:", e);
+                }
+            }
+        }
+
         function sendTextChatMessage() {
+            unlockMobileSpeech();
+            shouldAutoListen = false;
             const inputEl = document.getElementById('voice-text-input');
             const userText = inputEl.value.trim();
             if (!userText) return;
@@ -2187,6 +2203,7 @@
         }
 
         function toggleVoiceAssistant() {
+            unlockMobileSpeech();
             voiceAssistantActive = !voiceAssistantActive;
             const btn = document.getElementById('btn-toggle-voice');
             const toggleText = document.getElementById('voice-toggle-text');
@@ -2212,6 +2229,7 @@
                 speakAlert("వోయిస్ అసిస్టెంట్ ఆన్ చేయబడింది. నమస్తే సార్, నేను మీ GVN మార్కెట్ సహాయకుడిని. చెప్పండి సార్, ఈరోజు మార్కెట్ గురించి మీకు ఎలాంటి సమాచారం కావాలి?");
             } else {
                 // UI Deactivated State
+                shouldAutoListen = false;
                 btn.style.background = "rgba(168, 85, 247, 0.15)";
                 btn.style.borderColor = "rgba(168, 85, 247, 0.4)";
                 btn.style.color = "#c084fc";
@@ -2242,6 +2260,11 @@
             const cleanText = text.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "");
             
             document.getElementById('voice-log').innerHTML = formatLogText(text);
+            
+            // Chrome speech synthesis bug fix: cancel current queue/audio to un-stick
+            window.speechSynthesis.cancel();
+            isSpeaking = false;
+            
             speechQueue.push(cleanText);
             processSpeechQueue();
         }
@@ -2254,7 +2277,14 @@
             let utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = parseFloat(document.getElementById('voice-speed').value) || 1.0;
             
-            const langVal = document.getElementById('voice-lang').value;
+            // Auto detect text language to avoid letter-by-letter reading or crash
+            let langVal = document.getElementById('voice-lang').value;
+            const hasTelugu = /[\u0C00-\u0C7F]/.test(text);
+            if (!hasTelugu && langVal.startsWith("te")) {
+                langVal = "en-US";
+            } else if (hasTelugu && langVal.startsWith("en")) {
+                langVal = "te-IN";
+            }
             utterance.lang = langVal;
             
             let voices = window.speechSynthesis.getVoices();
@@ -2298,20 +2328,38 @@
             utterance.onend = function() {
                 isSpeaking = false;
                 document.getElementById('voice-avatar-container').style.borderColor = voiceAssistantActive ? "rgba(16, 185, 129, 0.4)" : "rgba(168, 85, 247, 0.3)";
-                setTimeout(processSpeechQueue, 300);
+                if (speechQueue.length > 0) {
+                    setTimeout(processSpeechQueue, 300);
+                } else if (voiceAssistantActive && shouldAutoListen && !isListening) {
+                    setTimeout(startVoiceRecognition, 600); // Conversational Loop: restarts mic automatically
+                }
             };
             
-            utterance.onerror = function() {
+            utterance.onerror = function(event) {
+                console.error("Utterance error:", event);
                 isSpeaking = false;
                 document.getElementById('voice-avatar-container').style.borderColor = voiceAssistantActive ? "rgba(16, 185, 129, 0.4)" : "rgba(168, 85, 247, 0.3)";
-                setTimeout(processSpeechQueue, 300);
+                if (speechQueue.length > 0) {
+                    setTimeout(processSpeechQueue, 300);
+                } else if (voiceAssistantActive && shouldAutoListen && !isListening) {
+                    setTimeout(startVoiceRecognition, 600); // Conversational Loop: restarts mic automatically
+                }
             };
             
             window.speechSynthesis.speak(utterance);
         }
 
         function startVoiceRecognition() {
+            unlockMobileSpeech();
+            
+            if (isSpeaking) {
+                window.speechSynthesis.cancel();
+                speechQueue = [];
+                isSpeaking = false;
+            }
+
             if (isListening) {
+                shouldAutoListen = false;
                 if (recognitionInstance) {
                     recognitionInstance.stop();
                 }
@@ -2324,13 +2372,12 @@
                 return;
             }
             
-            window.speechSynthesis.cancel();
-            isSpeaking = false;
             isListening = true;
+            shouldAutoListen = true;
             
             const recognition = new SpeechRecognition();
             recognitionInstance = recognition;
-            recognition.continuous = true;
+            recognition.continuous = false; // Silence detection triggers onend automatically
             recognition.interimResults = true;
             recognition.maxAlternatives = 1;
             recognition.accumulatedText = "";
@@ -2383,6 +2430,7 @@
                 
                 const textToSend = recognition.accumulatedText.trim();
                 if (textToSend) {
+                    logEl.innerHTML = `Thinking... (ఆలోచిస్తున్నాను...)`;
                     fetch('/api/ai-chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2395,6 +2443,11 @@
                     .catch(err => {
                         speakAlert("సార్, సర్వర్ లోడింగ్ లో సాంకేతిక లోపం వచ్చింది.");
                     });
+                } else {
+                    // No speech captured - restart automatically if assistant is still ON
+                    if (voiceAssistantActive && shouldAutoListen && !isListening && !isSpeaking) {
+                        setTimeout(startVoiceRecognition, 800);
+                    }
                 }
             };
             
@@ -2410,6 +2463,28 @@
                 }
                 const combined = (finalTranscript + interimTranscript).trim();
                 if (combined) {
+                    logEl.innerHTML = `You (speaking...): "${formatLogText(combined)}"`;
+                    recognition.accumulatedText = combined;
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                isListening = false;
+                if (recognitionTimer) clearInterval(recognitionTimer);
+                if (event.error === 'not-allowed') {
+                    logEl.innerHTML = `<span style="color:#fca5a5;">🎤 Microphone Blocked! Browser URL బార్ లోని లాక్/మైక్ ఐకాన్ క్లిక్ చేసి 'Allow' చేయండి. (గమనిక: HTTP ఐపి ప్రసారాల కొరకు క్రింది గైడ్ చూడండి).</span>`;
+                    alert("⚠️ మైక్రోఫోన్ బ్లాక్ చేయబడింది!\n\nబ్రౌజర్ అడ్రస్ బార్‌లోని 'లాక్' (🔒) లేదా 'మైక్' బటన్ క్లిక్ చేసి మైక్రోఫోన్ అనుమతించండి (Allow Microphone).");
+                    shouldAutoListen = false;
+                } else if (event.error === 'no-speech') {
+                    console.log("No speech detected by recognition engine.");
+                } else {
+                    logEl.innerHTML = `<span style="color:#fca5a5;">Error: ${event.error}</span>`;
+                }
+                waveform.style.display = "none";
+            };
+            
+            recognition.start();
+        }ed) {
                     logEl.innerHTML = `You (speaking...): "${formatLogText(combined)}"`;
                     recognition.accumulatedText = combined;
                 }
