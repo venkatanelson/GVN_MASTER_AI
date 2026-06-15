@@ -64,7 +64,17 @@ class SecurityShield:
         # Register Flask middleware
         @app.before_request
         def shield_middleware():
-            ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            # Extract actual client IP behind proxies/Cloudflare
+            x_forwarded = request.headers.get('X-Forwarded-For')
+            if x_forwarded:
+                ip = x_forwarded.split(',')[0].strip()
+            else:
+                ip = request.remote_addr
+            
+            # Bypass security blocking entirely for authenticated user/admin sessions
+            from flask import session
+            if session.get('user_id') or session.get('admin_logged_in'):
+                return None
             
             # 1. Whitelist check (Local & Private Network)
             if ip in ['127.0.0.1', 'localhost'] or ip.startswith('192.168.') or ip.startswith('10.'):
