@@ -171,6 +171,65 @@ class GVNAiWindEngine:
                             wind_state = "🔴 DOWN WIND (Bearish - DPD Confirmed)"
                         wind_power = max(wind_power * 1.3, 1.3)
             
+            # --- GVN LEVEL ACCELERATION PATTERN DETECTION (GAMMA SQUEEZE) ---
+            try:
+                import shared_data
+                from gvn_levels_engine import calculate_gvn_levels
+                
+                benchmark = shared_data.gvn_915_benchmark.get("NIFTY")
+                if benchmark and benchmark.get("captured") and symbol == "NIFTY":
+                    high_915 = benchmark.get("high")
+                    low_915 = benchmark.get("low")
+                    close_915 = benchmark.get("close")
+                    idx_levels = calculate_gvn_levels(high_915, low_915, close_915)
+                    
+                    if idx_levels:
+                        i5 = idx_levels.get("i5", 0)
+                        i6 = idx_levels.get("i6", 0)
+                        
+                        # Check NIFTY price between Level 6 (i6) and Level 5 (i5)
+                        # 1. Bearish Put Acceleration (Put option premium explodes)
+                        if i5 < ltp < i6 and dpd_metrics.get("pe_div", 0) > 0.08:
+                            wind_state = "🔴 DOWN WIND (Bearish - PE Acceleration Triggered 🌪️)"
+                            wind_power = 2.2
+                            trend_type = "🔥 Strong Trend (Gamma Explosion Active)"
+                            
+                            observation = {
+                                "timestamp": datetime.datetime.now().isoformat(),
+                                "event": "GVN_PE_LEVEL_ACCELERATION",
+                                "index_spot": ltp,
+                                "index_level_range": f"i6({i6}) to i5({i5})",
+                                "pe_divergence": dpd_metrics.get("pe_div"),
+                                "observation": "NIFTY spot is falling towards i5 level while Put premiums are accelerating (PE Gamma Squeeze pattern)."
+                            }
+                            shared_data.append_ai_memory(observation)
+                            logger.info(f"🧠 [AI MEMORY] Saved GVN PE Level Acceleration pattern at NIFTY={ltp}")
+                            
+                            with open("nse_status.log", "a") as f:
+                                f.write(f"{datetime.datetime.now()}: [AI OBSERVATION] PUT LEVEL ACCELERATION DETECTED! Spot: {ltp} is between i6({i6}) and i5({i5}) | PE Div: {dpd_metrics.get('pe_div')}\n")
+                                
+                        # 2. Bullish Call Acceleration (Call option premium explodes as spot rises from i6 up to i5)
+                        elif i6 < ltp < i5 and dpd_metrics.get("ce_div", 0) > 0.08:
+                            wind_state = "🟢 UP WIND (Bullish - CE Acceleration Triggered 🌪️)"
+                            wind_power = 2.2
+                            trend_type = "🔥 Strong Trend (Gamma Explosion Active)"
+                            
+                            observation = {
+                                "timestamp": datetime.datetime.now().isoformat(),
+                                "event": "GVN_CE_LEVEL_ACCELERATION",
+                                "index_spot": ltp,
+                                "index_level_range": f"i6({i6}) to i5({i5})",
+                                "ce_divergence": dpd_metrics.get("ce_div"),
+                                "observation": "NIFTY spot is rising towards i5 level while Call premiums are accelerating (CE Gamma Squeeze pattern)."
+                            }
+                            shared_data.append_ai_memory(observation)
+                            logger.info(f"🧠 [AI MEMORY] Saved GVN CE Level Acceleration pattern at NIFTY={ltp}")
+                            
+                            with open("nse_status.log", "a") as f:
+                                f.write(f"{datetime.datetime.now()}: [AI OBSERVATION] CALL LEVEL ACCELERATION DETECTED! Spot: {ltp} is between i6({i6}) and i5({i5}) | CE Div: {dpd_metrics.get('ce_div')}\n")
+            except Exception as e:
+                logger.error(f"Error checking GVN Level Acceleration: {e}")
+
             # --- MARKET STATES BASED ON WIND POWER ---
             if wind_power > 2.0:
                 trend_type = "🔥 Strong Trend (Gamma Explosion Possible)"

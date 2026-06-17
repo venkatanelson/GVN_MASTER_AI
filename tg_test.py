@@ -1,17 +1,24 @@
+import os
 import requests
+from dotenv import load_dotenv
 
-TELEGRAM_BOT_TOKEN = "8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs"
-TELEGRAM_CHAT_ID = "1008887074"
+load_dotenv()
+
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8072627750:AAHWp1Obka_cYbZVkHyKNpHO16TfL4smDGs")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1008887074")
 
 def send_telegram_msg(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    base_api = os.environ.get("TELEGRAM_API_URL", "https://api.telegram.org").rstrip('/')
+    url = f"{base_api}/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
         "parse_mode": "HTML"
     }
+    proxy_url = os.environ.get("TELEGRAM_PROXY")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, proxies=proxies, timeout=10)
         print(f"Response: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"TELEGRAM SEND ERROR: {e}")

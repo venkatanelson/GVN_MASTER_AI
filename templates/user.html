@@ -944,7 +944,7 @@
                 
                 <!-- Expanding voice options panel -->
                 <div id="voice-assistant-panel" style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 20px; display: none; transition: all 0.3s ease;">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px;">
                         <div>
                             <label style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;">Voice Engine Speed</label>
                             <select id="voice-speed" style="background: rgba(15, 23, 42, 0.8); color: white; border-radius: 8px; padding: 8px; font-size: 12px; width: 100%; border: 1px solid rgba(255,255,255,0.1); outline: none; cursor: pointer;">
@@ -959,6 +959,12 @@
                             <select id="voice-lang" style="background: rgba(15, 23, 42, 0.8); color: white; border-radius: 8px; padding: 8px; font-size: 12px; width: 100%; border: 1px solid rgba(255,255,255,0.1); outline: none; cursor: pointer;">
                                 <option value="te-IN" selected>Telugu (తెలుగు)</option>
                                 <option value="en-US">English</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color: var(--text-dim); font-size: 10px; font-weight: 800; display: block; margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase;">Select System Voice</label>
+                            <select id="voice-selection-override" style="background: rgba(15, 23, 42, 0.8); color: white; border-radius: 8px; padding: 8px; font-size: 12px; width: 100%; border: 1px solid rgba(255,255,255,0.1); outline: none; cursor: pointer;">
+                                <option value="default" selected>Default GVN Matcher</option>
                             </select>
                         </div>
                     </div>
@@ -2284,31 +2290,40 @@
             
             let voices = window.speechSynthesis.getVoices();
             let matchingVoice = null;
-            if (langVal.includes("te")) {
-                // Prioritize pleasant female Telugu voices
-                matchingVoice = voices.find(v => v.lang.includes("te") && (
-                    v.name.includes("Google") || 
-                    v.name.includes("Swara") || 
-                    v.name.includes("Heera") || 
-                    v.name.includes("female") || 
-                    v.name.includes("Female") ||
-                    v.name.includes("Microsoft")
-                ));
-                if (!matchingVoice) {
-                    matchingVoice = voices.find(v => v.lang.includes("te"));
-                }
-            } else {
-                // Prioritize female English voices
-                matchingVoice = voices.find(v => v.lang.includes(langVal) && (
-                    v.name.includes("Zira") || 
-                    v.name.includes("Google US English") || 
-                    v.name.includes("female") || 
-                    v.name.includes("Female") || 
-                    v.name.includes("Samantha") ||
-                    v.name.includes("Hazel")
-                ));
-                if (!matchingVoice) {
-                    matchingVoice = voices.find(v => v.lang.includes(langVal));
+            
+            // Check manual voice selection override
+            const userOverrideVoice = document.getElementById('voice-selection-override').value;
+            if (userOverrideVoice && userOverrideVoice !== "default") {
+                matchingVoice = voices.find(v => v.name === userOverrideVoice);
+            }
+            
+            if (!matchingVoice) {
+                if (langVal.includes("te")) {
+                    // Prioritize pleasant female Telugu voices
+                    matchingVoice = voices.find(v => v.lang.includes("te") && (
+                        v.name.includes("Google") || 
+                        v.name.includes("Swara") || 
+                        v.name.includes("Heera") || 
+                        v.name.includes("female") || 
+                        v.name.includes("Female") ||
+                        v.name.includes("Microsoft")
+                    ));
+                    if (!matchingVoice) {
+                        matchingVoice = voices.find(v => v.lang.includes("te"));
+                    }
+                } else {
+                    // Prioritize female English voices
+                    matchingVoice = voices.find(v => v.lang.includes(langVal) && (
+                        v.name.includes("Zira") || 
+                        v.name.includes("Google US English") || 
+                        v.name.includes("female") || 
+                        v.name.includes("Female") || 
+                        v.name.includes("Samantha") ||
+                        v.name.includes("Hazel")
+                    ));
+                    if (!matchingVoice) {
+                        matchingVoice = voices.find(v => v.lang.includes(langVal));
+                    }
                 }
             }
             
@@ -2525,9 +2540,30 @@
             originalUpdateScanner();
         };
 
+        function populateVoiceList() {
+            if (!window.speechSynthesis) return;
+            const dropdown = document.getElementById('voice-selection-override');
+            if (!dropdown) return;
+            
+            // Clear but keep first option
+            dropdown.innerHTML = '<option value="default">Default GVN Matcher</option>';
+            
+            const voices = window.speechSynthesis.getVoices();
+            voices.forEach((voice) => {
+                const option = document.createElement('option');
+                option.value = voice.name;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                dropdown.appendChild(option);
+            });
+        }
+
         window.speechSynthesis.onvoiceschanged = function() {
             window.speechSynthesis.getVoices();
+            populateVoiceList();
         };
+        
+        // Initial populate voice list
+        setTimeout(populateVoiceList, 1000);
 
         // Initial Chart Load
         setTimeout(() => changeTVSymbol(currentActiveIndex), 2000);

@@ -16,20 +16,23 @@ TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID', '@indicator_Gvn')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '1008887074')
 
 def test_telegram():
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    base_api = os.environ.get("TELEGRAM_API_URL", "https://api.telegram.org").rstrip('/')
+    url = f"{base_api}/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHANNEL_ID,
         "text": "🤖 <b>GVN ALGO DIAGNOSTIC:</b> Authentication Successful! Telegram integration is perfectly configured.",
         "parse_mode": "HTML"
     }
+    proxy_url = os.environ.get("TELEGRAM_PROXY")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     try:
-        res = requests.post(url, json=payload, timeout=5)
+        res = requests.post(url, json=payload, proxies=proxies, timeout=5)
         if res.status_code == 200:
             print(f"✅ TELEGRAM SUCCESS: Message delivered successfully.")
         else:
             print(f"⚠️ TELEGRAM WARNING: Channel post failed. Trying direct chat...")
             payload["chat_id"] = TELEGRAM_CHAT_ID
-            res2 = requests.post(url, json=payload, timeout=5)
+            res2 = requests.post(url, json=payload, proxies=proxies, timeout=5)
             if res2.status_code == 200:
                 print(f"✅ TELEGRAM SUCCESS: Message delivered to private chat.")
     except Exception as e:

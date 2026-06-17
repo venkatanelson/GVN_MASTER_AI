@@ -964,7 +964,83 @@
         <div id="bypass-status" style="margin-top: 10px; font-weight: bold; text-align: center; display: none;"></div>
     </div>
     
+    <!-- 🔒 GVN ACTIVE STRIKES OVERRIDE (MANUAL LOCK) -->
+    <div class="card" style="border-top: 5px solid #8b5cf6; background: #faf5ff; margin-top: 25px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h2 style="color: #8b5cf6; margin: 0;">🔒 GVN Active Strikes Manual Override (Lock Strikes)</h2>
+            <span style="font-size: 12px; color: #7c3aed; font-weight: bold; background: white; padding: 4px 12px; border-radius: 20px; border: 1px solid #ddd6fe;">
+                ⚡ MANUAL STRIKE LOCK
+            </span>
+        </div>
+        <p style="font-size: 13px; color: #555; margin-bottom: 15px;">
+            <strong>Strike Override Control:</strong> If the automated 9:15 AM strike selection is incorrect or misses, use this form to manually lock in the Call (CE) and Put (PE) strike prices for tracking. This locks the strikes and disables automatic rollovers for the rest of the day.
+        </p>
+        
+        <form id="override-strikes-form" onsubmit="submitOverrideStrikes(event)" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd6fe;">
+            <div>
+                <label><b>Symbol:</b></label><br>
+                <select id="override-symbol" style="width: 95%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                    <option value="NIFTY">NIFTY</option>
+                    <option value="BANKNIFTY">BANKNIFTY</option>
+                    <option value="FINNIFTY">FINNIFTY</option>
+                    <option value="SENSEX">SENSEX</option>
+                    <option value="MIDCPNIFTY">MIDCPNIFTY</option>
+                </select>
+            </div>
+            <div>
+                <label><b>Manual CE Strike:</b></label><br>
+                <input type="number" id="override-ce-strike" placeholder="e.g. 24000" style="width: 90%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" required>
+            </div>
+            <div>
+                <label><b>Manual PE Strike:</b></label><br>
+                <input type="number" id="override-pe-strike" placeholder="e.g. 24100" style="width: 90%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" required>
+            </div>
+            <div style="grid-column: span 3; text-align: center; margin-top: 10px;">
+                <button type="submit" class="btn" style="background: #8b5cf6; padding: 10px 30px; font-weight: bold; width: auto; font-size: 15px; box-shadow: 0 4px 8px rgba(139,92,246,0.3);">
+                    🔒 LOCK ACTIVE STRIKES
+                </button>
+            </div>
+        </form>
+        <div id="override-status" style="margin-top: 10px; font-weight: bold; text-align: center; display: none;"></div>
+    </div>
+    
     <script>
+    async function submitOverrideStrikes(event) {
+        event.preventDefault();
+        const symbol = document.getElementById('override-symbol').value;
+        const ce_strike = document.getElementById('override-ce-strike').value;
+        const pe_strike = document.getElementById('override-pe-strike').value;
+        const statusDiv = document.getElementById('override-status');
+        
+        statusDiv.style.display = 'block';
+        statusDiv.style.color = '#ff9800';
+        statusDiv.innerText = 'Locking manual strikes...';
+        
+        try {
+            const response = await fetch('/api/override-locked-strikes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    symbol: symbol,
+                    ce_strike: parseInt(ce_strike),
+                    pe_strike: parseInt(pe_strike)
+                })
+            });
+            const data = await response.json();
+            if (response.ok && data.status === 'success') {
+                statusDiv.style.color = '#28a745';
+                statusDiv.innerText = '✅ ' + data.message;
+            } else {
+                statusDiv.style.color = '#dc3545';
+                statusDiv.innerText = '❌ Failed: ' + (data.message || 'Unknown error');
+            }
+        } catch (err) {
+            statusDiv.style.color = '#dc3545';
+            statusDiv.innerText = '❌ Error: ' + err.message;
+        }
+    }
     function toggleBypassFields() {
         const mode = document.getElementById('bypass-mode').value;
         const strikeDiv = document.getElementById('bypass-strike-div');

@@ -2,83 +2,81 @@
 
 This document serves as the "Saving Memory" for the GVN Master Auto-Algo technology. It outlines the exact rule-set derived from real-market observations of the Pine Script levels (i0-i7) and the Delta-Gamma momentum patterns.
 
-## 1. Strike Selection (Delta Filter)
-The algorithm will automatically filter and prioritize option strikes based on the following Delta ranges:
-*   **Normal Trading Days:** Select strikes with a **Delta of 60 (Range: 0.60 to 0.69)**. This provides the best balance of momentum and premium decay.
-*   **Expiry Days (Zero-to-Hero):** Shift priority to strikes with a **Delta of 40 to 50 (Range: 0.40 to 0.50)**. These out-of-the-money or at-the-money strikes provide maximum Gamma blast potential for Z-to-H setups.
+---
 
-## 2. i-Level Priority, Entry Zones & Color Codes
-The system will monitor 14 option strikes and react exactly at these pre-calculated 9:15 AM Master Levels (High-Low Fibonacci calculations):
+## 1. Core Formulas & Strategy Names
 
-*   **Level i5 (0.5 Fib / 50%) - BLUE LINE 🔵**
-    *   **Priority:** First Entry (Morning Momentum).
-    *   **Behavior:** The market frequently bounces exactly from this 0.50 level in the morning. The algorithm will set primary alerts here to catch the first major reversal or momentum wave.
+We categorize our key trading setups into three official formulas:
 
-*   **Level i7 (0.786 Fib) - BLACK LINE ⚫**
-    *   **Priority:** Second Entry (Afternoon / Pullback).
-    *   **Behavior:** Used for second entries or deep pullbacks when the first momentum wave is missed or a second setup forms.
-
-*   **Level i1 (1.0 Fib) - GREEN LINE 🟢**
-    *   **Priority:** Zero-to-Hero (Expiry Special).
-    *   **Behavior:** On expiry days, if the price drops to the i1 level, the algorithm will activate the Z-to-H mode. This level historically triggers massive short-covering or gamma bursts.
-
-## 3. Expiry Zero-to-Hero (Z-to-H) Reversal Rules
-*   **Qualification Condition:** An option contract (Delta 0.46 to 0.60) qualifies for the Zero-to-Hero watchlist if its 9:15 AM candle low value drops below **Level i7 (Black Line / 0.220 Fib)**.
-*   **Entry Trigger:** The algorithm waits for the price to drop near **Level i1 (Green Line / 1.0 Fib / Bottom Level)** (with a ±3.0 point tolerance buffer) and checks that the **Wind Direction** is aligned (UP WIND for CE, DOWN WIND for PE) and not in a Trap/Premium Eating zone.
-*   **Targets & Reversal Wave:**
-    *   **Target 1:** Level i7 (0.220 Fib)
-    *   **Target 2:** Level i6 (0.382 Fib)
-    *   **Target 3:** Level i5 (0.50 Fib / Blue Line)
-*   **Stop Loss:** A strict 12.0 point stop loss below the entry price.
-
-## 4. Automation & Execution Pipeline
-1.  **9:15 AM Calculation (Data Retrieval):** 
-    *   The algo will use **Angel One's Historical API (`getCandleData`)** to fetch the 5-minute candle for the selected strike at exactly 9:15 AM.
-    *   *Fallback:* If the 5-min candle is delayed, it will fetch 1-min candles from 9:15 to 9:19 and aggregate the High and Low.
-    *   This High and Low will be passed into the Fibonacci formula to calculate the Master Levels (i0-i7).
-2.  **Strike Application:** Apply these exact mathematical levels to the 1 selected Option Strike (CE or PE based on Long Buildup).
-3.  **Alert Monitoring:** Run a continuous loop scanning for `LTP == i-Level`.
-4.  **Auto-Execution (Broker + Demo):**
-    *   When an alert triggers, immediately construct the trade JSON.
-    *   Send the order directly to **Angel One** (or the selected broker) for instant execution.
-    *   Simultaneously log the trade in the **GVN Demo Account** for paper-trading validation.
-    *   The system will automatically attach Target and Stop-Loss (e.g., Fixed SL) to the order.
-
-## 5. Morning Candle Retracement & Wind Direction Rules (Red vs Green Candle Setup)
-These rules are used to identify the morning wind direction and select entries based on the first candle's high/low wicks:
-
-*   **Red Candle Setup (High Wick Retracement):**
-    *   **Focus:** Track the candle's High value.
-    *   **Condition:** If the High value resides between **Level 0.618** and **Level 0.5**, check if the Put side's **0.618 level** (or **0.7 level** depending on the market open) gets activated.
-    *   **Execution:**
-        *   *Entry:* Enter after the price crosses **Level 0.5**.
-        *   *Targets:* Target 1 is **Level 0.382**, and Target 2 is **Level 0.236** on the Put side.
-    *   *Retracement Box:* `0.7` ➔ `0.618` ➔ `0.5` ➔ `0.382`.
-
-*   **Green Candle Setup (Low Wick Retracement):**
-    *   **Focus:** Track where the Lower Wick starts and touches.
-    *   **Condition:** Check the proximity of the low wick to the four core lines (`0.7`, `0.618`, `0.5`, `0.382`). Verify if it touches **Level 0.7 (Black Line)** or **Level 0.618**.
-    *   **Execution:**
-        *   *Confirmation:* Ensure the price crosses and sustains above **Level 0.5**.
-        *   *Targets:* Target 1 is **Level 0.382**, and Target 2 is **Level 0.236**.
-
-
-## 6. Real-Market Case Studies & Observations
-
-*   **Case 1: Red Candle Setup (June 5, 2026)**
-    *   **Main Index (NIFTY):** The morning candle high touched the **0.618 (23551.48)** level and reversed down.
-    *   **Call Option (23200 CE):** Did not touch its 0.6 level (310.76) in the morning ("Morning not touch 0.618 level").
-    *   **Put Option (23500 PE):** Dropped and touched its **0.6 level (135.61)** in the morning, finding perfect support and reversing upwards (rallying past 184.65).
-    *   **Key Lesson:** In a Red Candle setup, the Put option's 0.6 level serves as a high-probability bounce entry point.
-
-*   **Case 2: Green Candle Setup (June 4, 2026)**
-    *   **Main Index (NIFTY):** The morning candle low touched the **0.786 (23140.56)** level, creating a long lower wick.
-    *   **Call Option (SENSEX CALL 74400 / NIFTY Delta 60 Call):** Since the main index took support at its lower wick, we monitor the **0.7 and 0.6 levels on the Call side** ("observe Call side Delta 60 strike 0.7 0.6").
-    *   **Execution:** The Call option touched its bottom base level (marked ①) and reversed upwards.
-    *   **Targets:** The primary target for the Call option is **0.786** (with further targets at 0.5 and 0.382 on the index).
-    *   **Key Lesson:** In a Green Candle setup, observe the Call side Delta 60 strike at 0.7/0.6 levels for target wind direction when the main index first candle touches its low.
+### 🚀 Formula 1: GVN Expiry Zero-to-Hero (Z2H Expiry Blast)
+*   **Target Day:** Expiry Days only.
+*   **Strike Selection:** Strikes with a **Delta of 40 to 50 (Range: 0.40 to 0.50)**.
+*   **Qualification Condition:** Option contract qualifies for the watchlist if its 9:15 AM candle low drops below **Level i7 (Black Line / 0.220 Fib)**.
+*   **Entry Trigger:** Price drops near **Level i1 (Green Line / 1.0 Fib / Bottom Level)** (±3.0 point buffer) with wind alignment, and no traps.
+*   **Targets:** 
+    *   Target 1: Level i7 (0.220 Fib)
+    *   Target 2: Level i6 (0.382 Fib)
+    *   Target 3: Level i5 (0.50 Fib / Blue Line)
+*   **Stop Loss:** Strict 12.0 point stop loss.
 
 ---
-*Status: Strategy locked in memory. Zero-to-Hero, Morning Retracement, and Real-Market Case Studies fully integrated.*
+
+### 🌪️ Formula 2: GVN Level Acceleration (Gamma Squeeze Reversal)
+This formula is triggered by index reversals that cause massive option premium jumps due to accelerated option Greeks.
+*   **Index Condition:** Main index spot is reversing and moving between **Level 6 (0.618 Fib / idx_i3)** and **Level 5 (0.50 Fib / idx_i5)**.
+*   **Option Trigger:** Option LTP touches its launchpad **Level 7 (0.786 Fib)** and breaks above **Level 6**.
+*   **Greeks & Gamma Physics:**
+    *   **OTM to ATM (Level 7 to Level 5):** As the option price rises from Level 7 and crosses Level 6 towards Level 5, it transitions from Out-of-the-Money (OTM) to At-the-Money (ATM).
+    *   **Peak Gamma:** At Level 5 (ATM), **Gamma reaches its absolute peak**. High Gamma means Delta changes at its fastest rate. This causes the option premium to accelerate rapidly, covering three option levels (Level 7 ➔ Level 6 ➔ Level 5) while the index only moves one level.
+    *   **ATM to ITM (Above Level 5):** Once Level 5 is crossed, the option becomes In-the-Money (ITM). Gamma decreases, but **Delta approaches 1.0**, causing the option premium to move point-for-point (1:1 ratio) with the index, blasting to Target Level 3 and beyond.
+*   **Targets:** Target Level 3 (0.382 Fib).
+*   **Stop Loss:** Strict 12.0 point stop loss.
+
+---
+
+### 🟢 Formula 3: GVN 9:15 Option Level Confirmation (Morning Retracement Validation)
+This formula uses the 9:15 AM candle close and option level retests to establish a high-conviction directional bias.
+*   **Call Direction Setup (Bullish):**
+    *   **Index Condition:** The 9:15 AM candle closes **above the 0.618 level** (e.g. 25000).
+    *   **Option Action (CE):** We verify if the Call Option touches **0.6 level**, crosses **0.5 level**, and then returns to retest/touch **0.7 or 0.6 level**.
+    *   **Result:** Confirms strong upward wind direction on the Call side.
+*   **Put Direction Setup (Bearish):**
+    *   **Index Condition:** The 9:15 AM candle closes **below the 0.5 level** (e.g. 25000).
+    *   **Option Action (PE):** We verify if the Put Option touches **0.6 level**, retests it, and then crosses **0.5 or 0.7 level** (checking average levels).
+    *   **Result:** Confirms strong downward wind direction on the Put side.
+*   **Verification Rule:** Ensure that the index and options are strictly matched (Nifty with Nifty options, Sensex with Sensex options). Never match Sensex options with Nifty index.
+
+---
+
+## 2. i-Level Priority, Entry Zones & Color Codes
+The system monitors option strikes and reacts at these 9:15 AM Master Levels:
+*   **Level i5 (0.5 Fib / 50%) - BLUE LINE 🔵** (Morning Momentum / First Entry)
+*   **Level i7 (0.786 Fib) - BLACK LINE ⚫** (Afternoon Pullback / Second Entry / Level Acceleration Launchpad)
+*   **Level i1 (1.0 Fib) - GREEN LINE 🟢** (Zero-to-Hero Expiry Level)
+
+---
+
+## 3. Automation & Execution Pipeline
+1.  **9:15 AM Calculation (Data Retrieval):** Fetch 5-minute candle for the selected strike and calculate Fibonacci levels (i0-i7).
+2.  **Strict Symbol Alignment:** Ensure option contract matches index spot symbol strictly (prevent Nifty-Sensex mismatch).
+3.  **Alert Monitoring:** Run live scan loops matching LTP to levels.
+4.  **Auto-Execution:** Dispatch BUY orders to broker and demo accounts.
+
+---
+
+## 4. Real-Market Case Studies & Observations
+
+*   **Case 1: Red Candle Setup (June 5, 2026)**
+    *   **Main Index (NIFTY):** Morning candle high touched 0.618 (23551.48) and reversed down.
+    *   **Put Option (23500 PE):** Touched 0.6 level (135.61) in the morning, found support, and rallied past 184.65.
+*   **Case 2: Green Candle Setup (June 4, 2026)**
+    *   **Main Index (NIFTY):** Morning candle low touched 0.786 (23140.56) level.
+    *   **Call Option (23200 CE):** Call option touched its bottom base level and reversed upwards, reaching target 0.786.
+*   **Case 3: Put Option Level Acceleration / Gamma Squeeze (June 17, 2026)**
+    *   **Main Index (NIFTY):** Reversed and fell from Level 6 (0.618 - 24087) to Level 5 (0.50 - 24008).
+    *   **Put Option (PE Contract):** PE premium at Level 7 (₹334.13) began an explosive run, crossing Level 6 (₹493.28) and Level 5 (₹609.20), eventually reaching target Level 3 (₹725 / ₹867). This matches **Formula 2 (GVN Level Acceleration)**.
+
+---
+*Status: Strategy locked in memory. Formula 1 (Zero-to-Hero), Formula 2 (Level Acceleration with Gamma Physics), and Formula 3 (9:15 Option Level Confirmation) fully saved.*
 
 

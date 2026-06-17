@@ -27,8 +27,14 @@ class TelegramBot:
         """
         self.bot_token = bot_token
         self.chat_id = chat_id
-        self.base_url = f"https://api.telegram.org/bot{bot_token}"
+        
+        import os
+        base_api = os.environ.get("TELEGRAM_API_URL", "https://api.telegram.org").rstrip('/')
+        self.base_url = f"{base_api}/bot{bot_token}"
         self.enabled = bool(bot_token and chat_id)
+        
+        proxy_url = os.environ.get("TELEGRAM_PROXY")
+        self.proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     
     def send_message(self, text):
         """Send plain text message"""
@@ -43,7 +49,7 @@ class TelegramBot:
                 "text": text,
                 "parse_mode": "HTML"
             }
-            resp = requests.post(url, json=payload, timeout=5)
+            resp = requests.post(url, json=payload, proxies=self.proxies, timeout=10)
             if resp.status_code == 200:
                 logger.info(f"✅ Telegram: {text[:50]}...")
                 return True
@@ -63,7 +69,7 @@ class TelegramBot:
             url = f"{self.base_url}/sendDocument"
             files = {'document': (filename, file_content)}
             data = {'chat_id': self.chat_id, 'caption': caption}
-            resp = requests.post(url, files=files, data=data, timeout=10)
+            resp = requests.post(url, files=files, data=data, proxies=self.proxies, timeout=10)
             return resp.status_code == 200
         except Exception as e:
             logger.error(f"Document send error: {e}")

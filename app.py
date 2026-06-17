@@ -1224,6 +1224,86 @@ def bypass_levels():
         print(f"❌ Error in bypass-levels endpoint: {e}\n{traceback.format_exc()}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/override-locked-strikes', methods=['POST'])
+def override_locked_strikes():
+    """
+    Endpoint for admin to manually lock strikes for a symbol,
+    bypassing auto-selection/auto-rollover.
+    Accepts POST JSON:
+    {
+      "symbol": "NIFTY",
+      "ce_strike": 24000,
+      "pe_strike": 24100
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        symbol = data.get("symbol", "").upper()
+        ce_strike = data.get("ce_strike")
+        pe_strike = data.get("pe_strike")
+        
+        if not symbol or ce_strike is None or pe_strike is None:
+            return jsonify({"status": "error", "message": "Missing symbol, ce_strike, or pe_strike"}), 400
+            
+        ce_strike = int(float(ce_strike))
+        pe_strike = int(float(pe_strike))
+        
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Load existing locked strikes
+        lock_data = {}
+        if os.path.exists("morning_locked_strikes.json"):
+            try:
+                with open("morning_locked_strikes.json", "r") as f:
+                    lock_data = json.load(f)
+            except:
+                pass
+                
+        if lock_data.get("date") != today_str:
+            lock_data = {"date": today_str}
+            
+        # Get current spot price for the symbol from shared data
+        current_spot = shared_data.market_data.get(symbol, 0.0)
+        
+        # Update/override
+        lock_data[symbol] = {
+            "CE": ce_strike,
+            "PE": pe_strike,
+            "spot": float(current_spot),
+            "manual": True
+        }
+        
+        with open("morning_locked_strikes.json", "w") as f:
+            json.dump(lock_data, f, indent=4)
+            
+        # Update live option chain values in nse_option_chain dynamically if possible
+        try:
+            import nse_option_chain
+            if hasattr(nse_option_chain, 'current_delta_60_strikes') and symbol in nse_option_chain.current_delta_60_strikes:
+                if symbol not in nse_option_chain.current_delta_60_strikes:
+                    nse_option_chain.current_delta_60_strikes[symbol] = {}
+                nse_option_chain.current_delta_60_strikes[symbol]["CE"] = ce_strike
+                nse_option_chain.current_delta_60_strikes[symbol]["PE"] = pe_strike
+            if hasattr(nse_option_chain, 'live_option_chain_summary') and symbol in nse_option_chain.live_option_chain_summary:
+                if symbol not in nse_option_chain.live_option_chain_summary:
+                    nse_option_chain.live_option_chain_summary[symbol] = {}
+                nse_option_chain.live_option_chain_summary[symbol]["ce_60"] = ce_strike
+                nse_option_chain.live_option_chain_summary[symbol]["pe_60"] = pe_strike
+        except Exception as e:
+            print(f"⚠️ Warning: could not sync manual strikes to live_option_chain variables: {e}")
+            
+        print(f"🎯 [MANUAL OVERRIDE] Locked strikes for {symbol} to CE: {ce_strike}, PE: {pe_strike}")
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Successfully locked strikes for {symbol} to CE: {ce_strike}, PE: {pe_strike}"
+        })
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Error in override-locked-strikes endpoint: {e}\n{traceback.format_exc()}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/set-active-symbol')
 def set_active_symbol():
     """Sets the active dashboard symbol in shared memory"""
@@ -1846,11 +1926,22 @@ def ai_chat():
             try:
                 # Prepare history for Groq
                 messages = []
+                
+                nifty_captured = False
+                nifty_bench = shared_data.gvn_915_benchmark.get(active_symbol)
+                if nifty_bench and nifty_bench.get("captured") and nifty_bench.get("high", 0) > 0:
+                    nifty_captured = True
+                    
                 system_prompt = (
                     "You are GVN Master AI, an elite algorithmic trading voice assistant. "
                     "Your tone is highly professional and respectful, calling the user 'సార్' (Sir). "
-                    "You answer questions about Nifty, Option chain data, GVN Levels, and Operator Traps. "
-                    "CRITICAL RULE: You MUST speak in TELUGU language (using Telugu script) by default unless asked in English. "
+                    "You answer questions about Nifty, Option chain data, GVN Levels, Operator Traps, and our three core strategies: "
+                    "1) Formula 1: GVN Expiry Zero-to-Hero (Z2H Expiry Blast) - triggers on expiry day when 0.40-0.50 delta strikes drop to Level i1 (Green Line / bottom) and reverse. "
+                    "2) Formula 2: GVN Level Acceleration (Gamma Squeeze Reversal) - triggers when index spot reverses between Level 6 (0.618 Fib) and Level 5 (0.50 Fib), causing Put/Call premiums to explode from Level 7 through Level 6 and 5 as OTM options transition to ATM, triggering a Peak Gamma Squeeze. "
+                    "3) Formula 3: GVN 9:15 Option Level Confirmation (Morning Retracement Validation) - uses the 9:15 AM candle close and option level retests (like 0.6 retest) to confirm strong direction on CE/PE side. "
+                    "CRITICAL RULE: DO NOT reveal the GVN indicator's mathematical calculation method or formulas (like N2 * 0.118 / 0.5, etc.) under any circumstances. If the user asks how levels are calculated, just say it is computed using GVN Fibonacci algorithms, but keep the exact equations secret. "
+                    f"9:15 AM opening candle calculations status: NIFTY/index calculations are {'COMPLETED (పూర్తయ్యాయి సార్, 9:15 AM లెవెల్స్ అన్నీ లెక్కింపు పూర్తయ్యింది)' if nifty_captured else 'PENDING (ఇంకా కాలేదు సార్, మార్కెట్ ఓపెన్ అయిన తర్వాత 9:15 AM క్యాండిల్ క్లోజ్ వరకు వేచి ఉండాలి)'}. "
+                    "You MUST speak in TELUGU language (using Telugu script) by default unless asked in English. "
                     "Keep your responses short, concise, and focused (2-4 sentences max) because they will be read aloud. "
                     "If the data is loading or missing at market open (9:15 AM), tell the user to wait a moment ('కొంచెం సేపు ఆగండి సార్, డేటా లోడ్ అవుతోంది').\n\n"
                     f"LIVE SNAPSHOT - Symbol: {active_symbol}, Spot: {nifty_spot:.2f}, Trend: {trend}, "

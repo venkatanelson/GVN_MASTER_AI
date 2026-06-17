@@ -402,8 +402,51 @@ class GVNAiDelta60Engine:
             is_idx_i6_touched = True
             is_idx_i7_touched = True
             
+            # 🌪️ GVN LEVEL ACCELERATION / INDEX-OPTION LEVEL DIVERGENCE ENTRY
+            is_level_accel_setup = False
+            index_benchmark = shared_data.gvn_915_benchmark.get(symbol)
+            if index_benchmark and index_benchmark.get("captured"):
+                idx_levels = gvn_levels_engine.calculate_gvn_levels(
+                    index_benchmark["high"], 
+                    index_benchmark["low"], 
+                    index_benchmark.get("close"),
+                    is_index=True
+                )
+                if idx_levels:
+                    idx_i3 = idx_levels.get("i3", 0)  # 0.618 level
+                    idx_i5 = idx_levels.get("i5", 0)  # 0.50 level
+                    idx_spot = shared_data.market_data.get(symbol, 0)
+                    
+                    if idx_i3 > 0 and idx_i5 > 0 and idx_spot > 0:
+                        min_idx = min(idx_i3, idx_i5)
+                        max_idx = max(idx_i3, idx_i5)
+                        
+                        # Check if Index Spot is between Level 6 (i3) and Level 5 (i5)
+                        if min_idx <= idx_spot <= max_idx:
+                            # 1. Bearish Put Acceleration (Put option premium explodes as spot falls)
+                            if strike['type'] == 'PE' and (any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "PE Acceleration"]) or shared_data.market_pulse.get("score", 50) <= 45):
+                                if i7_val > 0 and (previous_ltp < i7_val <= ltp or abs(ltp - i7_val) <= 0.30):
+                                    is_level_accel_setup = True
+                                    triggered_level_name = "I7_ACCEL_PE"
+                                    entry_level_val = ltp
+                                    target_lvl_name = "i6"
+                                    target_val = levels.get("i6", ltp + 25.0)
+                                    sl_val = round(ltp - 12.0, 2)
+                                    logger.info(f"🌪️ [LEVEL ACCELERATION] PE Acceleration entry triggered on {symbol} PE {strike['strike']} @ {ltp}")
+                                    
+                            # 2. Bullish Call Acceleration (Call option premium explodes as spot rises)
+                            elif strike['type'] == 'CE' and (any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "CE Acceleration"]) or shared_data.market_pulse.get("score", 50) >= 55):
+                                if i7_val > 0 and (previous_ltp < i7_val <= ltp or abs(ltp - i7_val) <= 0.30):
+                                    is_level_accel_setup = True
+                                    triggered_level_name = "I7_ACCEL_CE"
+                                    entry_level_val = ltp
+                                    target_lvl_name = "i6"
+                                    target_val = levels.get("i6", ltp + 25.0)
+                                    sl_val = round(ltp - 12.0, 2)
+                                    logger.info(f"🌪️ [LEVEL ACCELERATION] CE Acceleration entry triggered on {symbol} CE {strike['strike']} @ {ltp}")
+
             # Check i5 (1st Entry)
-            if i5_val > 0:
+            if not triggered_level_name and i5_val > 0:
                 is_i5_triggered = False
                 if previous_ltp < i5_val <= ltp:
                     is_i5_triggered = True
@@ -452,16 +495,18 @@ class GVNAiDelta60Engine:
                     
             if triggered_level_name:
                 is_allowed = True
-                pref_level_val = levels["i5"] # Always i5 preference (same as normal days)
-                pref_key = f"{key}_pref_traded"
-                
-                # Force first morning entry to be near preference level
-                if not self.memory.get(pref_key, False):
-                    if abs(entry_level_val - pref_level_val) > 1.5:
-                        is_allowed = False
+                if "ACCEL" not in triggered_level_name:
+                    pref_level_val = levels["i5"] # Always i5 preference (same as normal days)
+                    pref_key = f"{key}_pref_traded"
+                    
+                    # Force first morning entry to be near preference level
+                    if not self.memory.get(pref_key, False):
+                        if abs(entry_level_val - pref_level_val) > 1.5:
+                            is_allowed = False
                         
-                if is_allowed and session_params.get("enable_new_trades", True) and ((strike['type'] == 'CE' and is_bullish) or (strike['type'] == 'PE' and is_bearish)):
-                    self.memory[pref_key] = True
+                if is_allowed and session_params.get("enable_new_trades", True) and (is_level_accel_setup or (strike['type'] == 'CE' and is_bullish) or (strike['type'] == 'PE' and is_bearish)):
+                    if "ACCEL" not in triggered_level_name:
+                        self.memory[pref_key] = True
                     # Execute
                     self._execute_gvn_level_trade(symbol, strike, entry_level_val, target_val, sl_val, f"GVN Level Entry ({triggered_level_name} @ {entry_level_val:.2f})")
         else:
@@ -535,7 +580,8 @@ class GVNAiDelta60Engine:
                 sl_price = strike.get("ltp", 0.0) - 12.0
             
             level_name = "I3"
-            if "i5" in reason.lower(): level_name = "I5"
+            if "accel" in reason.lower(): level_name = "I7 (Level Acceleration 🌪️)"
+            elif "i5" in reason.lower(): level_name = "I5"
             elif "i7" in reason.lower(): level_name = "I7"
             elif "i1" in reason.lower() or "i0" in reason.lower(): level_name = "I1/I0"
             elif "i6" in reason.lower(): level_name = "I6"

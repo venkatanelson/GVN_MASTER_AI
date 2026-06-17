@@ -15,10 +15,11 @@ logger = logging.getLogger("GVNLevelsEngine")
 # LEGACY SUPPORT + ENHANCED CALCULATION
 # ───────────────────────────────────────────────────────────────
 
-def calculate_gvn_levels(high_915, low_915, close_915=None):
+def calculate_gvn_levels(high_915, low_915, close_915=None, is_index=False):
     """
     Calculates GVN Master Levels (i0-i7) based on the 9:15 AM candle.
     Enhanced with complete Fibonacci levels and trade setup info.
+    Supports index-specific calculation logic and ratios.
     """
     if not high_915 or not low_915:
         return None
@@ -30,11 +31,21 @@ def calculate_gvn_levels(high_915, low_915, close_915=None):
     n2 = low_915 + result
     c1 = (n1 + n2) / 2
     
-    # GVN Constants from Pine Script
-    gvn0_calc = n2 * 0.118 / 0.5
-    gvn_i1_calc = n1 * 0.786 / 0.5
-    
-    spread = gvn_i1_calc - gvn0_calc
+    if is_index:
+        fib_r = diff / 0.118
+        gvn0_calc = n2 - (0.5 * fib_r)
+        gvn_i1_calc = gvn0_calc + fib_r
+        spread = fib_r
+        
+        i2_ratio = 0.786
+        i7_ratio = 0.236
+    else:
+        gvn0_calc = n2 * 0.118 / 0.5
+        gvn_i1_calc = n1 * 0.786 / 0.5
+        spread = gvn_i1_calc - gvn0_calc
+        
+        i2_ratio = 0.763
+        i7_ratio = 0.220
     
     # Calculate all levels with Fibonacci ratios
     levels = {
@@ -48,11 +59,11 @@ def calculate_gvn_levels(high_915, low_915, close_915=None):
         "range": round(diff, 2),
         "i0": round(gvn_i1_calc, 2),
         "i1": round(gvn0_calc, 2),      # Zero-to-Hero level (priority on expiry)
-        "i2": round(gvn0_calc + 0.763 * spread, 2),
+        "i2": round(gvn0_calc + i2_ratio * spread, 2),
         "i3": round(gvn0_calc + 0.618 * spread, 2),
         "i5": round(gvn0_calc + 0.5 * spread, 2),   # Momentum level
         "i6": round(gvn0_calc + 0.382 * spread, 2),
-        "i7": round(gvn0_calc + 0.220 * spread, 2), # Entry level
+        "i7": round(gvn0_calc + i7_ratio * spread, 2), # Entry level
         "sl": 12  # Default SL as per script
     }
     return levels

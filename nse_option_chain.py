@@ -76,9 +76,10 @@ local_broker_915_ohlc = {}
 nse_single_poll_done = False
 
 # --- GVN Fibonacci Level Calculator ---
-def calculate_gvn_levels(high915, low915):
+def calculate_gvn_levels(high915, low915, is_index=False):
     """
     Calculates GVN Master Fibonacci Levels based on the 9:15 AM candle (PRO v2 Logic).
+    Supports index-specific calculation logic and ratios.
     """
     if not high915 or not low915: return {}
     
@@ -87,18 +88,30 @@ def calculate_gvn_levels(high915, low915):
     n1 = high915 + result
     n2 = low915 + result
     
-    gvn0 = n2 * 0.118 / 0.5
-    gvn100 = n1 * 0.786 / 0.5
-    gvnR = gvn100 - gvn0
+    if is_index:
+        fib_r = diff / 0.118
+        gvn0 = n2 - (0.5 * fib_r)
+        gvn100 = gvn0 + fib_r
+        gvnR = fib_r
+        
+        i2_ratio = 0.786
+        i7_ratio = 0.236
+    else:
+        gvn0 = n2 * 0.118 / 0.5
+        gvn100 = n1 * 0.786 / 0.5
+        gvnR = gvn100 - gvn0
+        
+        i2_ratio = 0.763
+        i7_ratio = 0.220
     
     levels = {
         "i1": round(gvn100, 2), # GVN Top
         "i0": round(gvn0, 2),   # GVN Bottom
-        "i2": round(gvn0 + 0.763 * gvnR, 2),
+        "i2": round(gvn0 + i2_ratio * gvnR, 2),
         "i3": round(gvn0 + 0.618 * gvnR, 2),
         "i5": round(gvn0 + 0.500 * gvnR, 2),
         "i6": round(gvn0 + 0.382 * gvnR, 2),
-        "i7": round(gvn0 + 0.220 * gvnR, 2)
+        "i7": round(gvn0 + i7_ratio * gvnR, 2)
     }
     return levels
 
@@ -581,9 +594,14 @@ def generate_emulated_option_chain(symbol, spot_price):
             d1 = (math.log(spot_price / strike) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
             ce_delta = norm_cdf(d1)
             pe_delta = norm_cdf(d1) - 1.0
+            
+            # Calculate Gamma using Black-Scholes formula
+            pdf_d1 = math.exp(-d1**2 / 2.0) / 2.5066282746310002
+            gamma = pdf_d1 / (spot_price * sigma * math.sqrt(T))
         except Exception:
             ce_delta = 0.5
             pe_delta = -0.5
+            gamma = 0.0015
             
         # Add slight random flutter to make prices tick realistically
         import random
@@ -618,7 +636,8 @@ def generate_emulated_option_chain(symbol, spot_price):
                 "askprice": ce_price + 0.05,
                 "underlyingValue": spot_price,
                 "lastTradedPrice": ce_price,
-                "delta": ce_delta
+                "delta": ce_delta,
+                "gamma": gamma
             },
             "PE": {
                 "strikePrice": float(strike),
@@ -641,7 +660,8 @@ def generate_emulated_option_chain(symbol, spot_price):
                 "askprice": pe_price + 0.05,
                 "underlyingValue": spot_price,
                 "lastTradedPrice": pe_price,
-                "delta": pe_delta
+                "delta": pe_delta,
+                "gamma": gamma
             }
         })
         
@@ -1892,7 +1912,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 shared_data.touched_index_levels[symbol] = set()
                 shared_data.last_touched_index_date = index_benchmark.get("date")
                 
-            index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"])
+            index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"], is_index=True)
             if index_levels:
                 idx_buffer = underlying_value * 0.0005
                 for lvl_name in ["i5", "i6", "i7"]:
@@ -2269,7 +2289,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
     ref_price = underlying_value
     benchmark = shared_data.gvn_915_benchmark.get(symbol)
     if benchmark and benchmark.get("high", 0) > 0 and benchmark.get("low", 0) > 0:
-        idx_levels = calculate_gvn_levels(benchmark["high"], benchmark["low"])
+        idx_levels = calculate_gvn_levels(benchmark["high"], benchmark["low"], is_index=True)
         if idx_levels and "i5" in idx_levels:
             ref_price = idx_levels["i5"]
         else:
@@ -2877,7 +2897,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                             idx_open = index_benchmark.get("open", 0)
                             idx_close = index_benchmark.get("close", 0)
                             
-                            idx_levels = calculate_gvn_levels(idx_high, idx_low)
+                            idx_levels = calculate_gvn_levels(idx_high, idx_low, is_index=True)
                             
                             if idx_open > 0 and idx_close > 0:
                                 is_red_candle = idx_close < idx_open
@@ -3183,7 +3203,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     idx_open = index_benchmark.get("open", 0)
                                     idx_close = index_benchmark.get("close", 0)
                                     
-                                    idx_levels = calculate_gvn_levels(idx_high, idx_low)
+                                    idx_levels = calculate_gvn_levels(idx_high, idx_low, is_index=True)
                                     
                                     if idx_open > 0 and idx_close > 0:
                                         is_red_candle = idx_close < idx_open
@@ -3343,7 +3363,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 # Index-based Bias (for context)
                 index_levels = {}
                 if index_benchmark and index_benchmark["high"] > 0:
-                    index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"])
+                    index_levels = calculate_gvn_levels(index_benchmark["high"], index_benchmark["low"], is_index=True)
 
                 score = 0
                 zone = "NORMAL"
@@ -3496,7 +3516,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             
             # 🔄 DYNAMIC STRIKE ROLLOVER: Relax lock if spot price has drifted by 60+ points
             is_drifted = False
-            if symbol in lock_data:
+            is_manual = lock_data.get(symbol, {}).get("manual", False)
+            if symbol in lock_data and not is_manual:
                 saved_spot = lock_data[symbol].get("spot", 0)
                 target_ce = int(true_best_ce_60) if true_best_ce_60 else int(best_ce_60)
                 target_pe = int(true_best_pe_60) if true_best_pe_60 else int(best_pe_60)

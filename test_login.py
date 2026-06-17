@@ -6,7 +6,7 @@ import pyotp
 from NorenRestApiPy.NorenApi import NorenApi
 
 def test_shoonya():
-    print("🔍 Testing Shoonya Login Details...")
+    print("[TEST] Testing Shoonya Login Details...")
     
     # 1. Get Details from DB
     try:
@@ -20,7 +20,7 @@ def test_shoonya():
         conn.close()
         
         if not row:
-            print("❌ No Shoonya config found in database!")
+            print("[ERROR] No Shoonya config found in database!")
             return
 
         cipher = Fernet(base64.urlsafe_b64encode(b'gvn_secure_key_for_encryption_26'))
@@ -30,18 +30,18 @@ def test_shoonya():
         app_key = cipher.decrypt(row[3]).decode() if row[3] else ""
         totp_raw = cipher.decrypt(row[4]).decode() if row[4] else "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65"
         
-        print(f"✅ Client ID: {uid}")
-        print(f"✅ VC: {'SAVED' if vc else 'MISSING'}")
-        print(f"✅ App Key: {'SAVED' if app_key else 'MISSING'}")
+        print(f"[INFO] Client ID: {uid}")
+        print(f"[INFO] VC: {'SAVED' if vc else 'MISSING'}")
+        print(f"[INFO] App Key: {'SAVED' if app_key else 'MISSING'}")
         
         # 2. Generate TOTP
         try:
             totp_clean = "".join(c for c in totp_raw if c.isalnum()).upper()
             if "FA440429" in totp_clean: totp_clean = "II5QTH6E4GXE4OWEAY6Y62C5XQ2Y2B65"
             token = pyotp.TOTP(totp_clean).now()
-            print(f"✅ TOTP Token Generated: {token}")
+            print(f"[INFO] TOTP Token Generated: {token}")
         except Exception as e:
-            print(f"❌ TOTP Generation Failed: {e}")
+            print(f"[ERROR] TOTP Generation Failed: {e}")
             return
 
         # 3. Attempt Login
@@ -50,22 +50,21 @@ def test_shoonya():
                 NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', websocket='wss://api.shoonya.com/NorenWSTP/')
         
         api = ShoonyaApiPy()
-        print("📡 Sending login request to Shoonya...")
+        print("[INFO] Sending login request to Shoonya...")
         
-        # We try to catch the raw response by wrapping the call
         ret = api.login(userid=uid, password=pwd, twoFA=token, vendor_code=vc, api_secret=app_key, imei='ABC123456789')
         
         if ret:
-            print(f"📥 Response received: {ret}")
+            print(f"[INFO] Response received: {ret}")
             if ret.get('stat') == 'Ok':
-                print("🎉 SUCCESS! Login is working perfectly.")
+                print("[SUCCESS] Login is working perfectly.")
             else:
-                print(f"⚠️ LOGIN FAILED: {ret.get('emsg', 'Unknown Error')}")
+                print(f"[WARNING] LOGIN FAILED: {ret.get('emsg', 'Unknown Error')}")
         else:
-            print("❌ SERVER RETURNED EMPTY RESPONSE. This usually means VC or API Key is wrong.")
+            print("[ERROR] SERVER RETURNED EMPTY RESPONSE.")
 
     except Exception as e:
-        print(f"💥 CRASH DURING TEST: {e}")
+        print(f"[CRASH] CRASH DURING TEST: {e}")
 
 if __name__ == "__main__":
     test_shoonya()
