@@ -1985,12 +1985,23 @@ def ai_chat():
                 pass
 
         # 6. Advanced Fallback Dynamic Rule Engine (Zero-dependency Local AI)
-        is_telugu = any(x in user_msg_lower for x in ["మార్కెట్", "పెరుగు", "తగ్గు", "ట్రాప్", "లెవెల్", "ఏమైంది", "ఏంటి", "పుట్", "కాల్", "నిఫ్టీ", "చెప్పు", "ఎలా", "హెవీ", "వాల్యూ", "డౌన్", "సపోర్ట్", "రెసిస్టెన్స్", "డెల్టా", "గ్యాప్", "రేపు", "ఓఐ", "ఎటు", "వెళ్తుంది", "పైకి", "కిందకి"])
+        is_telugu = any(x in user_msg_lower for x in [
+            "మార్కెట్", "పెరుగు", "తగ్గు", "ట్రాప్", "లెవెల్", "ఏమైంది", "ఏంటి", "పుట్", "కాల్", "నిఫ్టీ", "చెప్పు", "ఎలా", "హెవీ", "వాల్యూ", "డౌన్", "సపోర్ట్", "రెసిస్టెన్స్", "డెల్టా", "గ్యాప్", "రేపు", "ఓఐ", "ఎటు", "వెళ్తుంది", "పైకి", "కిందకి", "జీరో", "హీరో", "యాక్సిలరేషన్", "క్యాలిక్యులేషన్",
+            "cheppu", "chappu", "enti", "chudu", "ekkada", "adi", "telugu", "cheppi", "chapp"
+        ])
         reply = ""
         
         if is_telugu:
-            # Check for specific questions first
-            if any(x in user_msg_lower for x in ["delta 60", "డెల్టా 60", "delta"]):
+            # Check for GVN Formulas first
+            if any(x in user_msg_lower for x in ["zero to hero", "zero-to-hero", "z2h", "జీరో", "హీరో", "formula 1", "formula1"]):
+                reply = "సార్, జీరో-టు-హీరో (Formula 1) అనేది కేవలం ఎక్స్‌పైరీ రోజుల్లో పనిచేసే వ్యూహం. డెల్టా 0.40–0.50 స్ట్రైక్స్ లలో ధర మన బాటమ్ లెవెల్ i1 (Green Line) కు వచ్చినప్పుడు ఎంట్రీ తీసుకుంటాము. దీనికి 12 పాయింట్ల స్టాప్ లాస్ మరియు టార్గెట్స్ i7, i6, i5 గా ఉంటాయి సార్."
+            elif any(x in user_msg_lower for x in ["level acceleration", "gamma squeeze", "gamma", "గామా", "యాక్సిలరేషన్", "formula 2", "formula2"]):
+                reply = "సార్, GVN లెవెల్ యాక్సిలరేషన్ (Formula 2) అనేది ఇండెక్స్ 0.618 మరియు 0.50 లెవెల్స్ మధ్య ఉన్నప్పుడు పుట్ లేదా కాల్ ఆప్షన్స్ లో వచ్చే గామా స్క్వీజ్ కదలిక. ఆప్షన్ OTM నుండి ATM కి మారుతున్నప్పుడు గామా పీక్ (Peak Gamma) స్థాయికి చేరుకోవడం వల్ల ప్రీమియం అతివేగంగా దూసుకుపోతుంది. ఆప్షన్ Level 5 (ATM) దాటి ITM లోకి వెళ్ళినప్పుడు Gamma తగ్గి Delta 1.0 కి చేరుకుంటుంది, అప్పుడు ఆప్షన్ ధర ఇండెక్స్ తో పాటు 1:1 నిష్పత్తిలో దూసుకుపోతుంది సార్."
+            elif any(x in user_msg_lower for x in ["status", "done", "complete", "పూర్తయిందా", "ముగిసిందా", "finished"]) and any(x in user_msg_lower for x in ["9:15", "9 15", "calculation", "క్యాలిక్యులేషన్"]):
+                reply = f"సార్, ఈరోజు 9:15 AM నిఫ్టీ ఆప్షన్ లెవెల్స్ లెక్కించడం {'విజయవంతంగా పూర్తయింది సార్. అల్గో లైవ్ లో రన్ అవుతోంది.' if nifty_captured else 'ఇంకా పెండింగ్ లో ఉంది సార్. మార్కెట్ ఓపెన్ అయిన తర్వాత 9:15 AM క్యాండిల్ క్లోజ్ కోసం సిస్టమ్ వేచి చూస్తోంది.'}"
+            elif any(x in user_msg_lower for x in ["9:15", "9 15", "క్యాలిక్యులేషన్", "formula 3", "formula3", "confirmation"]):
+                reply = f"సార్, GVN 9:15 ఆప్షన్ లెవెల్ కన్ఫర్మేషన్ (Formula 3) లో 9:15 AM మొదటి క్యాండిల్ క్లోజ్ ఆధారంగా విండ్ డైరెక్షన్ కన్ఫర్మ్ చేస్తాము. కాల్ వైపు ఇండెక్స్ 0.618 పైన క్లోజ్ అయి, CE ఆప్షన్ 0.6 లెవెల్ ని తాకి, 0.5 లెవెల్ ని దాటిన తర్వాత మళ్ళీ 0.7 లేదా 0.6 లెవెల్ ని రీటెస్ట్ చేయాలి. పుట్ వైపు ఇండెక్స్ 0.5 కింద క్లోజ్ అయి, PE ఆప్షన్ 0.6 ని తాకి, రీటెస్ట్ చేసి 0.5 లేదా 0.7 లెవెల్స్ ని క్రాస్ చేయాలి. 10:45 వంటి ముఖ్యమైన సమయాల్లో కాల్ మరియు పుట్ లెవెల్స్ యొక్క దూరాన్ని పోల్చి చూస్తాము సార్. నిఫ్టీ క్యాలిక్యులేషన్స్ ప్రస్తుతం {'పూర్తయ్యాయి సార్' if nifty_captured else 'ఇంకా కాలేదు సార్'}."
+            elif any(x in user_msg_lower for x in ["delta 60", "డెల్టా 60", "delta"]):
                 reply = f"సార్, ఈరోజు డెల్టా 60 కాల్ స్ట్రైక్ ధర ₹{d60_ce} మరియు పుట్ స్ట్రైక్ ధర ₹{d60_pe} గా ఉన్నాయి. ప్రస్తుత నిఫ్టీ స్పాట్ ధర {nifty_spot:.2f}."
             elif any(x in user_msg_lower for x in ["gap up", "gap down", "గ్యాప్", "గ్యాప్ అప్", "గ్యాప్ డౌన్", "tomorrow", "రేపు"]):
                 if pcr > 1.15:
@@ -2049,7 +2060,15 @@ def ai_chat():
                 )
         else:
             # English Fallback specific questions
-            if any(x in user_msg_lower for x in ["delta 60", "delta"]):
+            if any(x in user_msg_lower for x in ["zero to hero", "zero-to-hero", "z2h", "formula 1", "formula1"]):
+                reply = "Sir, GVN Expiry Zero-to-Hero (Formula 1) is an expiry-day only strategy. It selects strikes with Delta between 0.40 and 0.50. Entry is triggered when the premium drops near Level i1 (bottom Green Line / 1.0 Fib) and reverses, with a strict 12-point SL and targets at Levels i7, i6, and i5."
+            elif any(x in user_msg_lower for x in ["level acceleration", "gamma squeeze", "gamma", "formula 2", "formula2"]):
+                reply = "Sir, GVN Level Acceleration (Formula 2) is a Peak Gamma Squeeze strategy. When the index reverses between Level 6 (0.618 Fib) and Level 5 (0.50 Fib), the option premium explodes from Level 7 through Level 6 and 5 as OTM options transition to ATM, peaking Gamma. Above Level 5 (ITM), Delta approaches 1.0, moving 1:1 with the index towards Target Level 3, with a strict 12-point SL."
+            elif any(x in user_msg_lower for x in ["status", "done", "complete", "finished"]) and any(x in user_msg_lower for x in ["9:15", "9 15", "calculation"]):
+                reply = f"Sir, today's 9:15 AM option levels calculations are {'COMPLETED and the algo is running live.' if nifty_captured else 'PENDING. The system is waiting for the 9:15 AM opening candle to close.'}"
+            elif any(x in user_msg_lower for x in ["9:15", "9 15", "calculation", "formula 3", "formula3", "confirmation"]):
+                reply = f"Sir, GVN 9:15 Option Level Confirmation (Formula 3) validates morning retracements. For Call side (Bullish), the index closes above 0.618 Fib, and the Call option touches 0.6 level, crosses 0.5 level, and then retests 0.7 or 0.6. For Put side (Bearish), the index closes below 0.5 Fib, and the Put option touches 0.6, retests, and crosses 0.5 or 0.7. Time-based alignment (like comparing levels at 10:45 AM) confirms the direction. Calculations status: {'COMPLETED' if nifty_captured else 'PENDING'}."
+            elif any(x in user_msg_lower for x in ["delta 60", "delta"]):
                 reply = f"Sir, today's Delta 60 Call Strike is at {d60_ce} and Put Strike is at {d60_pe}. Spot is currently {nifty_spot:.2f}."
             elif any(x in user_msg_lower for x in ["gap up", "gap down", "tomorrow", "opening"]):
                 if pcr > 1.15:
