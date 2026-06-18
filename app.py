@@ -1936,7 +1936,7 @@ def ai_chat():
                     "You are GVN Master AI, an elite algorithmic trading voice assistant. "
                     "Your tone is highly professional and respectful, calling the user 'సార్' (Sir). "
                     "You answer questions about Nifty, Option chain data, GVN Levels, Operator Traps, and our three core strategies: "
-                    "1) Formula 1: GVN Expiry Zero-to-Hero (Z2H Expiry Blast) - triggers on expiry day when 0.40-0.50 delta strikes drop to Level i1 (Green Line / bottom) and reverse. "
+                    "1) Formula 1: GVN Expiry Zero-to-Hero (Z2H Expiry Blast) - triggers on expiry day when 0.40-0.85 delta strikes drop to Level i1 (Green Line / bottom) and reverse under multi-layer confirmations (Wind direction, Power >= 0.8, No-Trap, Trend, Wicks). "
                     "2) Formula 2: GVN Level Acceleration (Gamma Squeeze Reversal) - triggers when index spot reverses between Level 6 (0.618 Fib) and Level 5 (0.50 Fib), causing Put/Call premiums to explode from Level 7 through Level 6 and 5 as OTM options transition to ATM, triggering a Peak Gamma Squeeze. "
                     "3) Formula 3: GVN 9:15 Option Level Confirmation (Morning Retracement Validation) - uses the 9:15 AM candle close and option level retests (like 0.6 retest) to confirm strong direction on CE/PE side. "
                     "CRITICAL RULE: DO NOT reveal the GVN indicator's mathematical calculation method or formulas (like N2 * 0.118 / 0.5, etc.) under any circumstances. If the user asks how levels are calculated, just say it is computed using GVN Fibonacci algorithms, but keep the exact equations secret. "
@@ -1994,7 +1994,7 @@ def ai_chat():
         if is_telugu:
             # Check for GVN Formulas first
             if any(x in user_msg_lower for x in ["zero to hero", "zero-to-hero", "z2h", "జీరో", "హీరో", "formula 1", "formula1"]):
-                reply = "సార్, జీరో-టు-హీరో (Formula 1) అనేది కేవలం ఎక్స్‌పైరీ రోజుల్లో పనిచేసే వ్యూహం. డెల్టా 0.40–0.50 స్ట్రైక్స్ లలో ధర మన బాటమ్ లెవెల్ i1 (Green Line) కు వచ్చినప్పుడు ఎంట్రీ తీసుకుంటాము. దీనికి 12 పాయింట్ల స్టాప్ లాస్ మరియు టార్గెట్స్ i7, i6, i5 గా ఉంటాయి సార్."
+                reply = "సార్, జీరో-టు-హీరో (Formula 1) అనేది ఎక్స్‌పైరీ రోజుల్లో పనిచేసే వ్యూహం. డెల్టా 0.40–0.85 మధ్య ఉన్న స్ట్రైక్స్ లలో ధర మన బాటమ్ లెవెల్ i1 (Green Line) కు వచ్చి, విండ్ డైరెక్షన్ మరియు విండ్ పవర్ (>= 0.8) కన్ఫర్మ్ చేసినప్పుడు మల్టీ-ఫిల్టర్లతో ఎంట్రీ తీసుకుంటాము సార్."
             elif any(x in user_msg_lower for x in ["level acceleration", "gamma squeeze", "gamma", "గామా", "యాక్సిలరేషన్", "formula 2", "formula2"]):
                 reply = "సార్, GVN లెవెల్ యాక్సిలరేషన్ (Formula 2) అనేది ఇండెక్స్ 0.618 మరియు 0.50 లెవెల్స్ మధ్య ఉన్నప్పుడు పుట్ లేదా కాల్ ఆప్షన్స్ లో వచ్చే గామా స్క్వీజ్ కదలిక. ఆప్షన్ OTM నుండి ATM కి మారుతున్నప్పుడు గామా పీక్ (Peak Gamma) స్థాయికి చేరుకోవడం వల్ల ప్రీమియం అతివేగంగా దూసుకుపోతుంది. ఆప్షన్ Level 5 (ATM) దాటి ITM లోకి వెళ్ళినప్పుడు Gamma తగ్గి Delta 1.0 కి చేరుకుంటుంది, అప్పుడు ఆప్షన్ ధర ఇండెక్స్ తో పాటు 1:1 నిష్పత్తిలో దూసుకుపోతుంది సార్."
             elif any(x in user_msg_lower for x in ["status", "done", "complete", "పూర్తయిందా", "ముగిసిందా", "finished"]) and any(x in user_msg_lower for x in ["9:15", "9 15", "calculation", "క్యాలిక్యులేషన్"]):
@@ -2061,7 +2061,7 @@ def ai_chat():
         else:
             # English Fallback specific questions
             if any(x in user_msg_lower for x in ["zero to hero", "zero-to-hero", "z2h", "formula 1", "formula1"]):
-                reply = "Sir, GVN Expiry Zero-to-Hero (Formula 1) is an expiry-day only strategy. It selects strikes with Delta between 0.40 and 0.50. Entry is triggered when the premium drops near Level i1 (bottom Green Line / 1.0 Fib) and reverses, with a strict 12-point SL and targets at Levels i7, i6, and i5."
+                reply = "Sir, GVN Expiry Zero-to-Hero (Formula 1) is an expiry-day strategy. It selects strikes with Delta between 0.40 and 0.85. Entry triggers when premium drops near Level i1 (bottom Green Line / 1.0 Fib) and reverses under Wind direction, Wind power (>= 0.8), and Trap filters."
             elif any(x in user_msg_lower for x in ["level acceleration", "gamma squeeze", "gamma", "formula 2", "formula2"]):
                 reply = "Sir, GVN Level Acceleration (Formula 2) is a Peak Gamma Squeeze strategy. When the index reverses between Level 6 (0.618 Fib) and Level 5 (0.50 Fib), the option premium explodes from Level 7 through Level 6 and 5 as OTM options transition to ATM, peaking Gamma. Above Level 5 (ITM), Delta approaches 1.0, moving 1:1 with the index towards Target Level 3, with a strict 12-point SL."
             elif any(x in user_msg_lower for x in ["status", "done", "complete", "finished"]) and any(x in user_msg_lower for x in ["9:15", "9 15", "calculation"]):

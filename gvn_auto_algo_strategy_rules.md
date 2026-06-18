@@ -10,9 +10,15 @@ We categorize our key trading setups into three official formulas:
 
 ### 🚀 Formula 1: GVN Expiry Zero-to-Hero (Z2H Expiry Blast)
 *   **Target Day:** Expiry Days only.
-*   **Strike Selection:** Strikes with a **Delta of 40 to 50 (Range: 0.40 to 0.50)**.
+*   **Strike Selection:** Strikes with a **Delta of 40 to 85 (Range: 0.40 to 0.85)** (expanded to include ITM/ATM strikes like SENSEX 77000 CE and 77200 CE).
 *   **Qualification Condition:** Option contract qualifies for the watchlist if its 9:15 AM candle low drops below **Level i7 (Black Line / 0.220 Fib)**.
-*   **Entry Trigger:** Price drops near **Level i1 (Green Line / 1.0 Fib / Bottom Level)** (±3.0 point buffer) with wind alignment, and no traps.
+*   **Entry Trigger:** Price drops near **Level i1 (Green Line / 1.0 Fib / Bottom Level)** (±3.0 point buffer) with multi-layer confirmation filters.
+*   **Multi-Layer Confirmations:**
+    *   **Wind Direction Alignment:** Must align with trade bias (Bullish winds: UP WIND, SHORT COVERING, SLOW UP for CE; Bearish winds: DOWN WIND, LONG UNWINDING, SLOW DOWN for PE).
+    *   **Wind Power & Volume:** Minimum Wind Power must be **>= 0.8** (verifying strong institutional volume/pressure).
+    *   **Anti-Trap Filter:** Entry is rejected if `TRAP` or `PREMIUM EATING` is detected in the wind direction.
+    *   **Trend Confirmation:** Overall index trend must not be opposing (CE trades blocked in strong bearish trend; PE trades blocked in strong bullish trend).
+    *   **Morning Wick Confirmation:** Morning candle wick must match the retracement zone on the index (high wick for PE, low wick for CE).
 *   **Targets:** 
     *   Target 1: Level i7 (0.220 Fib)
     *   Target 2: Level i6 (0.382 Fib)

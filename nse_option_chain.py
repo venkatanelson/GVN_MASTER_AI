@@ -3097,7 +3097,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         logger.error(f"❌ Failed to log 9:15 option benchmark: {db_err}")
 
                 # 🚀 GVN ZERO-TO-HERO EXPIRY DAY STRATEGY
-                if is_expiry_day and delta is not None and 0.46 <= delta <= 0.60:
+                if is_expiry_day and delta is not None and 0.40 <= delta <= 0.85:
                     is_qualified = False
                     if strike_low > 0:
                         # If candle is flat (mock or single trade), automatically qualify
