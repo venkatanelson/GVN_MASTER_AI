@@ -1878,7 +1878,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 shared_data.gvn_scanner_data = {
                     "summary": live_option_chain_summary,
                     "scanner": gvn_scanner_data,
-                    "pulse": market_pulse
+                    "pulse": market_pulse,
+                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 import json
                 with open("live_market_data.json", "w") as jf:
@@ -3571,12 +3572,83 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         shared_data.gvn_scanner_data = {
             "summary": live_option_chain_summary,
             "scanner": gvn_scanner_data,
-            "pulse": market_pulse
+            "pulse": market_pulse,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         # Force persist to file for dashboard
         import json
         with open("live_market_data.json", "w") as jf:
             json.dump(shared_data.gvn_scanner_data, jf)
+
+        # 🚨 GVN DUAL-SYNC TELEGRAM ALERT AUTOMATION
+        try:
+            nifty_spot = underlying_value
+            nifty_idx_05 = 23969.20  # Nifty GVN 0.5 Level
+            
+            # Find closest CE and PE
+            ce_item = None
+            pe_item = None
+            for item in gvn_scanner_data.get(symbol, []):
+                strike_name = item.get("strike", "")
+                if "CE" in strike_name and not ce_item: ce_item = item
+                elif "PE" in strike_name and not pe_item: pe_item = item
+                
+            if symbol == "NIFTY":
+                # Check for active state changes to prevent spamming the Telegram channel
+                if not hasattr(shared_data, 'last_dualsync_alert'):
+                    shared_data.last_dualsync_alert = None
+                
+                alert_type = None
+                alert_msg = None
+                
+                if nifty_spot < nifty_idx_05:
+                    if pe_item:
+                        pe_ltp = pe_item.get("ltp", 0)
+                        pe_levels = pe_item.get("levels", {})
+                        pe_05 = float(pe_levels.get("i5", 0))
+                        pe_06 = float(pe_levels.get("i6", 0))
+                        
+                        if pe_ltp >= pe_05:
+                            alert_type = "PE_BREAKOUT"
+                            alert_msg = (
+                                f"🟢 <b>GVN DUAL-SYNC PUT BREAKOUT CONFIRMED!</b>\n"
+                                f"📉 <b>Nifty Spot:</b> {nifty_spot:.2f} (Below 0.5 Level: {nifty_idx_05:.2f})\n"
+                                f"📥 <b>Strike:</b> {pe_item.get('strike')}\n"
+                                f"⚡ <b>LTP:</b> {pe_ltp:.2f} (Above 0.5 Level: {pe_05:.2f})\n"
+                                f"🎯 <b>Action:</b> Strong PE Buy Momentum (2x Volume Entry)\n"
+                                f"🏁 <b>Target:</b> i3 ({float(pe_levels.get('i3', 0)):.2f})"
+                            )
+                else:
+                    if ce_item:
+                        ce_ltp = ce_item.get("ltp", 0)
+                        ce_levels = ce_item.get("levels", {})
+                        ce_05 = float(ce_levels.get("i5", 0))
+                        ce_06 = float(ce_levels.get("i6", 0))
+                        
+                        if ce_ltp >= ce_05:
+                            alert_type = "CE_BREAKOUT"
+                            alert_msg = (
+                                f"🟢 <b>GVN DUAL-SYNC CALL BREAKOUT CONFIRMED!</b>\n"
+                                f"📈 <b>Nifty Spot:</b> {nifty_spot:.2f} (Above 0.5 Level: {nifty_idx_05:.2f})\n"
+                                f"📞 <b>Strike:</b> {ce_item.get('strike')}\n"
+                                f"⚡ <b>LTP:</b> {ce_ltp:.2f} (Above 0.5 Level: {ce_05:.2f})\n"
+                                f"🎯 <b>Action:</b> Strong CE Buy Momentum (2x Volume Entry)\n"
+                                f"🏁 <b>Target:</b> i3 ({float(ce_levels.get('i3', 0)):.2f})"
+                            )
+                
+                # If breakout type changed, notify!
+                if alert_type and alert_type != shared_data.last_dualsync_alert:
+                    from gvn_telegram_engine import TelegramAlertManager
+                    import os
+                    tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
+                    tg.send_direct_message(alert_msg)
+                    shared_data.last_dualsync_alert = alert_type
+                    logger.info(f"🚨 [DUAL-SYNC ALERT] Sent Telegram Notification for {alert_type}")
+                elif not alert_type:
+                    # Reset alert state if no active breakout is happening
+                    shared_data.last_dualsync_alert = None
+        except Exception as alert_err:
+            logger.error(f"Error in GVN Dual-Sync Alert: {alert_err}")
             
         # Log specific tracking for 24100 PE if it exists in data
         found_target = False

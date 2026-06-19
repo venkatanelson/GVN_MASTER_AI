@@ -20,7 +20,11 @@ class SecurityShield:
         self.db = db
         self.tg_sender = tg_sender
         self.blocked_ips = set()
-        self.whitelist_ips = set()
+        self.whitelist_ips = {'127.0.0.1', 'localhost', '157.50.87.3'}
+        env_whitelist = os.getenv("WHITELISTED_IPS")
+        if env_whitelist:
+            for ip in env_whitelist.split(','):
+                self.whitelist_ips.add(ip.strip())
         self.request_history = {} # IP: [timestamps]
         self.file_hashes = {}
         self.audit_log = []
@@ -97,11 +101,12 @@ class SecurityShield:
                     self._log_security_event("BOT_DETECTED", ip, request.path, f"Blocked malicious UA: {ua}")
                     return abort(403, description="🤖 Security Alert: Bot activity detected and blocked.")
 
-            # 4. Rate Limiting / Bot Detection
-            if self._is_suspicious(ip):
-                self.block_ip(ip, "High Frequency Request (DDoS/Bot)")
-                self._log_security_event("DDoS_ATTEMPT", ip, request.path, "Rate limit exceeded")
-                return abort(429, description="🚨 Security Alert: Too many requests. Try again later.")
+            # 4. Rate Limiting / Bot Detection (Exclude dashboard scanner and static files from blocking)
+            if not any(path in request.path for path in ['/api/gvn-scanner', '/static/', '/favicon.ico']):
+                if self._is_suspicious(ip):
+                    self.block_ip(ip, "High Frequency Request (DDoS/Bot)")
+                    self._log_security_event("DDoS_ATTEMPT", ip, request.path, "Rate limit exceeded")
+                    return abort(429, description="🚨 Security Alert: Too many requests. Try again later.")
 
             # 5. Path Traversal / Common Attack Patterns
             path = request.path.lower()

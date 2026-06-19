@@ -41,6 +41,7 @@ This formula is triggered by index reversals that cause massive option premium j
 ---
 
 ### 🟢 Formula 3: GVN 9:15 Option Level Confirmation (Morning Retracement Validation)
+*   **Official Wind Direction Name:** `Morning Retracement Wind` (or `MRV Wind`)
 This formula uses the 9:15 AM candle close and option level retests to establish a high-conviction directional bias.
 *   **Call Direction Setup (Bullish):**
     *   **Index Condition:** The 9:15 AM candle closes **above the 0.618 level** (e.g. 25000).
@@ -51,6 +52,10 @@ This formula uses the 9:15 AM candle close and option level retests to establish
     *   **Option Action (PE):** We verify if the Put Option touches **0.6 level**, retests it, and then crosses **0.5 or 0.7 level** (checking average levels).
     *   **Result:** Confirms strong downward wind direction on the Put side.
 *   **Verification Rule:** Ensure that the index and options are strictly matched (Nifty with Nifty options, Sensex with Sensex options). Never match Sensex options with Nifty index.
+*   **GVN Dual-Sync Timing & Level Comparison Filter:**
+    *   **Timing Correlation:** Compare the exact time when the Main Index touches/crosses a level with when the Option Premium touches/crosses its corresponding level (e.g. `12:25 PM` candle analysis).
+    *   **Divergence Filter:** If the Main Index reaches/crosses its `0.5` level but the active Option contract (CE/PE) remains below/fails to cross its own `0.5` level, the move is a **false breakout** (Reject Entry).
+    *   **PE Acceleration Trigger:** When Nifty Index breaks below its `0.5` level (`23,969.03`) and the Put Option simultaneously crosses above its `0.5` level (`197.66`), it triggers a high-probability **2x Momentum Breakout Entry** targeting `i3 (234.84)`.
 
 ---
 
