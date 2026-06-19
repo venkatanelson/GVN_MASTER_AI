@@ -326,9 +326,10 @@ class TelegramAlertManager:
         except Exception as e:
             logger.error(f"Error checking morning locked strikes in telegram engine: {e}")
             
-        if not is_locked:
-            logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because it is not a locked morning strike.")
-            return
+        # USER REQUEST: Always send alerts for any active dashboard trade signals, regardless of morning lock
+        # if not is_locked:
+        #     logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because it is not a locked morning strike.")
+        #     return
 
         if not self.should_send_alert("ENTRY", trade_sym):
             return
