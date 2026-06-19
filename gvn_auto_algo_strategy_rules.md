@@ -19,6 +19,10 @@ We categorize our key trading setups into three official formulas:
     *   **Anti-Trap Filter:** Entry is rejected if `TRAP` or `PREMIUM EATING` is detected in the wind direction.
     *   **Trend Confirmation:** Overall index trend must not be opposing (CE trades blocked in strong bearish trend; PE trades blocked in strong bullish trend).
     *   **Morning Wick Confirmation:** Morning candle wick must match the retracement zone on the index (high wick for PE, low wick for CE).
+    *   **Wind Direction Sentinel Sync (Delta-60 Confirmation):** 
+        *   Before executing a Z2H CE trade, the corresponding Delta-60 CE contract must have crossed and held above its **0.6 and 0.5 GVN levels** (under Formula 4). If the Delta-60 CE is trading below its 0.6 level, the Z2H CE trade is blocked.
+        *   Before executing a Z2H PE trade, the corresponding Delta-60 PE contract must have crossed and held above its **0.6 and 0.5 GVN levels**. If the Delta-60 PE is trading below its 0.6 level, the Z2H PE trade is blocked.
+        *   This ensures Z2H entries are backed by verified institutional volume pressure.
 *   **Targets:** 
     *   Target 1: Level i7 (0.220 Fib)
     *   Target 2: Level i6 (0.382 Fib)
