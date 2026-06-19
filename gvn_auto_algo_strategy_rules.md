@@ -92,10 +92,11 @@ The system monitors option strikes and reacts at these 9:15 AM Master Levels:
 ### 🧭 Formula 4: GVN Wind Direction Sentinel (Delta-60 Trend Lock & Reversal)
 This formula uses Delta-60 option contracts and index Fibonacci levels to identify the dominant trend at market open and capture high-probability afternoon reversals.
 *   **Strike Selection:** Option contracts with a **Delta of 0.59 to 0.69 (Delta-60)** at market open.
-*   **Morning Trend Lock:** 
-    *   Monitor which option (CE or PE) crosses its **0.6 GVN level** from below first.
-    *   If PE crosses 0.6 and then 0.5, the morning bearish trend is locked.
-    *   If CE crosses 0.6 and then 0.5, the morning bullish trend is locked.
+*   **Morning Trend Lock & Pressure Analysis (9:15 AM Candle Signature):**
+    *   Compare the 9:15 AM candle behavior between CE and PE to determine the direction of institutional pressure:
+        *   **Strong Side (Bullish PE / Bearish Market):** PE candle starts near the bottom levels (between 0.7 and 0.6 GVN levels) and prints a strong, full-bodied **green candle** crossing above the **0.6 GVN level** from below, backed by high volume (e.g. 2x margin volume). The exact retracement (50% or 80%) doesn't matter; the break and close above the 0.6/0.5 levels confirm the trend.
+        *   **Weak Side (Bearish CE):** CE candle starts near upper levels (between 0.3 and 0.2 GVN levels) and prints a **red candle** cutting down horizontally through the **0.5 GVN level** and closing below it, without ever touching its 0.6 level.
+    *   **Asymmetric Level Retest Rule:** If one side (e.g., PE) touches or crosses its 0.6 or 0.7 level from below, but the opposite side (CE) does not touch its corresponding GVN level, the market pressure is locked on the side that successfully tested/broke its levels.
 *   **Anti-Trap Rule (Trend Filter):**
     *   No trades are allowed on the opposite side as long as the dominant side stays above its 0.5 level.
     *   Opposite option trade is blocked if it remains below its 0.6 and 0.5 levels.
