@@ -307,8 +307,18 @@ class TelegramAlertManager:
             
         # Get active dashboard symbol from shared memory
         active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-        if base_sym != active_sym:
-            logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because active dashboard symbol is {active_sym}")
+        
+        # Check if today is the expiry day for this symbol
+        is_expiry_today = False
+        try:
+            if hasattr(shared_data, 'expiry_status'):
+                is_expiry_today = shared_data.expiry_status.get(base_sym, False)
+        except:
+            pass
+            
+        # Bypass active dashboard symbol filter if it is the Expiry Day for this symbol
+        if base_sym != active_sym and not is_expiry_today:
+            logger.info(f"🔇 [ALERT MUTED] Muted entry alert for {trade_sym} because active dashboard symbol is {active_sym} and it is not expiry day.")
             return
             
         # Verify if it is one of the morning locked strikes for this index

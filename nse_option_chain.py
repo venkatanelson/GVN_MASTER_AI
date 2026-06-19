@@ -1961,6 +1961,11 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         current_date = datetime.now().date()
         current_dt = datetime.now()
 
+    # Save expiry day status for this symbol in shared_data
+    if not hasattr(shared_data, 'expiry_status'):
+        shared_data.expiry_status = {}
+    shared_data.expiry_status[symbol] = is_expiry_day
+
     # Reset Zero-to-Hero watchlist if date changes
     playback_date_str = current_date.strftime("%Y-%m-%d")
     if hasattr(shared_data, 'gvn_z2h_watchlist') and len(shared_data.gvn_z2h_watchlist) > 0:
@@ -3249,7 +3254,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                                 if abs(ltp - bottom_level) <= 3.0 and is_wind_aligned:
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         existing_item["status"] = "ACTIVE"
                                         existing_item["entry_price"] = round(ltp, 2)
                                         existing_item["sl"] = round(ltp - 12.0, 2)
@@ -3278,7 +3283,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -3291,7 +3296,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T1 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 1:</b> ₹{target1:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🎯 [Z2H T1 HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -3308,7 +3313,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -3321,7 +3326,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"🎯 <b>[GVN ZERO-TO-HERO T2 HIT]</b> ✅\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Target 2:</b> ₹{target2:.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🎯 [Z2H T2 HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -3338,7 +3343,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"⛔ <b>[GVN ZERO-TO-HERO SL HIT]</b> ⛔\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>Exit Price:</b> ₹{ltp:.2f}\n📉 <b>Loss:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"⛔ [Z2H SL HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
@@ -3353,7 +3358,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     msg_text = f"🏆 <b>[GVN ZERO-TO-HERO T3 HIT - TARGET MET]</b> 🏆\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎯 <b>Symbol:</b> {contract_key.replace('_', ' ')}\n💸 <b>LTP:</b> ₹{ltp:.2f}\n📈 <b>Gain:</b> ₹{(ltp - existing_item['entry_price']):.2f}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚡ <i>GVN Real-Time Engine Active</i>"
                                     logger.info(f"🏆 [Z2H T3 HIT] {contract_key} at {ltp}")
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         try:
                                             from gvn_telegram_engine import TelegramAlertManager
                                             tg = TelegramAlertManager(os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID"))
