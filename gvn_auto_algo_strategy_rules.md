@@ -88,6 +88,25 @@ The system monitors option strikes and reacts at these 9:15 AM Master Levels:
     *   **Put Option (PE Contract):** PE premium at Level 7 (₹334.13) began an explosive run, crossing Level 6 (₹493.28) and Level 5 (₹609.20), eventually reaching target Level 3 (₹725 / ₹867). This matches **Formula 2 (GVN Level Acceleration)**.
 
 ---
-*Status: Strategy locked in memory. Formula 1 (Zero-to-Hero), Formula 2 (Level Acceleration with Gamma Physics), and Formula 3 (9:15 Option Level Confirmation) fully saved.*
+
+### 🧭 Formula 4: GVN Wind Direction Sentinel (Delta-60 Trend Lock & Reversal)
+This formula uses Delta-60 option contracts and index Fibonacci levels to identify the dominant trend at market open and capture high-probability afternoon reversals.
+*   **Strike Selection:** Option contracts with a **Delta of 0.59 to 0.69 (Delta-60)** at market open.
+*   **Morning Trend Lock:** 
+    *   Monitor which option (CE or PE) crosses its **0.6 GVN level** from below first.
+    *   If PE crosses 0.6 and then 0.5, the morning bearish trend is locked.
+    *   If CE crosses 0.6 and then 0.5, the morning bullish trend is locked.
+*   **Anti-Trap Rule (Trend Filter):**
+    *   No trades are allowed on the opposite side as long as the dominant side stays above its 0.5 level.
+    *   Opposite option trade is blocked if it remains below its 0.6 and 0.5 levels.
+*   **Afternoon Reversal Trigger:**
+    *   Triggered in the afternoon (12:30 PM - 3:00 PM) when the Main Index crosses its **0.618 Fib level** from below.
+    *   Simultaneously, the opposite option must cross its dormant **0.6 GVN level** from below, and confirm above **0.5 GVN level**.
+    *   This triggers a high-probability trade targeting the **0.3 GVN level** (and 0.2 level).
+*   **Targets:** Level 0.3 (0.382 Fib) and Level 0.2 (0.236 Fib).
+*   **Stop Loss:** Strict 12.0 point stop loss.
+
+---
+*Status: Strategy locked in memory. Formula 1 (Zero-to-Hero), Formula 2 (Level Acceleration with Gamma Physics), Formula 3 (9:15 Option Level Confirmation), and Formula 4 (Wind Direction Sentinel) fully saved.*
 
 
