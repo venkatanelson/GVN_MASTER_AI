@@ -2667,8 +2667,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                             # Retrieve active symbol from dashboard
                             active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
                             
-                            # Only trigger alerts if this option belongs to the active index
-                            if symbol == active_sym:
+                            # Only trigger alerts if this option belongs to the active index or is expiry day
+                            if symbol == active_sym or is_expiry_day:
                                 # Determine if this strike is one of the morning locked strikes
                                 is_locked = False
                                 try:
@@ -2806,7 +2806,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     new_sl = last_tgt - 12.0 # Strict 12-point Stop Loss
                                     
                                     active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                    if symbol == active_sym:
+                                    if symbol == active_sym or is_expiry_day:
                                         shared_data.demo_trade = {
                                             "active": True,
                                             "symbol": full_sym,
@@ -2824,7 +2824,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     else:
                                         # Reset pullback flag anyway
                                         shared_data.target_pullback_flags[full_sym] = False
-                                        logger.info(f"🔇 [TRADE MUTED] Muted GVN re-entry trade for {full_sym} because active dashboard symbol is {active_sym}")
+                                        logger.info(f"🔇 [TRADE MUTED] Muted GVN re-entry trade for {full_sym} because active dashboard symbol is {active_sym} and it is not expiry day.")
                                     
                                     try:
                                         from gvn_telegram_engine import TelegramAlertManager
@@ -3022,7 +3022,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                     
                             if triggered_level_name:
                                 active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
-                                if symbol == active_sym:
+                                if symbol == active_sym or is_expiry_day:
                                     shared_data.demo_trade = {
                                         "active": True,
                                         "symbol": full_sym,
@@ -3046,7 +3046,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                         })
                                     except: pass
                                 else:
-                                    logger.info(f"🔇 [TRADE MUTED] Muted standard touch entry for {full_sym} because active dashboard symbol is {active_sym}")
+                                    logger.info(f"🔇 [TRADE MUTED] Muted standard touch entry for {full_sym} because active dashboard symbol is {active_sym} and it is not expiry day.")
                 
                 # ---- DEFAULT MOMENTUM LOGIC (For Non-Authorized Strikes) ----
                 # Disabled to enforce strict, institutional level-to-level discipline on Authorized Tracks

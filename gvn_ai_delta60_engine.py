@@ -250,6 +250,68 @@ class GVNAiDelta60Engine:
         levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915)
         if not levels: return
         
+        # 📊 GVN RSI 15 Trend Calculation
+        idx_rsi = 50.0
+        opt_rsi = 50.0
+        try:
+            # Initialize caches
+            if "rsi_last_fetch" not in self.memory: self.memory["rsi_last_fetch"] = {}
+            if "rsi_closes" not in self.memory: self.memory["rsi_closes"] = {}
+            
+            now = time.time()
+            idx_cache_key = f"{symbol}_index_closes"
+            idx_last_fetch = self.memory["rsi_last_fetch"].get(idx_cache_key, 0)
+            idx_closes = self.memory["rsi_closes"].get(idx_cache_key, [])
+            
+            if now - idx_last_fetch > 30 or not idx_closes:
+                fetched_closes = self._fetch_closes_from_api(symbol)
+                if fetched_closes:
+                    self.memory["rsi_closes"][idx_cache_key] = fetched_closes
+                    idx_closes = fetched_closes
+                    self.memory["rsi_last_fetch"][idx_cache_key] = now
+                    
+            opt_cache_key = f"{key}_option_closes"
+            opt_last_fetch = self.memory["rsi_last_fetch"].get(opt_cache_key, 0)
+            opt_closes = self.memory["rsi_closes"].get(opt_cache_key, [])
+            
+            if now - opt_last_fetch > 30 or not opt_closes:
+                fetched_closes = self._fetch_closes_from_api(symbol, strike['strike'], strike['type'])
+                if fetched_closes:
+                    self.memory["rsi_closes"][opt_cache_key] = fetched_closes
+                    opt_closes = fetched_closes
+                    self.memory["rsi_last_fetch"][opt_cache_key] = now
+                    
+            # Compute live values
+            idx_closes_live = list(idx_closes)
+            idx_spot = shared_data.market_data.get(symbol, 0)
+            if idx_spot <= 0 and symbol == "NIFTY":
+                idx_spot = shared_data.market_data.get("NIFTY 50", 0)
+            if idx_spot > 0 and idx_closes_live:
+                idx_closes_live.append(float(idx_spot))
+                
+            opt_closes_live = list(opt_closes)
+            if ltp > 0 and opt_closes_live:
+                opt_closes_live.append(float(ltp))
+                
+            if len(idx_closes_live) >= 16:
+                idx_rsi = self._compute_rsi(idx_closes_live, period=15)
+            if len(opt_closes_live) >= 16:
+                opt_rsi = self._compute_rsi(opt_closes_live, period=15)
+                
+            # Cache values in shared_data
+            shared_data.market_pulse[f"{symbol}_rsi_15"] = idx_rsi
+            shared_data.market_pulse[f"{key}_rsi_15"] = opt_rsi
+        except Exception as rsi_calc_err:
+            logger.error(f"❌ GVN RSI Calculation Error: {rsi_calc_err}")
+
+        # 🚨 GVN DUAL-SYNC LIVE ALERT CROSSOVER CHECK
+        try:
+            self._check_gvn_sync_alerts(symbol, strike, ltp, levels, idx_rsi=idx_rsi, opt_rsi=opt_rsi)
+        except Exception as alert_err:
+            logger.error(f"❌ Error in GVN Sync Alert Check: {alert_err}")
+
+
+        
         # 🔒 PERSISTENT MORNING LOCK: Only allow trades on the morning locked strike
         locked_strike = 0
         try:
@@ -312,7 +374,66 @@ class GVNAiDelta60Engine:
                 logger.info(f"🚫 [NIFTY 50 STOCK FILTER] PE entry blocked. Nifty 50 trend is {nifty50_trend}.")
                 is_bearish = False
 
-            # Store previous price to detect crossover/touch
+            is_fake_crossover = False
+            # 5. GVN Dual-Sync Crossover Verification Filter (True vs Fake Breakouts)
+            try:
+                idx_high, idx_low = 0, 0
+                if symbol == "NIFTY":
+                    idx_high = 24110.75
+                    idx_low = 24032.35
+                else:
+                    bench = shared_data.gvn_915_benchmark.get(symbol, {})
+                    if bench.get("high", 0) > 0:
+                        idx_high = bench["high"]
+                        idx_low = bench["low"]
+                
+                if idx_high > 0 and idx_low > 0:
+                    idx_levels = gvn_levels_engine.calculate_gvn_levels(idx_high, idx_low, is_index=True)
+                    if idx_levels:
+                        spot_price = shared_data.market_data.get(symbol, 0)
+                        if spot_price <= 0 and symbol == "NIFTY":
+                            spot_price = shared_data.market_data.get("NIFTY 50", 0)
+                        
+                        opt_i5 = levels.get("i5", 0) # Option 0.5 level
+                        
+                        if strike['type'] == 'CE' and ltp >= opt_i5:
+                            idx_i3 = idx_levels.get("i3", 0) # Index 0.618 level
+                            if spot_price < idx_i3:
+                                logger.info(f"🚫 [GVN SYNC FILTER] FAKE CE BREAKOUT: Option CE LTP {ltp} >= {opt_i5} (0.5 level) but Spot {spot_price} is below Index 0.618 Level {idx_i3}.")
+                                is_fake_crossover = True
+                                is_bullish = False
+                                
+                        elif strike['type'] == 'PE' and ltp >= opt_i5:
+                            idx_i5 = idx_levels.get("i5", 0) # Index 0.5 level
+                            if spot_price > idx_i5:
+                                logger.info(f"🚫 [GVN SYNC FILTER] FAKE PE BREAKOUT: Option PE LTP {ltp} >= {opt_i5} (0.5 level) but Spot {spot_price} is above Index 0.5 Level {idx_i5}.")
+                                is_fake_crossover = True
+                                is_bearish = False
+            except Exception as sync_filt_err:
+                logger.error(f"❌ GVN Sync Filter Error: {sync_filt_err}")
+
+            is_rsi_unconfirmed = False
+            # 6. GVN RSI 15 Trend & 50-Crossover Validation Filter
+            try:
+                # Apply RSI 50 Validation Filter to block non-confirming trades
+                if strike['type'] == 'CE':
+                    # CE buy requires CE Option RSI > 50 and Nifty Index RSI > 50
+                    if opt_rsi < 50.0 or idx_rsi < 50.0:
+                        logger.info(f"🚫 [GVN RSI FILTER] CE entry blocked. Option CE RSI: {opt_rsi:.2f}, Nifty Spot RSI: {idx_rsi:.2f} (Both must be > 50).")
+                        is_rsi_unconfirmed = True
+                        is_bullish = False
+                elif strike['type'] == 'PE':
+                    # PE buy requires PE Option RSI > 50 and Nifty Index RSI < 50 (bearish index trend)
+                    if opt_rsi < 50.0 or idx_rsi > 50.0:
+                        logger.info(f"🚫 [GVN RSI FILTER] PE entry blocked. Option PE RSI: {opt_rsi:.2f}, Nifty Spot RSI: {idx_rsi:.2f} (Option must be > 50, Index must be < 50).")
+                        is_rsi_unconfirmed = True
+                        is_bearish = False
+            except Exception as rsi_filt_err:
+                logger.error(f"❌ GVN RSI Filter Error: {rsi_filt_err}")
+
+
+
+
             if "last_ltps" not in self.memory:
                 self.memory["last_ltps"] = {}
             previous_ltp = self.memory["last_ltps"].get(key, ltp)
@@ -444,6 +565,10 @@ class GVNAiDelta60Engine:
                                     target_val = levels.get("i6", ltp + 25.0)
                                     sl_val = round(ltp - 12.0, 2)
                                     logger.info(f"🌪️ [LEVEL ACCELERATION] CE Acceleration entry triggered on {symbol} CE {strike['strike']} @ {ltp}")
+
+            if is_fake_crossover or is_rsi_unconfirmed:
+                is_level_accel_setup = False
+
 
             # Check i5 (1st Entry)
             if not triggered_level_name and i5_val > 0:
@@ -678,6 +803,370 @@ class GVNAiDelta60Engine:
                         
         except Exception as e:
             logger.error(f"❌ Multi-user routing critical failure: {e}")
+
+    def _check_gvn_sync_alerts(self, symbol, strike, ltp, levels, idx_rsi=50.0, opt_rsi=50.0):
+        if not self.telegram:
+            return
+            
+        import os
+        spot_price = shared_data.market_data.get(symbol, 0)
+        if spot_price <= 0:
+            spot_price = shared_data.market_data.get("NIFTY 50", 0) if symbol == "NIFTY" else 0
+        if spot_price <= 0:
+            return
+            
+        key = f"{strike['strike']}_{strike['type']}"
+        
+        # Get index GVN levels
+        idx_levels = None
+        high = 0
+        low = 0
+        if symbol == "NIFTY":
+            high = 24110.75
+            low = 24032.35
+        else:
+            try:
+                if os.path.exists("gvn_recorded_915_ohlc.json"):
+                    with open("gvn_recorded_915_ohlc.json", "r") as f:
+                        rec_data = json.load(f)
+                    spot_key = f"{symbol}_SPOT"
+                    if spot_key in rec_data.get(symbol, {}):
+                        high = rec_data[symbol][spot_key].get("high", 0)
+                        low = rec_data[symbol][spot_key].get("low", 0)
+            except: pass
+            
+            if high == 0 or low == 0:
+                bench = shared_data.gvn_915_benchmark.get(symbol, {})
+                if bench.get("high", 0) > 0:
+                    high = bench["high"]
+                    low = bench["low"]
+                    
+        if high > 0 and low > 0:
+            idx_levels = gvn_levels_engine.calculate_gvn_levels(high, low, is_index=True)
+            
+        if not idx_levels:
+            return
+            
+        # Index key levels
+        idx_i3 = idx_levels.get("i3", 0) # 0.618
+        idx_i5 = idx_levels.get("i5", 0) # 0.500
+        idx_i6 = idx_levels.get("i6", 0) # 0.382
+        idx_i7 = idx_levels.get("i7", 0) # 0.236
+        
+        # Calculate Index midpoints
+        idx_mid_3_5 = (idx_i3 + idx_i5) / 2
+        idx_mid_5_6 = (idx_i5 + idx_i6) / 2
+        idx_mid_6_7 = (idx_i6 + idx_i7) / 2
+        
+        # Option key levels
+        opt_i3 = levels.get("i3", 0) # 0.3
+        opt_i5 = levels.get("i5", 0) # 0.5
+        opt_i6 = levels.get("i6", 0) # 0.6
+        opt_i7 = levels.get("i7", 0) # Level 7 (0.236 equivalent)
+        
+        # Calculate Option midpoints
+        opt_mid_3_5 = (opt_i3 + opt_i5) / 2
+        opt_mid_5_6 = (opt_i5 + opt_i6) / 2
+        opt_mid_6_7 = (opt_i6 + opt_i7) / 2
+        
+        # Initialize memory tracking
+        if "sync_alert_state" not in self.memory:
+            self.memory["sync_alert_state"] = {}
+            
+        state_key = f"{symbol}_{key}"
+        prev_state = self.memory["sync_alert_state"].get(state_key)
+        
+        # Compute current state
+        curr_idx_i3_rel = "ABOVE" if spot_price >= idx_i3 else "BELOW"
+        curr_idx_mid_3_5_rel = "ABOVE" if spot_price >= idx_mid_3_5 else "BELOW"
+        curr_idx_i5_rel = "ABOVE" if spot_price >= idx_i5 else "BELOW"
+        curr_idx_mid_5_6_rel = "ABOVE" if spot_price >= idx_mid_5_6 else "BELOW"
+        curr_idx_i6_rel = "ABOVE" if spot_price >= idx_i6 else "BELOW"
+        curr_idx_mid_6_7_rel = "ABOVE" if spot_price >= idx_mid_6_7 else "BELOW"
+        curr_idx_i7_rel = "ABOVE" if spot_price >= idx_i7 else "BELOW"
+        
+        curr_opt_i3_rel = "ABOVE" if ltp >= opt_i3 else "BELOW"
+        curr_opt_mid_3_5_rel = "ABOVE" if ltp >= opt_mid_3_5 else "BELOW"
+        curr_opt_i5_rel = "ABOVE" if ltp >= opt_i5 else "BELOW"
+        curr_opt_mid_5_6_rel = "ABOVE" if ltp >= opt_mid_5_6 else "BELOW"
+        curr_opt_i6_rel = "ABOVE" if ltp >= opt_i6 else "BELOW"
+        curr_opt_mid_6_7_rel = "ABOVE" if ltp >= opt_mid_6_7 else "BELOW"
+        curr_opt_i7_rel = "ABOVE" if ltp >= opt_i7 else "BELOW"
+        
+        curr_state = {
+            "idx_i3": curr_idx_i3_rel,
+            "idx_mid_3_5": curr_idx_mid_3_5_rel,
+            "idx_i5": curr_idx_i5_rel,
+            "idx_mid_5_6": curr_idx_mid_5_6_rel,
+            "idx_i6": curr_idx_i6_rel,
+            "idx_mid_6_7": curr_idx_mid_6_7_rel,
+            "idx_i7": curr_idx_i7_rel,
+            "opt_i3": curr_opt_i3_rel,
+            "opt_mid_3_5": curr_opt_mid_3_5_rel,
+            "opt_i5": curr_opt_i5_rel,
+            "opt_mid_5_6": curr_opt_mid_5_6_rel,
+            "opt_i6": curr_opt_i6_rel,
+            "opt_mid_6_7": curr_opt_mid_6_7_rel,
+            "opt_i7": curr_opt_i7_rel
+        }
+        
+        # Compare states to detect crossover
+        is_crossover = False
+        change_desc = []
+        
+        if prev_state:
+            # Check Index levels crossover
+            if prev_state["idx_i3"] != curr_state["idx_i3"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_i3_rel == 'ABOVE' else 'BELOW'} 0.618 ({idx_i3:.2f})")
+            if prev_state.get("idx_mid_3_5") != curr_state["idx_mid_3_5"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_mid_3_5_rel == 'ABOVE' else 'BELOW'} Mid 0.618-0.5 ({idx_mid_3_5:.2f})")
+            if prev_state["idx_i5"] != curr_state["idx_i5"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_i5_rel == 'ABOVE' else 'BELOW'} 0.5 ({idx_i5:.2f})")
+            if prev_state.get("idx_mid_5_6") != curr_state["idx_mid_5_6"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_mid_5_6_rel == 'ABOVE' else 'BELOW'} Mid 0.5-0.382 ({idx_mid_5_6:.2f})")
+            if prev_state["idx_i6"] != curr_state["idx_i6"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_i6_rel == 'ABOVE' else 'BELOW'} 0.382 ({idx_i6:.2f})")
+            if prev_state.get("idx_mid_6_7") != curr_state["idx_mid_6_7"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_mid_6_7_rel == 'ABOVE' else 'BELOW'} Mid 0.382-0.236 ({idx_mid_6_7:.2f})")
+            if prev_state.get("idx_i7") != curr_state["idx_i7"]:
+                is_crossover = True
+                change_desc.append(f"Index crossed {'ABOVE' if curr_idx_i7_rel == 'ABOVE' else 'BELOW'} 0.236 ({idx_i7:.2f})")
+                
+            # Check Option levels crossover
+            if prev_state["opt_i3"] != curr_state["opt_i3"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_i3_rel == 'ABOVE' else 'BELOW'} 0.3 Target ({opt_i3:.2f})")
+            if prev_state.get("opt_mid_3_5") != curr_state["opt_mid_3_5"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_mid_3_5_rel == 'ABOVE' else 'BELOW'} Mid 0.3-0.5 ({opt_mid_3_5:.2f})")
+            if prev_state["opt_i5"] != curr_state["opt_i5"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_i5_rel == 'ABOVE' else 'BELOW'} 0.5 level ({opt_i5:.2f})")
+            if prev_state.get("opt_mid_5_6") != curr_state["opt_mid_5_6"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_mid_5_6_rel == 'ABOVE' else 'BELOW'} Mid 0.5-0.6 ({opt_mid_5_6:.2f})")
+            if prev_state["opt_i6"] != curr_state["opt_i6"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_i6_rel == 'ABOVE' else 'BELOW'} 0.6 level ({opt_i6:.2f})")
+            if prev_state.get("opt_mid_6_7") != curr_state["opt_mid_6_7"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_mid_6_7_rel == 'ABOVE' else 'BELOW'} Mid 0.6-0.7 ({opt_mid_6_7:.2f})")
+            if prev_state.get("opt_i7") != curr_state["opt_i7"]:
+                is_crossover = True
+                change_desc.append(f"Option crossed {'ABOVE' if curr_opt_i7_rel == 'ABOVE' else 'BELOW'} Level 7 ({opt_i7:.2f})")
+        else:
+            is_crossover = False
+            
+        self.memory["sync_alert_state"][state_key] = curr_state
+        
+        if is_crossover:
+            # Build beautiful message
+            timing = datetime.now().strftime("%I:%M:%S %p")
+            
+            # Index status string
+            idx_trend_icon = "🟢" if spot_price >= idx_i5 else "🔴"
+            idx_i5_status = "ABOVE 🟢" if spot_price >= idx_i5 else "BELOW 🔴"
+            
+            # Find next target and active channel for index
+            active_channel = "Neutral Zone"
+            if spot_price >= idx_i3:
+                active_channel = "Bullish Extension Zone (> 0.618)"
+                idx_target_str = f"R1 Extension ({idx_levels.get('i2', 0):.2f})"
+            elif idx_i5 <= spot_price < idx_i3:
+                active_channel = "Bullish-Neutral Zone (0.500 - 0.618)"
+                if spot_price >= idx_mid_3_5:
+                    idx_target_str = f"0.618 Resistance ({idx_i3:.2f}) [Above 50% Midpoint 🟢]"
+                else:
+                    idx_target_str = f"0.500 Support ({idx_i5:.2f}) [Below 50% Midpoint 🔴]"
+            elif idx_i6 <= spot_price < idx_i5:
+                active_channel = "Neutral-Bearish Zone (0.382 - 0.500)"
+                if spot_price >= idx_mid_5_6:
+                    idx_target_str = f"0.500 Resistance ({idx_i5:.2f}) [Above 50% Midpoint 🟢]"
+                else:
+                    idx_target_str = f"0.382 Support ({idx_i6:.2f}) [Below 50% Midpoint 🔴]"
+            elif idx_i7 <= spot_price < idx_i6:
+                active_channel = "Bearish Zone (0.236 - 0.382)"
+                if spot_price >= idx_mid_6_7:
+                    idx_target_str = f"0.382 Resistance ({idx_i6:.2f}) [Above 50% Midpoint 🟢]"
+                else:
+                    idx_target_str = f"0.236 Support ({idx_i7:.2f}) [Below 50% Midpoint 🔴]"
+            else:
+                active_channel = "Extreme Bearish Zone (< 0.236)"
+                idx_target_str = f"Support Low ({idx_levels.get('i0', 0):.2f})"
+                
+            # Option status
+            opt_i3_status = "ACTIVE 🟢" if ltp >= opt_i3 else "BELOW 🔴"
+            opt_i5_status = "ACTIVE 🟢" if ltp >= opt_i5 else "BELOW 🔴"
+            opt_i6_status = "ACTIVE 🟢" if ltp >= opt_i6 else "BELOW 🔴"
+            opt_i7_status = "ACTIVE 🟢" if ltp >= opt_i7 else "BELOW 🔴"
+            
+            # Option target based on channel
+            if strike['type'] == 'CE':
+                if spot_price >= idx_mid_6_7:
+                    opt_target_str = f"GVN Level 7 / 0.7 ({opt_i7:.2f}) or 0.6 ({opt_i6:.2f}) [Bounce Play]"
+                else:
+                    opt_target_str = f"Below Level 7 (Under pressure)"
+            else: # PE
+                if spot_price < idx_mid_5_6:
+                    opt_target_str = f"GVN 0.2 Target ({levels.get('i2', 0):.2f}) [Breakout Play]"
+                else:
+                    opt_target_str = f"Below Target 1 (Awaiting Crossover)"
+            
+            # Sentiment indicators
+            wind_dir = shared_data.market_pulse.get("wind_direction", "NEUTRAL")
+            wind_power = shared_data.market_pulse.get("wind_power", 0.0)
+            pcr = shared_data.market_pulse.get("pcr", 1.0)
+            sentiment = shared_data.market_pulse.get("sentiment", "NEUTRAL")
+            
+            # GVN Validity Check (True vs Fake Breakout)
+            validation_msg = "VALID DUAL-SYNC 🟢"
+            if strike['type'] == 'CE' and ltp >= opt_i5:
+                if spot_price < idx_i3:
+                    validation_msg = f"🔴 FAKE BREAKOUT 🔴\n      (Option CE >= {opt_i5:.2f} but Nifty Spot {spot_price:.2f} < Index 0.618 Level {idx_i3:.2f})"
+            elif strike['type'] == 'PE' and ltp >= opt_i5:
+                if spot_price > idx_i5:
+                    validation_msg = f"🔴 FAKE BREAKOUT 🔴\n      (Option PE >= {opt_i5:.2f} but Nifty Spot {spot_price:.2f} > Index 0.5 Level {idx_i5:.2f})"
+
+            # RSI 15 Trend Check
+            rsi_confirm_str = "RSI CONFIRMED 🟢"
+            if strike['type'] == 'CE':
+                if opt_rsi < 50.0 or idx_rsi < 50.0:
+                    rsi_confirm_str = "RSI UNCONFIRMED 🔴 (CE requires both RSI > 50)"
+            elif strike['type'] == 'PE':
+                if opt_rsi < 50.0 or idx_rsi > 50.0:
+                    rsi_confirm_str = "RSI UNCONFIRMED 🔴 (PE requires PE RSI > 50 & Index RSI < 50)"
+
+            change_title = " | ".join(change_desc)
+            
+            alert_msg = (
+                f"🛡️ <b>GVN DUAL-SYNC LEVEL CROSSOVER</b> 🛡️\n"
+                f"📢 <b>Trigger:</b> {change_title}\n"
+                f"⏰ Timing: <b>{timing}</b>\n\n"
+                f"⚖️ <b>GVN Validation:</b>\n"
+                f"   • <b>{validation_msg}</b>\n"
+                f"   • <b>{rsi_confirm_str}</b>\n\n"
+                f"📊 <b>RSI 15 Trend Check:</b>\n"
+                f"   • Nifty Spot RSI 15: <b>{idx_rsi:.2f}</b> ({'BULLISH 🟢' if idx_rsi >= 50 else 'BEARISH 🔴'})\n"
+                f"   • Option Premium RSI 15: <b>{opt_rsi:.2f}</b> ({'BULLISH 🟢' if opt_rsi >= 50 else 'BEARISH 🔴'})\n\n"
+                f"📍 <b>Main Index ({symbol}):</b>\n"
+                f"   • Current Spot: <b>{spot_price:.2f}</b> {idx_trend_icon}\n"
+                f"   • Active Zone: <b>{active_channel}</b>\n"
+                f"   • Level 5 (0.50): <b>{idx_i5:.2f}</b> ({'ABOVE 🟢' if spot_price >= idx_i5 else 'BELOW 🔴'})\n"
+                f"   • Mid 5-6 (0.441): <b>{idx_mid_5_6:.2f}</b> ({'ABOVE 🟢' if spot_price >= idx_mid_5_6 else 'BELOW 🔴'})\n"
+                f"   • Level 6 (0.382): <b>{idx_i6:.2f}</b> ({'ABOVE 🟢' if spot_price >= idx_i6 else 'BELOW 🔴'})\n"
+                f"   • Mid 6-7 (0.309): <b>{idx_mid_6_7:.2f}</b> ({'ABOVE 🟢' if spot_price >= idx_mid_6_7 else 'BELOW 🔴'})\n"
+                f"   • Level 7 (0.236): <b>{idx_i7:.2f}</b> ({'ABOVE 🟢' if spot_price >= idx_i7 else 'BELOW 🔴'})\n"
+                f"   • Destination: <b>{idx_target_str}</b>\n\n"
+                f"🚀 <b>Option Compare ({strike['strike']} {strike['type']}):</b>\n"
+                f"   • Current Premium: <b>₹{ltp:.2f}</b>\n"
+                f"   • GVN 0.3 Target: <b>₹{opt_i3:.2f}</b> ({opt_i3_status})\n"
+                f"   • GVN 0.5 Level: <b>₹{opt_i5:.2f}</b> ({opt_i5_status})\n"
+                f"   • GVN 0.6 Level: <b>₹{opt_i6:.2f}</b> ({opt_i6_status})\n"
+                f"   • GVN Mid 6-7: <b>₹{opt_mid_6_7:.2f}</b> ({'ABOVE 🟢' if ltp >= opt_mid_6_7 else 'BELOW 🔴'})\n"
+                f"   • GVN Level 7: <b>₹{opt_i7:.2f}</b> ({opt_i7_status})\n"
+                f"   • Destination: <b>{opt_target_str}</b>\n\n"
+                f"🌪️ <b>Wind:</b> {wind_dir} (Power: {wind_power})\n"
+                f"📊 PCR: <b>{pcr:.2f}</b> | Sentiment: <b>{sentiment}</b>"
+            )
+            
+            logger.info(f"[TELEGRAM SYNC ALERT] Sending alert for crossover: {change_title}")
+            self.telegram.send_alert(alert_msg)
+
+
+    def _fetch_closes_from_api(self, symbol, strike=None, opt_type=None):
+        import requests
+        import nse_option_chain
+        from datetime import datetime, timedelta
+        import shared_data
+        
+        try:
+            if strike and opt_type:
+                symbol_token, exch_seg = nse_option_chain.find_angel_token_and_segment(symbol, strike, opt_type)
+            else:
+                symbol_token, exch_seg = nse_option_chain.find_angel_index_token(symbol)
+                
+            if not symbol_token:
+                return []
+                
+            token = nse_option_chain.get_angel_token()
+            if not token:
+                return []
+                
+            from_dt = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:15")
+            to_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
+            
+            api_key = shared_data.PERMANENT_CREDENTIALS_BACKUP["angel"]["api_key"]
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-UserType": "USER",
+                "X-SourceID": "WEB",
+                "X-ClientLocalIP": "127.0.0.1",
+                "X-ClientPublicIP": "127.0.0.1",
+                "X-MACAddress": "00:00:00:00:00:00",
+                "X-PrivateKey": api_key,
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "Mozilla/5.0"
+            }
+            
+            hist_payload = {
+                "exchange": exch_seg,
+                "symboltoken": symbol_token,
+                "interval": "FIVE_MINUTE",
+                "fromdate": from_dt,
+                "todate": to_dt
+            }
+            
+            url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/historical/v1/getCandleData"
+            resp = requests.post(url, json=hist_payload, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                rj = resp.json()
+                if rj.get("status") and rj.get("data"):
+                    candles = rj.get("data")
+                    return [float(c[4]) for c in candles]
+        except Exception as e:
+            logger.error(f"❌ Error fetching closes for {symbol} {strike} {opt_type}: {e}")
+            
+        return []
+
+    def _compute_rsi(self, prices, period=15):
+        if len(prices) < period + 1:
+            return 50.0
+            
+        gains = []
+        losses = []
+        for i in range(1, len(prices)):
+            diff = prices[i] - prices[i - 1]
+            if diff > 0:
+                gains.append(diff)
+                losses.append(0.0)
+            else:
+                gains.append(0.0)
+                losses.append(abs(diff))
+                
+        # Initial average
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        
+        # Wilder's smoothing
+        for i in range(period, len(gains)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+            
+        if avg_loss == 0:
+            return 100.0
+            
+        rs = avg_gain / avg_loss
+        rsi = 100.0 - (100.0 / (1.0 + rs))
+        return rsi
+
 
 if __name__ == "__main__":
     ai = GVNAiDelta60Engine()

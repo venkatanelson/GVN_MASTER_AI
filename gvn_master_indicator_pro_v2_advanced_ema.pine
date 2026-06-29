@@ -23,6 +23,9 @@ in_showBuySellConf = input.bool(false, "Show Basic Buy/Sell Signals", group="Lab
 in_showAlgoSignals = input.bool(false, "Show Algo Perfect Signals", group="Labels Settings")
 in_showMomentumFlashes = input.bool(false, "Show Momentum Flashes", group="Labels Settings")
 in_showGVNS = input.bool(false, "Show GVNS Level", group="Labels Settings")
+in_labelBgColor = input.color(color.new(color.black, 20), "GVN Level Labels Background", group="Labels Settings")
+in_showTodayCandlesOnly = input.bool(false, "Plot Today's Candles Only (Hide native candles in TV settings)", group="Labels Settings")
+
 
 // Option Market Custom Labels Settings
 lbl_opt_gvn100 = input.string("Auto", "Option Mode Gvn=i1 (Top) Label", tooltip="Set to 'Auto' to dynamically use '0.0' for Call options and '0.1' for Put options.", group="Labels Settings")
@@ -286,7 +289,7 @@ update_label(lb_ref, price, ratio_text, line_color, start_time, end_time, label_
         // Shift left labels 4 hours (14400000 ms) to the left to place them in the overnight gap
         label_x = (label_align == "left") ? (start_time - 14400000) : end_time
         label_style = (label_align == "left") ? label.style_label_right : label.style_label_left
-        new_lb := label.new(label_x, price, ratio_text + " (" + str.tostring(price, "#.##") + ")" + suff_text, xloc=xloc.bar_time, color=color.new(color.white, 100), textcolor=line_color, style=label_style, size=size.small)
+        new_lb := label.new(label_x, price, ratio_text + " (" + str.tostring(price, "#.##") + ")" + suff_text, xloc=xloc.bar_time, color=in_labelBgColor, textcolor=line_color, style=label_style, size=size.small)
     new_lb
 
 // Track the 9:15 start time of the latest day
@@ -1014,3 +1017,10 @@ plot(show200EMA and enableMA ? smoothingMA : na, "EMA-based MA", color=color.yel
 bbUpperBand = plot(show200EMA and isBB ? smoothingMA + smoothingStDev : na, title = "Upper Bollinger Band", color=color.green)
 bbLowerBand = plot(show200EMA and isBB ? smoothingMA - smoothingStDev : na, title = "Lower Bollinger Band", color=color.green)
 fill(bbUpperBand, bbLowerBand, color = show200EMA and isBB ? color.new(color.green, 90) : na, title="Bollinger Bands Background Fill")
+
+// Custom candle plotting for today only
+plotcandle(in_showTodayCandlesOnly and time >= startT ? open : na, high, low, close, 
+           title="GVN Today Candles", 
+           color=close >= open ? color.rgb(38, 166, 154) : color.rgb(239, 83, 80), 
+           wickcolor=close >= open ? color.rgb(38, 166, 154) : color.rgb(239, 83, 80), 
+           bordercolor=close >= open ? color.rgb(38, 166, 154) : color.rgb(239, 83, 80))
