@@ -293,14 +293,14 @@ class GVNAiDelta60Engine:
             if ltp > 0 and opt_closes_live:
                 opt_closes_live.append(float(ltp))
                 
-            if len(idx_closes_live) >= 16:
-                idx_rsi = self._compute_rsi(idx_closes_live, period=15)
-            if len(opt_closes_live) >= 16:
-                opt_rsi = self._compute_rsi(opt_closes_live, period=15)
+            if len(idx_closes_live) >= 15:
+                idx_rsi = self._compute_rsi(idx_closes_live, period=14)
+            if len(opt_closes_live) >= 15:
+                opt_rsi = self._compute_rsi(opt_closes_live, period=14)
                 
             # Cache values in shared_data
-            shared_data.market_pulse[f"{symbol}_rsi_15"] = idx_rsi
-            shared_data.market_pulse[f"{key}_rsi_15"] = opt_rsi
+            shared_data.market_pulse[f"{symbol}_rsi_14"] = idx_rsi
+            shared_data.market_pulse[f"{key}_rsi_14"] = opt_rsi
         except Exception as rsi_calc_err:
             logger.error(f"❌ GVN RSI Calculation Error: {rsi_calc_err}")
 
@@ -1033,7 +1033,7 @@ class GVNAiDelta60Engine:
                 if spot_price > idx_i5:
                     validation_msg = f"🔴 FAKE BREAKOUT 🔴\n      (Option PE >= {opt_i5:.2f} but Nifty Spot {spot_price:.2f} > Index 0.5 Level {idx_i5:.2f})"
 
-            # RSI 15 Trend Check
+            # RSI 50 Trend Check (using period 14)
             rsi_confirm_str = "RSI CONFIRMED 🟢"
             if strike['type'] == 'CE':
                 if opt_rsi < 50.0 or idx_rsi < 50.0:
@@ -1051,9 +1051,9 @@ class GVNAiDelta60Engine:
                 f"⚖️ <b>GVN Validation:</b>\n"
                 f"   • <b>{validation_msg}</b>\n"
                 f"   • <b>{rsi_confirm_str}</b>\n\n"
-                f"📊 <b>RSI 15 Trend Check:</b>\n"
-                f"   • Nifty Spot RSI 15: <b>{idx_rsi:.2f}</b> ({'BULLISH 🟢' if idx_rsi >= 50 else 'BEARISH 🔴'})\n"
-                f"   • Option Premium RSI 15: <b>{opt_rsi:.2f}</b> ({'BULLISH 🟢' if opt_rsi >= 50 else 'BEARISH 🔴'})\n\n"
+                f"📊 <b>RSI 50 Crossover Check:</b>\n"
+                f"   • Nifty Spot RSI (14): <b>{idx_rsi:.2f}</b> ({'BULLISH 🟢' if idx_rsi >= 50 else 'BEARISH 🔴'})\n"
+                f"   • Option Premium RSI (14): <b>{opt_rsi:.2f}</b> ({'BULLISH 🟢' if opt_rsi >= 50 else 'BEARISH 🔴'})\n\n"
                 f"📍 <b>Main Index ({symbol}):</b>\n"
                 f"   • Current Spot: <b>{spot_price:.2f}</b> {idx_trend_icon}\n"
                 f"   • Active Zone: <b>{active_channel}</b>\n"
@@ -1136,7 +1136,7 @@ class GVNAiDelta60Engine:
             
         return []
 
-    def _compute_rsi(self, prices, period=15):
+    def _compute_rsi(self, prices, period=14):
         if len(prices) < period + 1:
             return 50.0
             
