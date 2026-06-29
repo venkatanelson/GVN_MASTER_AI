@@ -2233,12 +2233,22 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                 custom_levels = {}
                 ai_msg = "🎯 SCANNING (No 9:15 candle)"
             
+            # Calculate delta proxy
+            d_val = 0.5
+            spot = underlying_value
+            if spot > 0:
+                if s_type == "CE":
+                    d_val = 0.5 + (spot - s_price) / (spot * 0.1)
+                else:
+                    d_val = 0.5 + (s_price - spot) / (spot * 0.1)
+                d_val = min(0.99, max(0.01, d_val))
+
             # Check if already added
             if not any(x['strike'] == strike_name for x in gvn_scanner_data[symbol]):
                 gvn_scanner_data[symbol].append({
                     "strike": strike_name,
                     "ltp": strike_data.get('lastPrice') or strike_data.get('ltp') or 0,
-                    "delta": 0.65,
+                    "delta": d_val,
                     "oi_change": strike_data.get('changeinOpenInterest') or 0,
                     "volume": strike_data.get('totalTradedVolume') or 0,
                     "score": 95, 
@@ -3590,13 +3600,16 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             nifty_spot = underlying_value
             nifty_idx_05 = 23969.20  # Nifty GVN 0.5 Level
             
-            # Find closest CE and PE
+            # Find closest CE and PE to Delta 0.60
+            ce_candidates = [item for item in gvn_scanner_data.get(symbol, []) if "CE" in item.get("strike", "")]
+            pe_candidates = [item for item in gvn_scanner_data.get(symbol, []) if "PE" in item.get("strike", "")]
+            
             ce_item = None
             pe_item = None
-            for item in gvn_scanner_data.get(symbol, []):
-                strike_name = item.get("strike", "")
-                if "CE" in strike_name and not ce_item: ce_item = item
-                elif "PE" in strike_name and not pe_item: pe_item = item
+            if ce_candidates:
+                ce_item = min(ce_candidates, key=lambda x: abs(x.get("delta", 0.65) - 0.60))
+            if pe_candidates:
+                pe_item = min(pe_candidates, key=lambda x: abs(x.get("delta", 0.65) - 0.60))
                 
             if symbol == "NIFTY":
                 # Check for active state changes to prevent spamming the Telegram channel
