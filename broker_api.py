@@ -328,7 +328,10 @@ def get_angel_option_ltps(cfg, token, token_ids):
     if not token_ids:
         return {}
     
-    api_key = cfg.get("access_token") or cfg.get("api_key")
+    api_key = cfg.get("api_key")
+    if not api_key:
+        import shared_data
+        api_key = shared_data.PERMANENT_CREDENTIALS_BACKUP.get("angel", {}).get("api_key")
     url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/market/v1/quote/"
     
     headers = {

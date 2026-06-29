@@ -1420,7 +1420,7 @@ def fetch_from_nse_direct(symbol):
         "Connection": "keep-alive"
     }
     
-    for attempt in range(5):
+    for attempt in range(1):
         try:
             # Rotate agent on retry attempts
             if attempt > 0:
@@ -1428,11 +1428,11 @@ def fetch_from_nse_direct(symbol):
                 
             # 1. Get cookies from main site - crucial step
             if attempt == 0 or not nse_session.cookies:
-                nse_session.get("https://www.nseindia.com", headers=headers, timeout=15)
-                time.sleep(random.uniform(1.2, 2.2)) # Random jitter
+                nse_session.get("https://www.nseindia.com", headers=headers, timeout=2.0)
+                time.sleep(0.5) # Reduced jitter
             
             # 2. Get API data
-            response = nse_session.get(url, headers=headers, timeout=15)
+            response = nse_session.get(url, headers=headers, timeout=2.0)
             
             if response.status_code == 200:
                 try:

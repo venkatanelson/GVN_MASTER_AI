@@ -97,7 +97,7 @@ class GVNAiDelta60Engine:
         time_val = now.hour + (now.minute / 60.0)
         is_time_cutoff = time_val >= 15.166
         
-        if is_killed or is_off or is_time_cutoff:
+        if is_killed or is_time_cutoff:
             if self.memory["active_trades"]:
                 reason = "Auto Square-off @ 15:10 ⏰" if is_time_cutoff else "EMERGENCY SQUARE-OFF"
                 logger.warning(f"🚨 [{reason}] Squaring off all positions immediately!")
@@ -961,7 +961,8 @@ class GVNAiDelta60Engine:
                 is_crossover = True
                 change_desc.append(f"Option crossed {'ABOVE' if curr_opt_i7_rel == 'ABOVE' else 'BELOW'} Level 7 ({opt_i7:.2f})")
         else:
-            is_crossover = False
+            is_crossover = True
+            change_desc.append("Initial GVN Level-to-Level Status Sync")
             
         self.memory["sync_alert_state"][state_key] = curr_state
         
