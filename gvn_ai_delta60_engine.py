@@ -210,11 +210,17 @@ class GVNAiDelta60Engine:
                             
         # Select 4 CE ITM closest to delta 0.60
         ce_itm_selected = sorted(ce_itm_candidates, key=lambda x: abs(x["delta"] - 0.60))[:4]
+        if ce_itm_selected:
+            ce_itm_selected[0]["is_delta_60_focus"] = True
+            
         # Select 3 CE OTM closest to delta 0.46
         ce_otm_selected = sorted(ce_otm_candidates, key=lambda x: abs(x["delta"] - 0.46))[:3]
         
         # Select 4 PE ITM closest to delta 0.60
         pe_itm_selected = sorted(pe_itm_candidates, key=lambda x: abs(x["delta"] - 0.60))[:4]
+        if pe_itm_selected:
+            pe_itm_selected[0]["is_delta_60_focus"] = True
+            
         # Select 3 PE OTM closest to delta 0.46
         pe_otm_selected = sorted(pe_otm_candidates, key=lambda x: abs(x["delta"] - 0.46))[:3]
         
@@ -806,6 +812,10 @@ class GVNAiDelta60Engine:
 
     def _check_gvn_sync_alerts(self, symbol, strike, ltp, levels, idx_rsi=50.0, opt_rsi=50.0):
         if not self.telegram:
+            return
+            
+        # 🎯 GVN SENTINEL FOCUS: Only send sync alerts for the primary Delta-60 strikes (closest to delta 0.60)
+        if not strike.get("is_delta_60_focus", False):
             return
             
         import os
