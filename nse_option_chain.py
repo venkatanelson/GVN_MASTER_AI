@@ -3627,6 +3627,16 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         pe_06 = float(pe_levels.get("i6", 0))
                         
                         if pe_ltp >= pe_05:
+                            # Dynamic target selection based on GVN levels ladder
+                            pe_target_name = "i3"
+                            pe_target_val = float(pe_levels.get("i3", 0))
+                            for lvl_name in ["i7", "i6", "i5", "i3", "i2", "i1"]:
+                                lvl_val = float(pe_levels.get(lvl_name, 0))
+                                if lvl_val > pe_ltp:
+                                    pe_target_name = lvl_name
+                                    pe_target_val = lvl_val
+                                    break
+                            
                             alert_type = "PE_BREAKOUT"
                             alert_msg = (
                                 f"🟢 <b>GVN DUAL-SYNC PUT BREAKOUT CONFIRMED!</b>\n"
@@ -3634,7 +3644,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 f"📥 <b>Strike:</b> {pe_item.get('strike')}\n"
                                 f"⚡ <b>LTP:</b> {pe_ltp:.2f} (Above 0.5 Level: {pe_05:.2f})\n"
                                 f"🎯 <b>Action:</b> Strong PE Buy Momentum (2x Volume Entry)\n"
-                                f"🏁 <b>Target:</b> i3 ({float(pe_levels.get('i3', 0)):.2f})"
+                                f"🏁 <b>Target:</b> {pe_target_name} ({pe_target_val:.2f})"
                             )
                 else:
                     if ce_item:
@@ -3644,6 +3654,16 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         ce_06 = float(ce_levels.get("i6", 0))
                         
                         if ce_ltp >= ce_05:
+                            # Dynamic target selection based on GVN levels ladder
+                            ce_target_name = "i3"
+                            ce_target_val = float(ce_levels.get("i3", 0))
+                            for lvl_name in ["i7", "i6", "i5", "i3", "i2", "i1"]:
+                                lvl_val = float(ce_levels.get(lvl_name, 0))
+                                if lvl_val > ce_ltp:
+                                    ce_target_name = lvl_name
+                                    ce_target_val = lvl_val
+                                    break
+                            
                             alert_type = "CE_BREAKOUT"
                             alert_msg = (
                                 f"🟢 <b>GVN DUAL-SYNC CALL BREAKOUT CONFIRMED!</b>\n"
@@ -3651,7 +3671,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                                 f"📞 <b>Strike:</b> {ce_item.get('strike')}\n"
                                 f"⚡ <b>LTP:</b> {ce_ltp:.2f} (Above 0.5 Level: {ce_05:.2f})\n"
                                 f"🎯 <b>Action:</b> Strong CE Buy Momentum (2x Volume Entry)\n"
-                                f"🏁 <b>Target:</b> i3 ({float(ce_levels.get('i3', 0)):.2f})"
+                                f"🏁 <b>Target:</b> {ce_target_name} ({ce_target_val:.2f})"
                             )
                 
                 # If breakout type changed, notify!
