@@ -85,7 +85,7 @@ class AlertTemplates:
     
     @staticmethod
     def entry_alert(symbol, entry_price, target, sl, level="NORMAL"):
-        """Entry signal alert matching user screenshot format"""
+        """Entry signal alert - Short & Sweet Version"""
         try: entry_price = round(float(entry_price), 2)
         except: pass
         try: target = round(float(target), 2)
@@ -93,21 +93,30 @@ class AlertTemplates:
         try: sl = round(float(sl), 2)
         except: pass
         
-        return f"""
-🚀 GVN MASTER ALGO - NEW ENTRY 🚀
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎯 <b>Symbol:</b> {symbol}
-⚡ <b>Level Triggered:</b> {level}
-💸 <b>Entry Price:</b> ₹{entry_price}
-✅ <b>Target:</b> ₹{target}
+        is_z2h = "Z2H" in str(level).upper() or "ZERO" in str(level).upper()
+        
+        if is_z2h:
+            return f"""🚀 <b>GVN ZERO-TO-HERO BLAST</b> 🚀
+━━━━━━━━━━━━━━━━━━
+🎯 <b>Strike:</b> {symbol}
+🟢 <b>Entry Zone (i1):</b> ₹{entry_price}
+🎯 <b>Target:</b> ₹{target}
 ⛔ <b>Stop Loss:</b> ₹{sl}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ <i>Processed exactly as per GVN Settings</i>
+🌪️ <i>Z2H Wind Sync: ACTIVE</i>
+"""
+        else:
+            return f"""⚡ <b>GVN DUAL-SYNC BUY</b> ⚡
+━━━━━━━━━━━━━━━━━━
+🎯 <b>Strike:</b> {symbol}
+🟢 <b>Trigger:</b> {level}
+💸 <b>Entry LTP:</b> ₹{entry_price}
+🎯 <b>Target:</b> ₹{target}
+⛔ <b>Stop Loss:</b> ₹{sl}
 """
     
     @staticmethod
     def exit_alert(symbol, exit_reason, exit_price, pnl):
-        """Exit signal alert matching GVN formatting"""
+        """Exit signal alert - Short & Sweet Version"""
         try: exit_price = round(float(exit_price), 2)
         except: pass
         try: pnl = round(float(pnl), 2)
@@ -115,22 +124,18 @@ class AlertTemplates:
         
         status_emoji = "🎯" if "Target" in exit_reason else ("⛔" if "SL" in exit_reason else "⏹️")
         pnl_emoji = "🟩" if float(pnl) > 0 else "🟥"
-        return f"""
-{status_emoji} GVN MASTER ALGO - TRADE CLOSED {status_emoji}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 <b>Symbol:</b> {symbol}
+        return f"""{status_emoji} <b>GVN TRADE CLOSED</b> {status_emoji}
+━━━━━━━━━━━━━━━━━━
+🎯 <b>Strike:</b> {symbol}
 🔔 <b>Reason:</b> {exit_reason}
 💸 <b>Exit Price:</b> ₹{exit_price}
-{pnl_emoji} <b>P&L:</b> ₹{pnl}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚡ <i>Processed exactly as per GVN Settings</i>
+{pnl_emoji} <b>P&L:</b> {pnl} pts
 """
     
     @staticmethod
     def sentiment_alert(verdict, score, session, momentum_desc, pcr):
         """Market sentiment alert"""
-        return f"""
-📊 <b>MARKET SENTIMENT UPDATE</b>
+        return f"""📊 <b>MARKET SENTIMENT UPDATE</b>
 ━━━━━━━━━━━━━━━━━
 <b>Verdict:</b> {verdict}
 <b>Score:</b> {score}/5
@@ -143,78 +148,19 @@ class AlertTemplates:
     
     @staticmethod
     def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None):
-        """Wind Direction and Option Chain DNA Alert"""
+        """Wind Direction and Option Chain DNA Alert - Short Version"""
         # Determine dominant side emoji
-        side_emoji = "🟢" if "UP" in wind_dir or "SHORT" in wind_dir or "SLOW UP" in wind_dir else ("🔴" if "DOWN" in wind_dir or "LONG" in wind_dir or "SLOW DOWN" in wind_dir else "⚖️")
+        side_emoji = "🟢" if "UP" in str(wind_dir).upper() or "SHORT" in str(wind_dir).upper() or "SLOW UP" in str(wind_dir).upper() else ("🔴" if "DOWN" in str(wind_dir).upper() or "LONG" in str(wind_dir).upper() or "SLOW DOWN" in str(wind_dir).upper() else "⚖️")
         
-        expiry_header = ""
-        symbol_str = symbol
-        if is_expiry:
-            expiry_header = "🚨 <b>EXPIRY SPECIAL STRATEGY ACTIVE</b> 🚨\n"
-            symbol_str = f"{symbol} (EXPIRY DAY)"
-            
-        import shared_data
-        active_sym = getattr(shared_data, 'active_dashboard_symbol', 'NIFTY')
+        expiry_str = " (EXPIRY DAY)" if is_expiry else ""
         
-        algo_mode_str = "📊 DEMO/PAPER"
-        try:
-            from app import app, User
-            with app.app_context():
-                user = User.query.filter_by(username="Venkat").first() or User.query.get(1)
-                if user:
-                    algo_mode_str = "🟢 REAL/LIVE" if (user.user_type == 'LIVE' and user.is_approved) else "📊 DEMO/PAPER"
-        except Exception:
-            pass
-
-        # Fallback generation for direction details if not provided
-        if direction_details is None:
-            wind_dir_upper = str(wind_dir).upper()
-            direction_val = "UP 🟢" if any(w in wind_dir_upper for w in ["UP", "SHORT", "SLOW UP"]) else ("DOWN 🔴" if any(w in wind_dir_upper for w in ["DOWN", "LONG", "SLOW DOWN"]) else "SIDEWAYS / NEUTRAL 🟡")
-            oi_growth_val = "Put Writing (PE) is increasing more 🟢" if "UP" in direction_val else ("Call Writing (CE) is increasing more 🔴" if "DOWN" in direction_val else "Balanced ⚖️")
-            strength_val = "Bulls (Put Writers) are gaining strength 💪" if "UP" in direction_val else ("Bears (Call Writers) are gaining strength 💪" if "DOWN" in direction_val else "Balanced / Neutral ⚖️")
-            sr_val = "Support is increasing 🟢" if "UP" in direction_val else ("Resistance is increasing 🔴" if "DOWN" in direction_val else "Both Support & Resistance are decreasing ⚖️")
-            
-            direction_details = {
-                "direction": direction_val,
-                "oi_growth": oi_growth_val,
-                "strength_side": strength_val,
-                "sr_movement": sr_val
-            }
-
-        return f"""
-🌪️ <b>GVN AI WIND & MARKET DNA UPDATE</b> 🌪️
-{expiry_header}━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 <b>Symbol:</b> {symbol_str}
-{side_emoji} <b>Wind Direction:</b> {wind_dir}
-⚡ <b>Wind Strength:</b>
-  • 🟢 <b>Call Side (Bullish):</b> {call_pct}%
-  • 🔴 <b>Put Side (Bearish):</b> {put_pct}%
-
-🛡️ <b>Key Levels (Support & Resistance):</b>
-  • 🟢 <b>Support Level:</b> {support}
-  • 🔴 <b>Resistance Level:</b> {resistance}
-
-⚔️ <b>Battle Zone Status:</b> {battle_status}
-📊 <b>Volume Flow:</b>
-  • 🟢 <b>Call Volume:</b> {ce_vol:,}
-  • 🔴 <b>Put Volume:</b> {pe_vol:,}
-  • ⚖️ <b>PCR (Put-Call Ratio):</b> {pcr:.2f}
-
-🧠 <b>Smart Money Status:</b>
-{smart_money}
-
-🧭 <b>Market Direction & Strength (DNA):</b>
-  • 🧭 <b>Wind Direction Mode:</b> {direction_details.get('direction')}
-  • 📈 <b>OI Growth:</b> {direction_details.get('oi_growth')}
-  • 💪 <b>Dominant Strength:</b> {direction_details.get('strength_side')}
-  • 🛡️ <b>S/R Movement:</b> {direction_details.get('sr_movement')}
-
+        return f"""🌪️ <b>GVN AI WIND & TREND DNA</b> 🌪️
+━━━━━━━━━━━━━━━━━━
+📊 <b>{symbol}{expiry_str}</b>
+⚖️ <b>Wind Direction:</b> {side_emoji} {wind_dir}
+💪 <b>Strength:</b> 🟢 CE {call_pct}% | 🔴 PE {put_pct}%
 📈 <b>Trend Zone:</b> {trend_type}
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ <b>Algo Mode:</b> {algo_mode_str}
-🎯 <b>Trade Symbol:</b> {active_sym} (Trades execute only on this symbol)
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏰ Sent at: {datetime.now().strftime('%H:%M:%S')}
+🛡️ <b>Levels:</b> Supp: {support} | Res: {resistance}
 """
 
     
