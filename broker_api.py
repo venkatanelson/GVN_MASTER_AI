@@ -535,10 +535,44 @@ def execute_broker_order_async(cfg, symbol, txn_type, qty, user_name="User"):
         try:
             logger.info(f"🚀 [ASYNC EXECUTION] User: {user_name} | {txn_type} {qty} {symbol}")
             order_id = place_order_universal(cfg, symbol, txn_type, qty)
+            
+            import os
+            from gvn_telegram_engine import TelegramAlertManager
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+            chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+            tg = TelegramAlertManager(bot_token, chat_id)
+            
             if order_id:
                 logger.info(f"✅ [SUCCESS] Order {order_id} placed for {user_name}")
+                if bot_token and chat_id:
+                    msg = (
+                        f"✅ <b>[BROKER ORDER SUCCESS]</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"👤 <b>User:</b> {user_name}\n"
+                        f"🎯 <b>Broker:</b> {cfg.get('broker_name', 'AngelOne')}\n"
+                        f"⚡ <b>Action:</b> {txn_type}\n"
+                        f"📦 <b>Qty:</b> {qty}\n"
+                        f"📝 <b>Symbol:</b> {symbol}\n"
+                        f"🆔 <b>Order ID:</b> {order_id}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"🚀 Order placed successfully!"
+                    )
+                    tg.bot.send_message(msg)
             else:
                 logger.error(f"❌ [FAILURE] Order failed for {user_name}")
+                if bot_token and chat_id:
+                    msg = (
+                        f"❌ <b>[BROKER ORDER FAILURE]</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"👤 <b>User:</b> {user_name}\n"
+                        f"🎯 <b>Broker:</b> {cfg.get('broker_name', 'AngelOne')}\n"
+                        f"⚡ <b>Action:</b> {txn_type}\n"
+                        f"📦 <b>Qty:</b> {qty}\n"
+                        f"📝 <b>Symbol:</b> {symbol}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"⚠️ Order failed to execute on broker!"
+                    )
+                    tg.bot.send_message(msg)
         except Exception as e:
             logger.error(f"Async order exception: {e}")
 
