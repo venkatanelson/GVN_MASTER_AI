@@ -384,14 +384,26 @@ class GVNAiDelta60Engine:
             # 5. GVN Dual-Sync Crossover Verification Filter (True vs Fake Breakouts)
             try:
                 idx_high, idx_low = 0, 0
-                if symbol == "NIFTY":
-                    idx_high = 24110.75
-                    idx_low = 24032.35
-                else:
+                try:
+                    if os.path.exists("gvn_recorded_915_ohlc.json"):
+                        with open("gvn_recorded_915_ohlc.json", "r") as f:
+                            rec_data = json.load(f)
+                        spot_key = f"{symbol}_SPOT"
+                        if symbol in rec_data and spot_key in rec_data[symbol]:
+                            idx_high = rec_data[symbol][spot_key].get("high", 0)
+                            idx_low = rec_data[symbol][spot_key].get("low", 0)
+                except: pass
+                
+                if idx_high == 0 or idx_low == 0:
                     bench = shared_data.gvn_915_benchmark.get(symbol, {})
                     if bench.get("high", 0) > 0:
                         idx_high = bench["high"]
                         idx_low = bench["low"]
+                
+                if idx_high == 0 or idx_low == 0:
+                    if symbol == "NIFTY":
+                        idx_high = 24110.75
+                        idx_low = 24032.35
                 
                 if idx_high > 0 and idx_low > 0:
                     idx_levels = gvn_levels_engine.calculate_gvn_levels(idx_high, idx_low, is_index=True)
@@ -831,25 +843,26 @@ class GVNAiDelta60Engine:
         idx_levels = None
         high = 0
         low = 0
-        if symbol == "NIFTY":
-            high = 24110.75
-            low = 24032.35
-        else:
-            try:
-                if os.path.exists("gvn_recorded_915_ohlc.json"):
-                    with open("gvn_recorded_915_ohlc.json", "r") as f:
-                        rec_data = json.load(f)
-                    spot_key = f"{symbol}_SPOT"
-                    if spot_key in rec_data.get(symbol, {}):
-                        high = rec_data[symbol][spot_key].get("high", 0)
-                        low = rec_data[symbol][spot_key].get("low", 0)
-            except: pass
-            
-            if high == 0 or low == 0:
-                bench = shared_data.gvn_915_benchmark.get(symbol, {})
-                if bench.get("high", 0) > 0:
-                    high = bench["high"]
-                    low = bench["low"]
+        try:
+            if os.path.exists("gvn_recorded_915_ohlc.json"):
+                with open("gvn_recorded_915_ohlc.json", "r") as f:
+                    rec_data = json.load(f)
+                spot_key = f"{symbol}_SPOT"
+                if symbol in rec_data and spot_key in rec_data[symbol]:
+                    high = rec_data[symbol][spot_key].get("high", 0)
+                    low = rec_data[symbol][spot_key].get("low", 0)
+        except: pass
+        
+        if high == 0 or low == 0:
+            bench = shared_data.gvn_915_benchmark.get(symbol, {})
+            if bench.get("high", 0) > 0:
+                high = bench["high"]
+                low = bench["low"]
+                
+        if high == 0 or low == 0:
+            if symbol == "NIFTY":
+                high = 24110.75
+                low = 24032.35
                     
         if high > 0 and low > 0:
             idx_levels = gvn_levels_engine.calculate_gvn_levels(high, low, is_index=True)

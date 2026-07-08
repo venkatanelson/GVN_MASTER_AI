@@ -40,7 +40,22 @@ def run_check():
     if symbol == "SENSEX":
         nifty_idx_05 = 76600.00
     else:
-        nifty_idx_05 = 23969.20  # Nifty GVN 0.5 Level
+        nifty_idx_05 = 23969.20  # Fallback Nifty GVN 0.5 Level
+        try:
+            if os.path.exists("gvn_recorded_915_ohlc.json"):
+                with open("gvn_recorded_915_ohlc.json", "r") as f:
+                    rec_data = json.load(f)
+                spot_key = "NIFTY_SPOT"
+                if "NIFTY" in rec_data and spot_key in rec_data["NIFTY"]:
+                    high = float(rec_data["NIFTY"][spot_key].get("high", 0))
+                    low = float(rec_data["NIFTY"][spot_key].get("low", 0))
+                    if high > 0 and low > 0:
+                        from gvn_levels_engine import calculate_gvn_levels
+                        idx_levels = calculate_gvn_levels(high, low, is_index=True)
+                        if idx_levels and "i5" in idx_levels:
+                            nifty_idx_05 = idx_levels["i5"]
+        except:
+            pass
 
     print("=" * 70)
     print(f"GVN MASTER ALGO - REAL-TIME LEVEL COMPARISON REPORT")

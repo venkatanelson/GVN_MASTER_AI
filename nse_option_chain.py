@@ -2287,14 +2287,18 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             oi_val = opt.get("openInterest") or opt.get("oi", 0) or 0
             if opt_type == "CE":
                 total_ce_oi += oi_val
-                if oi_val > max_ce_oi:
-                    max_ce_oi = oi_val
-                    max_ce_strike = strike
+                # Restrict Resistance to be at or above spot price
+                if strike >= underlying_value:
+                    if oi_val > max_ce_oi:
+                        max_ce_oi = oi_val
+                        max_ce_strike = strike
             elif opt_type == "PE":
                 total_pe_oi += oi_val
-                if oi_val > max_pe_oi:
-                    max_pe_oi = oi_val
-                    max_pe_strike = strike
+                # Restrict Support to be at or below spot price
+                if strike <= underlying_value:
+                    if oi_val > max_pe_oi:
+                        max_pe_oi = oi_val
+                        max_pe_strike = strike
 
     # 2. Run USD-INR check and benchmark calculations
     usd_inr = 83.50
@@ -2544,14 +2548,18 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
             # 🚀 GVN PRESSURE ENGINE: Accumulate OI
             if opt_type == "CE":
                 total_ce_oi += oi_val
-                if oi_val > max_ce_oi:
-                    max_ce_oi = oi_val
-                    max_ce_strike = strike
+                # Restrict Resistance to be at or above spot price
+                if strike >= underlying_value:
+                    if oi_val > max_ce_oi:
+                        max_ce_oi = oi_val
+                        max_ce_strike = strike
             else:
                 total_pe_oi += oi_val
-                if oi_val > max_pe_oi:
-                    max_pe_oi = oi_val
-                    max_pe_strike = strike
+                # Restrict Support to be at or below spot price
+                if strike <= underlying_value:
+                    if oi_val > max_pe_oi:
+                        max_pe_oi = oi_val
+                        max_pe_strike = strike
             
             # Update History
             if key not in option_ltp_history: option_ltp_history[key] = []
@@ -3598,7 +3606,14 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         # 🚨 GVN DUAL-SYNC TELEGRAM ALERT AUTOMATION
         try:
             nifty_spot = underlying_value
-            nifty_idx_05 = 23969.20  # Nifty GVN 0.5 Level
+            
+            # Dynamically calculate Nifty GVN 0.5 Level from benchmark if available
+            nifty_idx_05 = 23969.20  # Fallback Nifty GVN 0.5 Level
+            nifty_bench = shared_data.gvn_915_benchmark.get("NIFTY", {})
+            if nifty_bench.get("high", 0) > 0:
+                idx_levels = calculate_gvn_levels(nifty_bench["high"], nifty_bench["low"], is_index=True)
+                if idx_levels and "i5" in idx_levels:
+                    nifty_idx_05 = idx_levels["i5"]
             
             # Find closest CE and PE to Delta 0.60
             ce_candidates = [item for item in gvn_scanner_data.get(symbol, []) if "CE" in item.get("strike", "")]
