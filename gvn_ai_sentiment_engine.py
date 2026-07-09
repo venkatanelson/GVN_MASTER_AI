@@ -270,8 +270,45 @@ class UnifiedSentimentFilter:
         momentum, momentum_desc = TimeZoneMomentum.get_session_momentum()
         is_prime = TimeZoneMomentum.is_prime_trading_window()
         
+        # Fetch latest FII/DII data
+        fii_cash = 0.0
+        dii_cash = 0.0
+        fii_dii_desc = "NO DATA"
+        fii_dii_bias = 0.0
+        
+        try:
+            from gvn_data_bank import get_latest_fii_dii
+            latest_fd = get_latest_fii_dii()
+            if latest_fd:
+                fii_cash = latest_fd.get("fii_cash", 0.0)
+                dii_cash = latest_fd.get("dii_cash", 0.0)
+                
+                # Bias calculation:
+                if fii_cash < -1000.0:
+                    fii_dii_bias = -1.5
+                    fii_dii_desc = f"HEAVY FII SELLING ({fii_cash:.1f} Cr)"
+                elif fii_cash < 0.0:
+                    fii_dii_bias = -0.75
+                    fii_dii_desc = f"MODERATE FII SELLING ({fii_cash:.1f} Cr)"
+                elif fii_cash > 1000.0:
+                    fii_dii_bias = 1.5
+                    fii_dii_desc = f"HEAVY FII BUYING ({fii_cash:.1f} Cr)"
+                elif fii_cash > 0.0:
+                    fii_dii_bias = 0.75
+                    fii_dii_desc = f"MODERATE FII BUYING ({fii_cash:.1f} Cr)"
+                else:
+                    fii_dii_desc = "NEUTRAL FLOW"
+                
+                # Check for DII Support / Buffer
+                if fii_cash < 0 and dii_cash > abs(fii_cash):
+                    # Reduce negative bias slightly since local institutions are countering FII selling
+                    fii_dii_bias += 0.5
+                    fii_dii_desc += f" (Supported by DII: {dii_cash:.1f} Cr)"
+        except Exception as e:
+            logger.error(f"Error loading FII/DII in sentiment: {e}")
+
         # Generate final signal
-        sentiment_score = 0
+        sentiment_score = fii_dii_bias # Start with FII/DII EOD bias
         
         # Add points for bullish factors
         if "BULLISH" in volume_trend:
@@ -316,7 +353,10 @@ class UnifiedSentimentFilter:
                 "session": session,
                 "momentum": momentum,
                 "momentum_desc": momentum_desc,
-                "prime_window": "YES" if is_prime else "NO"
+                "prime_window": "YES" if is_prime else "NO",
+                "fii_dii_sentiment": fii_dii_desc,
+                "fii_cash": fii_cash,
+                "dii_cash": dii_cash
             },
             "warnings": {
                 "is_reversal": is_reversal,
@@ -359,5 +399,6 @@ if __name__ == "__main__":
         )
         
         if i == 9:
-            print("\n✅ AI Sentiment Engine Initialized")
-            print(json.dumps(result, indent=2))
+            print("\n[SUCCESS] AI Sentiment Engine Initialized")
+            safe_json = json.dumps(result, indent=2).encode('ascii', errors='ignore').decode('ascii')
+            print(safe_json)

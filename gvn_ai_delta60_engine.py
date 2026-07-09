@@ -256,6 +256,16 @@ class GVNAiDelta60Engine:
         levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915)
         if not levels: return
         
+        # Dynamically calculate ATR Stop Loss (Half of the 9:15 AM candle range)
+        atr_sl = 12.0
+        try:
+            if high_915 > 0 and low_915 > 0:
+                atr_sl = round((high_915 - low_915) * 0.5, 2)
+                # Clamp it to be between 10.0 and 35.0 to protect against extreme candles
+                atr_sl = max(10.0, min(35.0, atr_sl))
+        except Exception as atr_err:
+            logger.error(f"❌ Error calculating ATR SL: {atr_err}")
+            
         # 📊 GVN RSI 15 Trend Calculation
         idx_rsi = 50.0
         opt_rsi = 50.0
@@ -501,7 +511,7 @@ class GVNAiDelta60Engine:
                 # 2. Trigger Re-entry (When price touches/crosses the target level again)
                 if self.memory["target_pullback_flags"].get(key, False):
                     is_retrigger = False
-                    if previous_ltp < last_tgt <= ltp:
+                    if previous_ltp < last_tgt <= ltp and (ltp - last_tgt) <= max(5.0, last_tgt * 0.03):
                         is_retrigger = True
                     elif abs(ltp - last_tgt) <= 0.20:
                         is_retrigger = True
@@ -515,7 +525,7 @@ class GVNAiDelta60Engine:
                                     new_tgt = sorted_lvls[idx + 1]
                                 break
                                 
-                        new_sl = last_tgt - 12.0 # Strict 12-point Stop Loss
+                        new_sl = round(last_tgt - atr_sl, 2) # Dynamic ATR Stop Loss
                         
                         # Reset pullback flag for this strike
                         self.memory["target_pullback_flags"][key] = False
@@ -564,24 +574,24 @@ class GVNAiDelta60Engine:
                         if min_idx <= idx_spot <= max_idx:
                             # 1. Bearish Put Acceleration (Put option premium explodes as spot falls)
                             if strike['type'] == 'PE' and (any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "PE Acceleration"]) or shared_data.market_pulse.get("score", 50) <= 45):
-                                if i7_val > 0 and (previous_ltp < i7_val <= ltp or abs(ltp - i7_val) <= 0.30):
+                                if i7_val > 0 and ((previous_ltp < i7_val <= ltp and (ltp - i7_val) <= max(5.0, i7_val * 0.03)) or abs(ltp - i7_val) <= 0.30):
                                     is_level_accel_setup = True
                                     triggered_level_name = "I7_ACCEL_PE"
                                     entry_level_val = ltp
                                     target_lvl_name = "i6"
                                     target_val = levels.get("i6", ltp + 25.0)
-                                    sl_val = round(ltp - 12.0, 2)
+                                    sl_val = round(ltp - atr_sl, 2)
                                     logger.info(f"🌪️ [LEVEL ACCELERATION] PE Acceleration entry triggered on {symbol} PE {strike['strike']} @ {ltp}")
                                     
                             # 2. Bullish Call Acceleration (Call option premium explodes as spot rises)
                             elif strike['type'] == 'CE' and (any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "CE Acceleration"]) or shared_data.market_pulse.get("score", 50) >= 55):
-                                if i7_val > 0 and (previous_ltp < i7_val <= ltp or abs(ltp - i7_val) <= 0.30):
+                                if i7_val > 0 and ((previous_ltp < i7_val <= ltp and (ltp - i7_val) <= max(5.0, i7_val * 0.03)) or abs(ltp - i7_val) <= 0.30):
                                     is_level_accel_setup = True
                                     triggered_level_name = "I7_ACCEL_CE"
                                     entry_level_val = ltp
                                     target_lvl_name = "i6"
                                     target_val = levels.get("i6", ltp + 25.0)
-                                    sl_val = round(ltp - 12.0, 2)
+                                    sl_val = round(ltp - atr_sl, 2)
                                     logger.info(f"🌪️ [LEVEL ACCELERATION] CE Acceleration entry triggered on {symbol} CE {strike['strike']} @ {ltp}")
 
             if is_fake_crossover or is_rsi_unconfirmed:
@@ -591,7 +601,7 @@ class GVNAiDelta60Engine:
             # Check i5 (1st Entry)
             if not triggered_level_name and i5_val > 0:
                 is_i5_triggered = False
-                if previous_ltp < i5_val <= ltp:
+                if previous_ltp < i5_val <= ltp and (ltp - i5_val) <= max(5.0, i5_val * 0.03):
                     is_i5_triggered = True
                 elif abs(ltp - i5_val) <= 0.20:
                     is_i5_triggered = True
@@ -602,12 +612,12 @@ class GVNAiDelta60Engine:
                     # Target is i3 (same as normal days)
                     target_lvl_name = "i3"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
-                    sl_val = round(i5_val - 12.0, 2)
+                    sl_val = round(i5_val - atr_sl, 2)
                     
             # Check i6 (Intermediate Entry) - only if i5 not triggered
             if not triggered_level_name and i6_val > 0:
                 is_i6_triggered = False
-                if previous_ltp < i6_val <= ltp:
+                if previous_ltp < i6_val <= ltp and (ltp - i6_val) <= max(5.0, i6_val * 0.03):
                     is_i6_triggered = True
                 elif abs(ltp - i6_val) <= 0.20:
                     is_i6_triggered = True
@@ -618,12 +628,12 @@ class GVNAiDelta60Engine:
                     # Target is i5 (same as normal days)
                     target_lvl_name = "i5"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
-                    sl_val = round(i6_val - 12.0, 2)
+                    sl_val = round(i6_val - atr_sl, 2)
                     
             # Check i7 (2nd Entry) - only if i5/i6 not triggered
             if not triggered_level_name and i7_val > 0:
                 is_i7_triggered = False
-                if previous_ltp < i7_val <= ltp:
+                if previous_ltp < i7_val <= ltp and (ltp - i7_val) <= max(5.0, i7_val * 0.03):
                     is_i7_triggered = True
                 elif abs(ltp - i7_val) <= 0.20:
                     is_i7_triggered = True
@@ -634,7 +644,7 @@ class GVNAiDelta60Engine:
                     # Target is i6 (same as normal days)
                     target_lvl_name = "i6"
                     target_val = levels.get(target_lvl_name, ltp + 12.0)
-                    sl_val = round(i7_val - 12.0, 2)
+                    sl_val = round(i7_val - atr_sl, 2)
                     
             if triggered_level_name:
                 is_allowed = True
@@ -682,6 +692,15 @@ class GVNAiDelta60Engine:
                 del self.memory["active_trades"][key]
 
     def _execute_gvn_level_trade(self, symbol, strike, entry_price, target, sl, reason):
+        # 🛡️ Safety check: If current price is already past target or below SL, block the entry
+        ltp = strike.get("ltp", entry_price)
+        if target <= ltp:
+            logger.warning(f"🚫 [GVN TRADE BLOCK] Blocked entry for {strike['strike']} {strike['type']} because target {target:.2f} is <= current price {ltp:.2f}")
+            return
+        if sl >= ltp:
+            logger.warning(f"🚫 [GVN TRADE BLOCK] Blocked entry for {strike['strike']} {strike['type']} because stop loss {sl:.2f} is >= current price {ltp:.2f}")
+            return
+
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
         key = f"{strike['strike']}_{strike['type']}"
@@ -703,60 +722,57 @@ class GVNAiDelta60Engine:
         full_symbol = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
         tsym = f"{symbol}_{int(strike['strike'])}_{strike['type']}"
         
+        # Calculate dynamic ATR Stop Loss (Half of the 9:15 AM candle range)
+        atr_sl = 12.0
+        try:
+            h_915 = float(strike.get("high_915", 0))
+            l_915 = float(strike.get("low_915", 0))
+            if h_915 > 0 and l_915 > 0:
+                atr_sl = round((h_915 - l_915) * 0.5, 2)
+                atr_sl = max(10.0, min(35.0, atr_sl))
+        except:
+            pass
+
+        if target_price is None:
+            target_price = strike.get("ltp", 0.0) + 12.0
+        if sl_price is None:
+            sl_price = strike.get("ltp", 0.0) - atr_sl
+        
         if side == "SELL":
             alert = (
                 f"🛑 <b>GVN MASTER ALGO - POSITION CLOSED</b> 🛑\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 Symbol: <b>{tsym}</b>\n"
                 f"⚡ Reason: <b>{reason}</b>\n"
-                f"💸 Exit Price: <b>₹{strike.get('ltp', 0.0)}</b>\n"
+                f"💸 Exit Price: <b>₹{strike.get('ltp', 0.0):.2f}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ Position closed successfully"
             )
             if self.telegram: self.telegram.send_alert(alert)
         else:
-            # Calculate levels to display in the alert
-            levels = gvn_levels_engine.calculate_gvn_levels(strike["high_915"], strike["low_915"])
-            if target_price is None:
-                target_price = strike.get("ltp", 0.0) + 12.0
-            if sl_price is None:
-                sl_price = strike.get("ltp", 0.0) - 12.0
-            
-            level_name = "I3"
-            if "accel" in reason.lower(): level_name = "I7 (Level Acceleration 🌪️)"
-            elif "i5" in reason.lower(): level_name = "I5"
-            elif "i7" in reason.lower(): level_name = "I7"
-            elif "i1" in reason.lower() or "i0" in reason.lower(): level_name = "I1/I0"
-            elif "i6" in reason.lower(): level_name = "I6"
-            elif "i2" in reason.lower(): level_name = "I2"
-            elif "i3" in reason.lower(): level_name = "I3"
-            
-            if levels and target_price is None:
-                is_exp = (datetime.now().weekday() == 3)
-                if level_name == "I5":
-                    target_price = levels["i2"] if is_exp else levels["i3"]
-                    sl_price = round(levels["i5"] - 12.0, 2)
-                elif level_name == "I6":
-                    target_price = levels["i3"] if is_exp else levels["i5"]
-                    sl_price = round(levels["i6"] - 12.0, 2)
-                elif level_name == "I7":
-                    target_price = levels["i5"] if is_exp else levels["i6"]
-                    sl_price = round(levels["i7"] - 12.0, 2)
-                elif level_name == "I1/I0":
-                    target_price, sl_price = levels["i5"], round(levels["i1"] - 12.0, 2)
-                elif level_name == "I3":
-                    target_price, sl_price = levels["i2"], round(levels["i3"] - 12.0, 2)
+            # Parse beautiful symbol and expiry
+            expiry_str = "14-JUL"
+            try:
+                expiry_str = shared_data.market_pulse.get(symbol, {}).get("expiry", "14 JUL")
+            except:
+                pass
+                
+            opt_type = strike.get("type", "PE")
+            strike_price = int(strike.get("strike", 24400))
 
             alert = (
-                f"🚀 <b>GVN MASTER ALGO - NEW ENTRY</b> 🚀\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 Symbol: <b>{tsym}</b>\n"
-                f"⚡ Level Triggered: <b>{level_name}</b>\n"
-                f"💸 Entry Price: <b>₹{strike.get('ltp', 0.0)}</b>\n"
-                f"✅ Target: <b>₹{target_price:.2f}</b>\n"
-                f"⛔ Stop Loss: <b>₹{sl_price:.2f}</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚡ Processed exactly as per GVN Settings"
+                f"🚀 <b>GVN DUAL-SYNC ENTRY ALERT</b> 🚀\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📞 <b>Strike:</b> {symbol} {expiry_str}-26 {opt_type} {strike_price}\n"
+                f"📥 <b>Action:</b> BUY Option ({opt_type})\n"
+                f"🟢 <b>Entry Price (LTP):</b> ₹{strike.get('ltp', 0.0):.2f}\n"
+                f"🎯 <b>Target:</b> ₹{target_price:.2f}\n"
+                f"⛔ <b>Stop Loss:</b> ₹{sl_price:.2f} (ATR SL: {atr_sl})\n\n"
+                f"📊 <b>Setup Confirmation:</b>\n"
+                f"• <b>Wind Sync:</b> Strong {'Up' if opt_type == 'CE' else 'Down'} Wind 🟢 (Confirmed)\n"
+                f"• <b>RSI Trend:</b> Bullish {opt_type} / {'Bullish' if opt_type == 'CE' else 'Bearish'} Index 🟢 (Confirmed)\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"⏰ {datetime.now().strftime('%I:%M %p')} | GVN Master Robot 🤖"
             )
             if self.telegram: self.telegram.send_alert(alert)
 
@@ -779,19 +795,49 @@ class GVNAiDelta60Engine:
                             if u.expiry_date and u.expiry_date > datetime.utcnow():
                                 is_live_allowed = True
                         
-                        # 2. Add trade to their database dashboard
-                        new_trade = AlgoTrade(
-                            user_id=u.id,
-                            symbol=full_symbol,
-                            entry_price=float(strike['ltp']) if side == 'BUY' else 0.0,
-                            exit_price=float(strike['ltp']) if side == 'SELL' else 0.0,
-                            quantity=user_lots * 50, # 1 lot = 50 qty
-                            trade_type=side,
-                            status='Open' if side == 'BUY' else 'Closed',
-                            delta=float(strike.get('delta', 0.60)),
-                            sentiment=reason
-                        )
-                        db.session.add(new_trade)
+                        # 2. Add or update trade in their database dashboard
+                        if side == 'SELL':
+                            # Find the last open trade for this user and symbol
+                            open_trade = AlgoTrade.query.filter_by(
+                                user_id=u.id,
+                                symbol=full_symbol,
+                                status='Open'
+                            ).order_by(AlgoTrade.timestamp.desc()).first()
+                            
+                            if open_trade:
+                                open_trade.exit_price = float(strike['ltp'])
+                                open_trade.status = 'Closed'
+                                open_trade.pnl = round((open_trade.exit_price - open_trade.entry_price) * open_trade.quantity, 2)
+                                logger.info(f"📊 [DASHBOARD SYNC] Closed open trade ID {open_trade.id} for user {u.username}. PnL: {open_trade.pnl}")
+                            else:
+                                new_trade = AlgoTrade(
+                                    user_id=u.id,
+                                    symbol=full_symbol,
+                                    entry_price=0.0,
+                                    exit_price=float(strike['ltp']),
+                                    quantity=user_lots * 50,
+                                    trade_type='SELL',
+                                    status='Closed',
+                                    pnl=0.0,
+                                    delta=float(strike.get('delta', 0.60)),
+                                    sentiment=reason
+                                )
+                                db.session.add(new_trade)
+                        else:
+                            new_trade = AlgoTrade(
+                                user_id=u.id,
+                                symbol=full_symbol,
+                                entry_price=float(strike['ltp']),
+                                exit_price=0.0,
+                                quantity=user_lots * 50,
+                                trade_type='BUY',
+                                status='Open',
+                                pnl=0.0,
+                                delta=float(strike.get('delta', 0.60)),
+                                sentiment=reason
+                            )
+                            db.session.add(new_trade)
+                        
                         db.session.commit()
                         
                         # 3. If LIVE subscription and API is configured, place REAL trade

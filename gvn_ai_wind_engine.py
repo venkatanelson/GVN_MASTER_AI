@@ -81,7 +81,7 @@ class GVNAiWindEngine:
             "state": state
         }
         
-    def calculate_wind_direction(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5):
+    def calculate_wind_direction(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5, support_strike=None, resistance_strike=None):
         """
         Calculates Institutional Market Direction based on the 5 Main Forces.
         """
@@ -230,6 +230,73 @@ class GVNAiWindEngine:
             except Exception as e:
                 logger.error(f"Error checking GVN Level Acceleration: {e}")
 
+            # --- FII/DII & SUPPORT/RESISTANCE DYNAMIC COUPLING ---
+            sr_status = "STABLE"
+            fii_multiplier = 1.0
+            sr_multiplier = 1.0
+            fii_cash = 0.0
+            
+            # Fetch latest FII/DII cash value
+            try:
+                from gvn_data_bank import get_latest_fii_dii
+                latest_fd = get_latest_fii_dii()
+                if latest_fd:
+                    fii_cash = latest_fd.get("fii_cash", 0.0)
+            except Exception as fe:
+                logger.error(f"Error fetching FII/DII for wind engine: {fe}")
+                
+            is_bullish_state = any(w in wind_state.upper() for w in ["UP WIND", "SHORT COVERING", "SLOW UP"])
+            is_bearish_state = any(w in wind_state.upper() for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"])
+            
+            if fii_cash < -1500.0:
+                if is_bearish_state:
+                    fii_multiplier = 1.25  # Boost bearish power by 25%
+                elif is_bullish_state:
+                    fii_multiplier = 0.70  # Damp bullish power by 30%
+            elif fii_cash < -500.0:
+                if is_bearish_state:
+                    fii_multiplier = 1.15
+                elif is_bullish_state:
+                    fii_multiplier = 0.85
+            elif fii_cash > 1500.0:
+                if is_bullish_state:
+                    fii_multiplier = 1.25  # Boost bullish power by 25%
+                elif is_bearish_state:
+                    fii_multiplier = 0.70  # Damp bearish power by 30%
+            elif fii_cash > 500.0:
+                if is_bullish_state:
+                    fii_multiplier = 1.15
+                elif is_bearish_state:
+                    fii_multiplier = 0.85
+
+            wind_power *= fii_multiplier
+
+            # Support & Resistance Adjustment
+            if support_strike and support_strike > 0:
+                if ltp < support_strike:
+                    sr_status = "SUPPORT BROKEN"
+                    if is_bearish_state:
+                        sr_multiplier = 1.30  # Add 30% breakout boost
+                        wind_state += " (S&R Breakdown)"
+                elif 0 <= (ltp - support_strike) <= 45.0:
+                    sr_status = "APPROACHING SUPPORT"
+                    if is_bearish_state:
+                        sr_multiplier = 0.70  # Dampen by 30% (approaching wall)
+            
+            if resistance_strike and resistance_strike > 0:
+                if ltp > resistance_strike:
+                    sr_status = "RESISTANCE BROKEN"
+                    if is_bullish_state:
+                        sr_multiplier = 1.30  # Add 30% breakout boost
+                        wind_state += " (S&R Breakout)"
+                elif 0 <= (resistance_strike - ltp) <= 45.0:
+                    sr_status = "APPROACHING RESISTANCE"
+                    if is_bullish_state:
+                        sr_multiplier = 0.70  # Dampen by 30% (approaching ceiling)
+
+            wind_power *= sr_multiplier
+            wind_power = max(0.1, wind_power)
+
             # --- MARKET STATES BASED ON WIND POWER ---
             if wind_power > 2.0:
                 trend_type = "🔥 Strong Trend (Gamma Explosion Possible)"
@@ -252,7 +319,13 @@ class GVNAiWindEngine:
                     "theta_decay_rate": round(theta_decay, 2),
                     "ce_div": dpd_metrics.get("ce_div", 0.0),
                     "pe_div": dpd_metrics.get("pe_div", 0.0),
-                    "dpd_state": dpd_metrics.get("state", "STABLE")
+                    "dpd_state": dpd_metrics.get("state", "STABLE"),
+                    "fii_multiplier": round(fii_multiplier, 2),
+                    "sr_multiplier": round(sr_multiplier, 2),
+                    "sr_status": sr_status,
+                    "fii_cash": fii_cash,
+                    "support_strike": support_strike,
+                    "resistance_strike": resistance_strike
                 }
             }
         except Exception as e:
@@ -375,11 +448,11 @@ class GVNAiWindEngine:
                 
         return "⚖️ CONSOLIDATION"
 
-    def get_market_dna(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5):
+    def get_market_dna(self, symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp=0, pe_ltp=0, ce_delta=0.5, pe_delta=-0.5, support_strike=None, resistance_strike=None):
         """
         Returns full Market DNA Report (Smart Money Tracker)
         """
-        wind_data = self.calculate_wind_direction(symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp, pe_ltp, ce_delta, pe_delta)
+        wind_data = self.calculate_wind_direction(symbol, ltp, vwap, ce_oi, pe_oi, ce_coi, pe_coi, ce_vol, pe_vol, delta, gamma, theta, ce_ltp, pe_ltp, ce_delta, pe_delta, support_strike, resistance_strike)
         
         # Smart Money Tracker
         smart_money = "WAITING"

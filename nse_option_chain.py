@@ -379,6 +379,12 @@ def get_real_option_915_ohlc(symbol, strike, opt_type, expiry_str=None):
         
     # Calculate timeframe dynamically based on current time
     now = datetime.now()
+    
+    # 🔒 GVN SAFE BENCHMARK LOCK: Never fetch 9:15 AM candle before it is fully completed (at or after 09:16:00 AM)
+    if now.hour == 9 and now.minute == 15:
+        logger.info("⏳ [9:15 CANDLE LOCK] 9:15 AM candle is active and incomplete. Waiting for 09:16:00 AM to fetch...")
+        return None
+        
     cutoff_time = now.replace(hour=9, minute=20, second=15, microsecond=0)
     timeframe = "1MIN" if now < cutoff_time else "5MIN"
     
@@ -2328,7 +2334,8 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
         ce_oi=total_ce_oi, pe_oi=total_pe_oi,
         ce_coi=ce_coi, pe_coi=pe_coi,
         ce_vol=ce_vol, pe_vol=pe_vol,
-        delta=mock_delta, gamma=0.015, theta=-0.5
+        delta=mock_delta, gamma=0.015, theta=-0.5,
+        support_strike=max_pe_strike, resistance_strike=max_ce_strike
     )
     
     sentiment = "NEUTRAL"
@@ -3641,7 +3648,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         pe_05 = float(pe_levels.get("i5", 0))
                         pe_06 = float(pe_levels.get("i6", 0))
                         
-                        if pe_ltp >= pe_05:
+                        if pe_05 > 0 and pe_ltp >= pe_05:
                             # Dynamic target selection based on GVN levels ladder
                             pe_target_name = "i3"
                             pe_target_val = float(pe_levels.get("i3", 0))
@@ -3668,7 +3675,7 @@ def analyze_and_update_gvn_scanner(symbol="NIFTY", mock_external_data=None):
                         ce_05 = float(ce_levels.get("i5", 0))
                         ce_06 = float(ce_levels.get("i6", 0))
                         
-                        if ce_ltp >= ce_05:
+                        if ce_05 > 0 and ce_ltp >= ce_05:
                             # Dynamic target selection based on GVN levels ladder
                             ce_target_name = "i3"
                             ce_target_val = float(ce_levels.get("i3", 0))

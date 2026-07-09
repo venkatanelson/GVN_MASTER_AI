@@ -57,6 +57,18 @@ def init_db():
             message TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS fii_dii_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT UNIQUE,
+            fii_cash REAL,
+            dii_cash REAL,
+            fii_idx_fut REAL,
+            fii_idx_opt REAL,
+            fii_stk_fut REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
     logger.info("✅ GVN Data Bank initialized.")
@@ -279,6 +291,52 @@ def purge_old_ai_memory(days=1):
     except Exception as e:
         logger.error(f"❌ Error purging old AI memory: {e}")
         return 0
+
+def save_fii_dii_record(date_str, fii_cash, dii_cash, fii_idx_fut, fii_idx_opt, fii_stk_fut):
+    """
+    Saves or updates FII/DII flow records in SQLite.
+    All cash values are in Crores.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO fii_dii_history 
+            (date, fii_cash, dii_cash, fii_idx_fut, fii_idx_opt, fii_stk_fut)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (date_str, float(fii_cash), float(dii_cash), float(fii_idx_fut), float(fii_idx_opt), float(fii_stk_fut)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"❌ Error saving FII/DII record: {e}")
+
+def get_latest_fii_dii():
+    """
+    Retrieves the latest FII/DII action data from the database.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT date, fii_cash, dii_cash, fii_idx_fut, fii_idx_opt, fii_stk_fut, timestamp
+            FROM fii_dii_history
+            ORDER BY date DESC LIMIT 1
+        ''')
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                "date": row[0],
+                "fii_cash": row[1],
+                "dii_cash": row[2],
+                "fii_idx_fut": row[3],
+                "fii_idx_opt": row[4],
+                "fii_stk_fut": row[5],
+                "timestamp": row[6]
+            }
+    except Exception as e:
+        logger.error(f"❌ Error fetching latest FII/DII record: {e}")
+    return None
 
 if __name__ == "__main__":
     init_db()

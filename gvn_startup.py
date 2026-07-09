@@ -45,6 +45,13 @@ class GVNSystem:
             logger.info("📁 [INIT] Loading market data structures...")
             self._load_shared_data()
             
+            logger.info("📊 [INIT] Synchronizing daily FII/DII records...")
+            try:
+                from gvn_fii_dii_fetcher import sync_fii_dii_data
+                sync_fii_dii_data()
+            except Exception as fe:
+                logger.error(f"⚠️ [INIT] FII/DII synchronization failed: {fe}")
+            
             logger.info("🤖 [INIT] Creating Master Robot instance...")
             self.robot = gvn_master_robot.GVNMasterRobot()
             
