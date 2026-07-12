@@ -173,6 +173,7 @@ class AlertTemplates:
         
         # Participant OI Analysis Formatting
         part_str = ""
+        verdict_str = ""
         if participant_data:
             try:
                 client_opt_net = participant_data["client_idx_call_long"] - participant_data["client_idx_call_short"] + participant_data["client_idx_put_short"] - participant_data["client_idx_put_long"]
@@ -194,6 +195,14 @@ class AlertTemplates:
 • 👥 <b>Clients:</b> {emoji_fn(client_opt_net)} Opt: {client_opt_net/1000.0:+.1f}k | Fut: {client_fut_net/1000.0:+.1f}k
 • 🏛️ <b>DIIs:</b> {emoji_fn(dii_opt_net)} Opt: {dii_opt_net/1000.0:+.1f}k | Fut: {dii_fut_net/1000.0:+.1f}k
 """
+                # Calculate verdict
+                verdict = "NEUTRAL ⚖️"
+                if fii_opt_net < -10000 or (abs(fii_opt_net) <= 10000 and pro_opt_net < -10000):
+                    verdict = "BEARISH 🔴"
+                elif fii_opt_net > 10000 or (abs(fii_opt_net) <= 10000 and pro_opt_net > 10000):
+                    verdict = "BULLISH 🟢"
+                
+                verdict_str = f"🎯 <b>Institutional Verdict:</b> {verdict}\n"
             except Exception as e:
                 part_str = f"\n⚠️ Error parsing participant data: {e}"
         
@@ -204,7 +213,7 @@ class AlertTemplates:
 💪 <b>Strength:</b> 🟢 CE {call_pct}% | 🔴 PE {put_pct}%
 📈 <b>Trend Zone:</b> {trend_type}
 🛡️ <b>Levels:</b> Supp: {support} | Res: {resistance}
-
+{verdict_str}
 🧱 <b>Option Chain Walls:</b>
 • <b>Biggest OI:</b>
   - 🟢 PE Support: {max_pe_oi_strike} ({max_pe_oi_val/100000.0:.2f}L)
@@ -431,8 +440,8 @@ class TelegramAlertManager:
             max_pe_oi_val=max_pe_oi_val,
             max_ce_oi_pct_strike=max_ce_oi_pct_strike,
             max_pe_oi_pct_strike=max_pe_oi_pct_strike,
-            max_ce_oi_pct_val=max_ce_oi_pct,
-            max_pe_oi_pct_val=max_pe_oi_pct,
+            max_ce_oi_pct_val=max_ce_oi_pct_val,
+            max_pe_oi_pct_val=max_pe_oi_pct_val,
             nifty_rsi=nifty_rsi,
             rsi_confirm_msg=rsi_confirm_msg,
             participant_data=participant_data
