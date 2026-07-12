@@ -256,13 +256,13 @@ class GVNAiDelta60Engine:
         levels = gvn_levels_engine.calculate_gvn_levels(high_915, low_915)
         if not levels: return
         
-        # Dynamically calculate ATR Stop Loss (Half of the 9:15 AM candle range)
-        atr_sl = 12.0
+        # Dynamically calculate ATR Stop Loss (Half of the 9:15 AM candle range) - USER REQUEST: min 20 points
+        atr_sl = 20.0
         try:
             if high_915 > 0 and low_915 > 0:
                 atr_sl = round((high_915 - low_915) * 0.5, 2)
-                # Clamp it to be between 10.0 and 35.0 to protect against extreme candles
-                atr_sl = max(10.0, min(35.0, atr_sl))
+                # Clamp it to be between 20.0 and 35.0 to protect against extreme candles and keep minimum 20 points
+                atr_sl = max(20.0, min(35.0, atr_sl))
         except Exception as atr_err:
             logger.error(f"❌ Error calculating ATR SL: {atr_err}")
             
@@ -527,12 +527,36 @@ class GVNAiDelta60Engine:
                                 
                         new_sl = round(last_tgt - atr_sl, 2) # Dynamic ATR Stop Loss
                         
-                        # Reset pullback flag for this strike
-                        self.memory["target_pullback_flags"][key] = False
+                        # Check wind direction alignment for re-entries to avoid fake signals
+                        wind_dir = shared_data.market_pulse.get("wind_direction", "NEUTRAL")
+                        wind_power = shared_data.market_pulse.get("wind_power", 1.0)
                         
-                        # Execute
-                        self._execute_gvn_level_trade(symbol, strike, ltp, new_tgt, new_sl, f"GVN Level Re-entry (near {last_tgt:.2f})")
-                        return
+                        is_wind_aligned = False
+                        if strike['type'] == 'CE':
+                            if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+                                is_wind_aligned = True
+                            if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+                                is_wind_aligned = False
+                        elif strike['type'] == 'PE':
+                            if any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING", "SLOW DOWN"]):
+                                is_wind_aligned = True
+                            if any(w in wind_dir for w in ["UP WIND", "SHORT COVERING", "SLOW UP"]):
+                                is_wind_aligned = False
+                                
+                        if "PREMIUM EATING" in wind_dir or wind_power < 0.8:
+                            is_wind_aligned = False
+                            
+                        if not is_wind_aligned:
+                            # Reset flag anyway to prevent getting stuck, but block order
+                            self.memory["target_pullback_flags"][key] = False
+                            logger.info(f"🚫 [GVN RE-ENTRY BLOCK] Blocked re-entry for {key} because wind {wind_dir} is not aligned or power {wind_power} is low.")
+                        else:
+                            # Reset pullback flag for this strike
+                            self.memory["target_pullback_flags"][key] = False
+                            
+                            # Execute
+                            self._execute_gvn_level_trade(symbol, strike, ltp, new_tgt, new_sl, f"GVN Level Re-entry (near {last_tgt:.2f})")
+                            return
 
             # GVN Pro Level Touch/Crossover checks: strictly 1st Entry (i5), intermediate Entry (i6), and 2nd Entry (i7)
             i5_val = levels.get("i5", 0)
@@ -722,14 +746,14 @@ class GVNAiDelta60Engine:
         full_symbol = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
         tsym = f"{symbol}_{int(strike['strike'])}_{strike['type']}"
         
-        # Calculate dynamic ATR Stop Loss (Half of the 9:15 AM candle range)
-        atr_sl = 12.0
+        # Calculate dynamic ATR Stop Loss (Half of the 9:15 AM candle range) - USER REQUEST: min 20 points
+        atr_sl = 20.0
         try:
             h_915 = float(strike.get("high_915", 0))
             l_915 = float(strike.get("low_915", 0))
             if h_915 > 0 and l_915 > 0:
                 atr_sl = round((h_915 - l_915) * 0.5, 2)
-                atr_sl = max(10.0, min(35.0, atr_sl))
+                atr_sl = max(20.0, min(35.0, atr_sl))
         except:
             pass
 
@@ -739,12 +763,17 @@ class GVNAiDelta60Engine:
             sl_price = strike.get("ltp", 0.0) - atr_sl
         
         if side == "SELL":
+            clean_sym = str(full_symbol).replace("_", "").replace(" ", "").upper()
+            execution_cmd = f"SELL {clean_sym} EXIT {strike.get('ltp', 0.0):.2f}"
             alert = (
                 f"🛑 <b>GVN MASTER ALGO - POSITION CLOSED</b> 🛑\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🎯 Symbol: <b>{tsym}</b>\n"
                 f"⚡ Reason: <b>{reason}</b>\n"
                 f"💸 Exit Price: <b>₹{strike.get('ltp', 0.0):.2f}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🤖 <b>ANGEL ONE EXECUTION:</b>\n"
+                f"<code>{execution_cmd}</code>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚡ Position closed successfully"
             )
@@ -760,6 +789,9 @@ class GVNAiDelta60Engine:
             opt_type = strike.get("type", "PE")
             strike_price = int(strike.get("strike", 24400))
 
+            clean_sym = str(full_symbol).replace("_", "").replace(" ", "").upper()
+            execution_cmd = f"BUY {clean_sym} ENTRY {strike.get('ltp', 0.0):.2f} SL {sl_price:.2f} TGT {target_price:.2f}"
+
             alert = (
                 f"🚀 <b>GVN DUAL-SYNC ENTRY ALERT</b> 🚀\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -767,7 +799,11 @@ class GVNAiDelta60Engine:
                 f"📥 <b>Action:</b> BUY Option ({opt_type})\n"
                 f"🟢 <b>Entry Price (LTP):</b> ₹{strike.get('ltp', 0.0):.2f}\n"
                 f"🎯 <b>Target:</b> ₹{target_price:.2f}\n"
-                f"⛔ <b>Stop Loss:</b> ₹{sl_price:.2f} (ATR SL: {atr_sl})\n\n"
+                f"⛔ <b>Stop Loss:</b> ₹{sl_price:.2f} (ATR SL: {atr_sl})\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🤖 <b>ANGEL ONE EXECUTION:</b>\n"
+                f"<code>{execution_cmd}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"📊 <b>Setup Confirmation:</b>\n"
                 f"• <b>Wind Sync:</b> Strong {'Up' if opt_type == 'CE' else 'Down'} Wind 🟢 (Confirmed)\n"
                 f"• <b>RSI Trend:</b> Bullish {opt_type} / {'Bullish' if opt_type == 'CE' else 'Bearish'} Index 🟢 (Confirmed)\n"

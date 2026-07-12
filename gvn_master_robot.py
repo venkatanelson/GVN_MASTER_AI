@@ -17,8 +17,8 @@ class GVNMasterRobot:
     def __init__(self):
         self.priority_delta_min = 0.59
         self.priority_delta_max = 0.69
-        self.stop_loss_pts = 12
-        self.panic_exit_pts = 16
+        self.stop_loss_pts = 20 # USER REQUEST: minimum 20 points stop loss
+        self.panic_exit_pts = 25
         self.active_trades = {} # {symbol: trade_info}
         self.last_processed_time = None
         self.strike_level_cache = {} # Cache GVN levels for strikes

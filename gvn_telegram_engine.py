@@ -94,6 +94,8 @@ class AlertTemplates:
         except: pass
         
         is_z2h = "Z2H" in str(level).upper() or "ZERO" in str(level).upper()
+        clean_sym = str(symbol).replace("_", "").replace(" ", "").upper()
+        execution_cmd = f"BUY {clean_sym} ENTRY {entry_price} SL {sl} TGT {target}"
         
         if is_z2h:
             return f"""🚀 <b>GVN ZERO-TO-HERO BLAST</b> 🚀
@@ -103,6 +105,9 @@ class AlertTemplates:
 🎯 <b>Target:</b> ₹{target}
 ⛔ <b>Stop Loss:</b> ₹{sl}
 🌪️ <i>Z2H Wind Sync: ACTIVE</i>
+━━━━━━━━━━━━━━━━━━
+🤖 <b>ANGEL ONE EXECUTION:</b>
+<code>{execution_cmd}</code>
 """
         else:
             return f"""⚡ <b>GVN DUAL-SYNC BUY</b> ⚡
@@ -112,6 +117,9 @@ class AlertTemplates:
 💸 <b>Entry LTP:</b> ₹{entry_price}
 🎯 <b>Target:</b> ₹{target}
 ⛔ <b>Stop Loss:</b> ₹{sl}
+━━━━━━━━━━━━━━━━━━
+🤖 <b>ANGEL ONE EXECUTION:</b>
+<code>{execution_cmd}</code>
 """
     
     @staticmethod
@@ -124,12 +132,18 @@ class AlertTemplates:
         
         status_emoji = "🎯" if "Target" in exit_reason else ("⛔" if "SL" in exit_reason else "⏹️")
         pnl_emoji = "🟩" if float(pnl) > 0 else "🟥"
+        clean_sym = str(symbol).replace("_", "").replace(" ", "").upper()
+        execution_cmd = f"SELL {clean_sym} EXIT {exit_price}"
+        
         return f"""{status_emoji} <b>GVN TRADE CLOSED</b> {status_emoji}
 ━━━━━━━━━━━━━━━━━━
 🎯 <b>Strike:</b> {symbol}
 🔔 <b>Reason:</b> {exit_reason}
 💸 <b>Exit Price:</b> ₹{exit_price}
 {pnl_emoji} <b>P&L:</b> {pnl} pts
+━━━━━━━━━━━━━━━━━━
+🤖 <b>ANGEL ONE EXECUTION:</b>
+<code>{execution_cmd}</code>
 """
     
     @staticmethod
@@ -147,12 +161,41 @@ class AlertTemplates:
 """
     
     @staticmethod
-    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None):
-        """Wind Direction and Option Chain DNA Alert - Short Version"""
+    def wind_alert(symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None,
+                   max_ce_oi_strike=0, max_pe_oi_strike=0, max_ce_oi_val=0, max_pe_oi_val=0,
+                   max_ce_oi_pct_strike=0, max_pe_oi_pct_strike=0, max_ce_oi_pct_val=0.0, max_pe_oi_pct_val=0.0,
+                   nifty_rsi=50.0, rsi_confirm_msg="", participant_data=None):
+        """Wind Direction and Option Chain DNA Alert - Detailed Version"""
         # Determine dominant side emoji
         side_emoji = "🟢" if "UP" in str(wind_dir).upper() or "SHORT" in str(wind_dir).upper() or "SLOW UP" in str(wind_dir).upper() else ("🔴" if "DOWN" in str(wind_dir).upper() or "LONG" in str(wind_dir).upper() or "SLOW DOWN" in str(wind_dir).upper() else "⚖️")
         
         expiry_str = " (EXPIRY DAY)" if is_expiry else ""
+        
+        # Participant OI Analysis Formatting
+        part_str = ""
+        if participant_data:
+            try:
+                client_opt_net = participant_data["client_idx_call_long"] - participant_data["client_idx_call_short"] + participant_data["client_idx_put_short"] - participant_data["client_idx_put_long"]
+                fii_opt_net = participant_data["fii_idx_call_long"] - participant_data["fii_idx_call_short"] + participant_data["fii_idx_put_short"] - participant_data["fii_idx_put_long"]
+                pro_opt_net = participant_data["pro_idx_call_long"] - participant_data["pro_idx_call_short"] + participant_data["pro_idx_put_short"] - participant_data["pro_idx_put_long"]
+                dii_opt_net = participant_data["dii_idx_call_long"] - participant_data["dii_idx_call_short"] + participant_data["dii_idx_put_short"] - participant_data["dii_idx_put_long"]
+                
+                client_fut_net = participant_data["client_idx_fut_long"] - participant_data["client_idx_fut_short"]
+                fii_fut_net = participant_data["fii_idx_fut_long"] - participant_data["fii_idx_fut_short"]
+                pro_fut_net = participant_data["pro_idx_fut_long"] - participant_data["pro_idx_fut_short"]
+                dii_fut_net = participant_data["dii_idx_fut_long"] - participant_data["dii_idx_fut_short"]
+                
+                emoji_fn = lambda val: "🟢 (BULL)" if val > 10000 else ("🔴 (BEAR)" if val < -10000 else "⚖️ (NEUTRAL)")
+                
+                part_str = f"""
+👥 <b>Participant OI Positions:</b>
+• 🏢 <b>FIIs:</b> {emoji_fn(fii_opt_net)} Opt: {fii_opt_net/1000.0:+.1f}k | Fut: {fii_fut_net/1000.0:+.1f}k
+• 👔 <b>PROs:</b> {emoji_fn(pro_opt_net)} Opt: {pro_opt_net/1000.0:+.1f}k | Fut: {pro_fut_net/1000.0:+.1f}k
+• 👥 <b>Clients:</b> {emoji_fn(client_opt_net)} Opt: {client_opt_net/1000.0:+.1f}k | Fut: {client_fut_net/1000.0:+.1f}k
+• 🏛️ <b>DIIs:</b> {emoji_fn(dii_opt_net)} Opt: {dii_opt_net/1000.0:+.1f}k | Fut: {dii_fut_net/1000.0:+.1f}k
+"""
+            except Exception as e:
+                part_str = f"\n⚠️ Error parsing participant data: {e}"
         
         return f"""🌪️ <b>GVN AI WIND & TREND DNA</b> 🌪️
 ━━━━━━━━━━━━━━━━━━
@@ -161,6 +204,20 @@ class AlertTemplates:
 💪 <b>Strength:</b> 🟢 CE {call_pct}% | 🔴 PE {put_pct}%
 📈 <b>Trend Zone:</b> {trend_type}
 🛡️ <b>Levels:</b> Supp: {support} | Res: {resistance}
+
+🧱 <b>Option Chain Walls:</b>
+• <b>Biggest OI:</b>
+  - 🟢 PE Support: {max_pe_oi_strike} ({max_pe_oi_val/100000.0:.2f}L)
+  - 🔴 CE Resistance: {max_ce_oi_strike} ({max_ce_oi_val/100000.0:.2f}L)
+• <b>Strongest Build-up:</b>
+  - 🟢 PE Support: {max_pe_oi_pct_strike} (+{max_pe_oi_pct_val:.1f}%)
+  - 🔴 CE Resistance: {max_ce_oi_pct_strike} (+{max_ce_oi_pct_val:.1f}%)
+
+📈 <b>RSI-50 Validation:</b>
+• {rsi_confirm_msg}
+{part_str}
+━━━━━━━━━━━━━━━━━━
+⏰ {datetime.now().strftime('%H:%M:%S')} | GVN Master Algo
 """
 
     
@@ -345,7 +402,10 @@ class TelegramAlertManager:
         self.bot.send_message(msg)
         self.alert_history.append({"type": "SENTIMENT", "data": sentiment_analysis, "time": datetime.now()})
     
-    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None):
+    def alert_wind(self, symbol, wind_dir, call_pct, put_pct, support, resistance, battle_status, ce_vol, pe_vol, pcr, smart_money, trend_type, is_expiry=False, direction_details=None,
+                   max_ce_oi_strike=0, max_pe_oi_strike=0, max_ce_oi_val=0, max_pe_oi_val=0,
+                   max_ce_oi_pct_strike=0, max_pe_oi_pct_strike=0, max_ce_oi_pct_val=0.0, max_pe_oi_pct_val=0.0,
+                   nifty_rsi=50.0, rsi_confirm_msg="", participant_data=None):
         """Send Wind and Market DNA alert"""
         if not self.should_send_alert("WIND", symbol):
             return
@@ -364,7 +424,18 @@ class TelegramAlertManager:
             smart_money=smart_money,
             trend_type=trend_type,
             is_expiry=is_expiry,
-            direction_details=direction_details
+            direction_details=direction_details,
+            max_ce_oi_strike=max_ce_oi_strike,
+            max_pe_oi_strike=max_pe_oi_strike,
+            max_ce_oi_val=max_ce_oi_val,
+            max_pe_oi_val=max_pe_oi_val,
+            max_ce_oi_pct_strike=max_ce_oi_pct_strike,
+            max_pe_oi_pct_strike=max_pe_oi_pct_strike,
+            max_ce_oi_pct_val=max_ce_oi_pct,
+            max_pe_oi_pct_val=max_pe_oi_pct,
+            nifty_rsi=nifty_rsi,
+            rsi_confirm_msg=rsi_confirm_msg,
+            participant_data=participant_data
         )
         
         self.bot.send_message(msg)

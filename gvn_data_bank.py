@@ -69,6 +69,25 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS participant_oi_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT UNIQUE,
+            client_idx_fut_long INTEGER, client_idx_fut_short INTEGER,
+            client_idx_call_long INTEGER, client_idx_call_short INTEGER,
+            client_idx_put_long INTEGER, client_idx_put_short INTEGER,
+            dii_idx_fut_long INTEGER, dii_idx_fut_short INTEGER,
+            dii_idx_call_long INTEGER, dii_idx_call_short INTEGER,
+            dii_idx_put_long INTEGER, dii_idx_put_short INTEGER,
+            fii_idx_fut_long INTEGER, fii_idx_fut_short INTEGER,
+            fii_idx_call_long INTEGER, fii_idx_call_short INTEGER,
+            fii_idx_put_long INTEGER, fii_idx_put_short INTEGER,
+            pro_idx_fut_long INTEGER, pro_idx_fut_short INTEGER,
+            pro_idx_call_long INTEGER, pro_idx_call_short INTEGER,
+            pro_idx_put_long INTEGER, pro_idx_put_short INTEGER,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
     logger.info("✅ GVN Data Bank initialized.")
@@ -336,6 +355,61 @@ def get_latest_fii_dii():
             }
     except Exception as e:
         logger.error(f"❌ Error fetching latest FII/DII record: {e}")
+    return None
+
+def save_participant_oi(date_str, data):
+    """
+    Saves or updates participant open interest records in SQLite.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO participant_oi_history (
+                date,
+                client_idx_fut_long, client_idx_fut_short, client_idx_call_long, client_idx_call_short, client_idx_put_long, client_idx_put_short,
+                dii_idx_fut_long, dii_idx_fut_short, dii_idx_call_long, dii_idx_call_short, dii_idx_put_long, dii_idx_put_short,
+                fii_idx_fut_long, fii_idx_fut_short, fii_idx_call_long, fii_idx_call_short, fii_idx_put_long, fii_idx_put_short,
+                pro_idx_fut_long, pro_idx_fut_short, pro_idx_call_long, pro_idx_call_short, pro_idx_put_long, pro_idx_put_short
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            date_str,
+            data["Client"].get("Future Index Long", 0), data["Client"].get("Future Index Short", 0),
+            data["Client"].get("Option Index Call Long", 0), data["Client"].get("Option Index Call Short", 0),
+            data["Client"].get("Option Index Put Long", 0), data["Client"].get("Option Index Put Short", 0),
+            data["DII"].get("Future Index Long", 0), data["DII"].get("Future Index Short", 0),
+            data["DII"].get("Option Index Call Long", 0), data["DII"].get("Option Index Call Short", 0),
+            data["DII"].get("Option Index Put Long", 0), data["DII"].get("Option Index Put Short", 0),
+            data["FII"].get("Future Index Long", 0), data["FII"].get("Future Index Short", 0),
+            data["FII"].get("Option Index Call Long", 0), data["FII"].get("Option Index Call Short", 0),
+            data["FII"].get("Option Index Put Long", 0), data["FII"].get("Option Index Put Short", 0),
+            data["Pro"].get("Future Index Long", 0), data["Pro"].get("Future Index Short", 0),
+            data["Pro"].get("Option Index Call Long", 0), data["Pro"].get("Option Index Call Short", 0),
+            data["Pro"].get("Option Index Put Long", 0), data["Pro"].get("Option Index Put Short", 0)
+        ))
+        conn.commit()
+        conn.close()
+        logger.info(f"💾 Participant OI saved for date {date_str}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving participant OI: {e}")
+        return False
+
+def get_latest_participant_oi():
+    """
+    Retrieves the latest participant OI record from SQLite.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM participant_oi_history ORDER BY date DESC LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return dict(row)
+    except Exception as e:
+        logger.error(f"Error getting latest participant OI: {e}")
     return None
 
 if __name__ == "__main__":
