@@ -80,8 +80,8 @@ class SecurityShield:
             if session.get('user_id') or session.get('admin_logged_in'):
                 return None
             
-            # 1. Whitelist check (Local & Private Network)
-            if ip in ['127.0.0.1', 'localhost'] or ip.startswith('192.168.') or ip.startswith('10.'):
+            # 1. Whitelist check (Local, Private Network & Cloudflare Proxies)
+            if ip in ['127.0.0.1', 'localhost'] or ip.startswith(('192.168.', '10.', '104.28.', '172.68.', '162.158.', '172.31.')):
                 return None  # Allow immediately
             
             if ip in self.whitelist_ips:
@@ -94,15 +94,16 @@ class SecurityShield:
 
             # 3. Bot Detection (User-Agent Filtering)
             ua = request.headers.get('User-Agent', '').lower()
-            malicious_bots = ['python-requests', 'curl', 'wget', 'postman', 'headless', 'scraper', 'zgrab', 'masscan']
+            malicious_bots = ['curl', 'wget', 'postman', 'headless', 'scraper', 'zgrab', 'masscan']
             if any(bot in ua for bot in malicious_bots):
                 # Check if it's a legitimate internal request first
                 if ip not in ['127.0.0.1', 'localhost']:
                     self._log_security_event("BOT_DETECTED", ip, request.path, f"Blocked malicious UA: {ua}")
                     return abort(403, description="🤖 Security Alert: Bot activity detected and blocked.")
 
-            # 4. Rate Limiting / Bot Detection (Exclude dashboard scanner and static files from blocking)
-            if not any(path in request.path for path in ['/api/gvn-scanner', '/static/', '/favicon.ico']):
+            # 4. Rate Limiting / Bot Detection (Exclude dashboard polling APIs and static files)
+            dashboard_paths = ['/api/gvn-scanner', '/api/ai_state', '/api/today-trades', '/api/order-flow', '/api/ai-memory', '/static/', '/favicon.ico']
+            if not any(path in request.path for path in dashboard_paths):
                 if self._is_suspicious(ip):
                     self.block_ip(ip, "High Frequency Request (DDoS/Bot)")
                     self._log_security_event("DDoS_ATTEMPT", ip, request.path, "Rate limit exceeded")
