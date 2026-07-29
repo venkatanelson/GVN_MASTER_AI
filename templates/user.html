@@ -1351,50 +1351,56 @@
             </div>
         </div>
 
-        <!-- TODAY'S LIVE SIGNALS -->
-        <div class="premium-card" style="margin-top: 30px;">
+        <!-- TODAY'S LIVE SIGNALS & TRADE EXECUTION LOG -->
+        <div class="premium-card" style="margin-top: 30px; border: 1px solid rgba(59, 130, 246, 0.2);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="margin: 0; font-weight: 900;">⚡ Today's Live Signals</h3>
+                <h3 style="margin: 0; font-weight: 900; color: #60a5fa;">⚡ GVN Today's Trade Execution Log (Entries & Targets)</h3>
                 {% if user.is_admin %}
                 <a href="/admin/clear-today-trades" class="btn-premium" style="background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); padding: 6px 12px; font-size: 10px;">Clear History</a>
                 {% endif %}
             </div>
             <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;" id="gvn-today-trades-table">
                     <thead>
                         <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--glass-border);">
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">TIME</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">SYMBOL</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">STATUS</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ENTRY</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">EXIT</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">P&L (₹)</th>
-                            <th style="padding: 15px; font-size: 11px; color: var(--text-dim);">ACTION</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">ENTRY TIME</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">EXIT TIME</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">SYMBOL</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">QTY</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">ENTRY PRICE</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">TARGET PRICE</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">EXIT / LTP</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">P&L (₹)</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">STATUS / ACTION</th>
+                            <th style="padding: 12px 14px; font-size: 11px; color: var(--text-dim);">CHART 📸</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for t in parsed_trades %}
                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
-                            <td style="padding: 15px; font-size: 13px;">{{ t.time }}</td>
-                            <td style="padding: 15px;"><span style="font-weight: 800; color: var(--primary);">{{ t.symbol }}</span></td>
-                            <td style="padding: 15px;">
-                                <span style="background: {{ 'rgba(245, 158, 11, 0.1)' if t.status == 'Running' else 'rgba(16, 185, 129, 0.1)' }}; color: {{ 'var(--warning)' if t.status == 'Running' else 'var(--secondary)' }}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">{{ t.status.upper() }}</span>
-                            </td>
-                            <td style="padding: 15px; font-weight: 800;">₹ {{ t.entry_price }}</td>
-                            <td style="padding: 15px;">{{ '₹ ' + (t.exit_price|string) if t.status == 'Closed' else '-' }}</td>
-                            <td style="padding: 15px; font-weight: 900;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
-                                <span class="{{ 'live-pnl' if t.status == 'Running' else '' }}" data-trade-id="{{ t.id }}">
+                            <td style="padding: 12px 14px; font-size: 12px; color: #94a3b8;">{{ t.time }}</td>
+                            <td style="padding: 12px 14px; font-size: 12px; color: #94a3b8;">{{ t.exit_time }}</td>
+                            <td style="padding: 12px 14px;"><span style="font-weight: 800; color: var(--primary);">{{ t.symbol }}</span></td>
+                            <td style="padding: 12px 14px; font-weight: 700; color: #e2e8f0;">{{ t.quantity }}</td>
+                            <td style="padding: 12px 14px; font-weight: 800; color: #38bdf8;">₹ {{ "%.2f"|format(t.entry_price) }}</td>
+                            <td style="padding: 12px 14px; font-weight: 800; color: #34d399;">₹ {{ "%.2f"|format(t.target_price) }}</td>
+                            <td style="padding: 12px 14px; font-weight: 700; color: #cbd5e1;">{{ ('₹ ' + ("%.2f"|format(t.exit_price))) if t.status == 'Closed' else '-' }}</td>
+                            <td style="padding: 12px 14px; font-weight: 900;" class="{% if t.pnl > 0 %}profit{% elif t.pnl < 0 %}loss{% endif %}">
+                                <span class="{{ 'live-pnl' if (t.status == 'Running' or t.status == 'Open') else '' }}" data-trade-id="{{ t.id }}">
                                     {{ '+' if t.pnl > 0 else '' }}₹ {{ "%.2f"|format(t.pnl) }}
                                 </span>
                             </td>
-                            <td style="padding: 15px;">
-                                {% if t.status == 'Running' %}
-                                <a href="/force-close-trade/{{ t.id }}" class="btn-premium" style="background: var(--danger); padding: 6px 12px; font-size: 10px;">Square Off</a>
-                                {% else %}-{% endif %}
+                            <td style="padding: 12px 14px;">
+                                <span style="background: {{ 'rgba(245, 158, 11, 0.15)' if (t.status == 'Running' or t.status == 'Open') else 'rgba(16, 185, 129, 0.15)' }}; color: {{ 'var(--warning)' if (t.status == 'Running' or t.status == 'Open') else 'var(--secondary)' }}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">
+                                    {{ t.status.upper() }}
+                                </span>
+                                {% if t.status == 'Running' or t.status == 'Open' %}
+                                <a href="/force-close-trade/{{ t.id }}" class="btn-premium" style="background: var(--danger); padding: 4px 8px; font-size: 10px; margin-left: 6px;">Square Off</a>
+                                {% endif %}
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" style="padding: 50px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for signals...</td></tr>
+                        <tr><td colspan="9" style="padding: 50px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for signals...</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -1958,8 +1964,106 @@
             });
         }
 
+        function updateTodayTradesTable() {
+            fetch('/api/today-trades?user_id={{ user.id }}')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success' && data.trades) {
+                        const tbody = document.querySelector('#gvn-today-trades-table tbody');
+                        if (!tbody) return;
+                        if (data.trades.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="9" style="padding: 50px; text-align: center; color: var(--warning); font-weight: 800;">📡 Waiting for signals...</td></tr>';
+                            return;
+                        }
+                        let html = '';
+                        data.trades.forEach(t => {
+                            const isRunning = t.status === 'Running' || t.status === 'Open';
+                            const pnlClass = t.pnl > 0 ? 'profit' : (t.pnl < 0 ? 'loss' : '');
+                            const pnlSign = t.pnl > 0 ? '+' : '';
+                            const exitPriceStr = (t.status === 'Closed' || t.status === 'CLOSED') ? ('₹ ' + t.exit_price.toFixed(2)) : '-';
+                            const badgeBg = isRunning ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+                            const badgeColor = isRunning ? 'var(--warning)' : 'var(--secondary)';
+                            
+                            html += `
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                                    <td style="padding: 12px 14px; font-size: 12px; color: #94a3b8;">${t.time}</td>
+                                    <td style="padding: 12px 14px; font-size: 12px; color: #94a3b8;">${t.exit_time}</td>
+                                    <td style="padding: 12px 14px;"><span style="font-weight: 800; color: var(--primary);">${t.symbol}</span></td>
+                                    <td style="padding: 12px 14px; font-weight: 700; color: #e2e8f0;">${t.quantity}</td>
+                                    <td style="padding: 12px 14px; font-weight: 800; color: #38bdf8;">₹ ${t.entry_price.toFixed(2)}</td>
+                                    <td style="padding: 12px 14px; font-weight: 800; color: #34d399;">₹ ${t.target_price.toFixed(2)}</td>
+                                    <td style="padding: 12px 14px; font-weight: 700; color: #cbd5e1;">${exitPriceStr}</td>
+                                    <td style="padding: 12px 14px; font-weight: 900;" class="${pnlClass}">
+                                        <span class="${isRunning ? 'live-pnl' : ''}" data-trade-id="${t.id}">
+                                            ${pnlSign}₹ ${t.pnl.toFixed(2)}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 12px 14px;">
+                                        <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900;">
+                                            ${t.status.toUpperCase()}
+                                        </span>
+                                        ${isRunning ? `<a href="/force-close-trade/${t.id}" class="btn-premium" style="background: var(--danger); padding: 4px 8px; font-size: 10px; margin-left: 6px;">Square Off</a>` : ''}
+                                    </td>
+                                    <td style="padding: 12px 14px; display: flex; gap: 6px; align-items: center;">
+                                        ${t.chart_image ? `<button onclick="viewTradeChart('${t.chart_image}')" class="btn-premium" style="background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 4px 8px; font-size: 10px;">🖼️ View Chart</button>` : ''}
+                                        <label class="btn-premium" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 4px 8px; font-size: 10px; cursor: pointer; border: 1px solid rgba(99, 102, 241, 0.4);">
+                                            📸 ${t.chart_image ? 'Re-upload' : 'Upload Chart'}
+                                            <input type="file" accept="image/*" style="display:none;" onchange="uploadChartForTrade(${t.id}, this)">
+                                        </label>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        tbody.innerHTML = html;
+                    }
+                }).catch(err => console.log('Trades table refresh error', err));
+        }
+
+        function uploadChartForTrade(tradeId, inputEl) {
+            if (!inputEl.files || !inputEl.files[0]) return;
+            const file = inputEl.files[0];
+            const formData = new FormData();
+            formData.append('trade_id', tradeId);
+            formData.append('chart_image', file);
+
+            fetch('/api/upload-trade-chart', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    alert('✅ Chart Screenshot Uploaded Successfully!');
+                    updateTodayTradesTable();
+                } else {
+                    alert('❌ Upload failed: ' + res.message);
+                }
+            })
+            .catch(err => alert('Upload error: ' + err));
+        }
+
+        function viewTradeChart(imgUrl) {
+            let modal = document.getElementById('chart-view-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'chart-view-modal';
+                modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:99999; display:flex; align-items:center; justify-content:center; flex-direction:column;';
+                modal.innerHTML = `
+                    <div style="position:relative; max-width:90vw; max-height:85vh; background:#0f172a; padding:15px; border-radius:16px; border:1px solid #6366f1;">
+                        <button onclick="document.getElementById('chart-view-modal').style.display='none'" style="position:absolute; top:-15px; right:-15px; background:#ef4444; color:#fff; border:none; width:30px; height:30px; border-radius:50%; font-weight:bold; cursor:pointer;">✕</button>
+                        <img id="chart-view-img" src="" style="max-width:100%; max-height:75vh; border-radius:8px; display:block;">
+                        <p style="color:#94a3b8; font-size:12px; margin-top:10px; text-align:center;">GVN Master Algo - Verified TradingView Chart Proof</p>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            document.getElementById('chart-view-img').src = imgUrl;
+            modal.style.display = 'flex';
+        }
+
         setInterval(updateScanner, 5000);
         setInterval(updateLivePnL, 3000);
+        setInterval(updateTodayTradesTable, 4000);
 
         function updateOrderFlow() {
             fetch('/api/order-flow')

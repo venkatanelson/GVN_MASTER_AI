@@ -6,6 +6,7 @@
 4. **Weak Side Identifier:** The weak side option opens high (0.3-0.2 levels) and prints a red candle cutting down below 0.5.
 5. **Volume Pressure Rule:** Strong side candle must close above the 0.6 GVN level with high volume (2x margin volume).
 6. **Asymmetric Touch Rule:** If PE touches/crosses 0.6 or 0.7 but CE fails to reach its level, pressure is locked on the PE side.
+6b. **OI % Asymmetry Surge Rule:** If Put Option strikes surge +2,000% to +7,000%+ in OI Change with Put price decay, while Call side unwinds, lock +100% Bullish Wind.
 7. **Trend Confirmation (The 0.5 Rule):** The dominant morning trend is fully confirmed only when the strong option holds above 0.5.
 8. **Anti-Trap Filter:** Strictly block any trades on the opposite option as long as the dominant option trades above 0.5.
 9. **Zero-to-Hero (Z2H) Expiry Rule:** Eligible only on Expiry Days for option contracts with Delta between 0.40 and 0.85.

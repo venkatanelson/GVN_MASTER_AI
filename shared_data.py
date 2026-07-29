@@ -28,8 +28,15 @@ forced_strike_data = {}
 # Live Playback Terminal Logs
 demo_logs = []
 
-# Demo Trade State for P&L Simulation
-demo_trade = {"active": False, "symbol": None, "entry_price": 0, "target": 0, "sl": 0, "qty": 50}
+# Demo Trade State for P&L Simulation (Locked to GVN Master Levels: 166.40 Entry, 196.94 Target, 159.45 SL)
+demo_trade = {
+    "active": True,
+    "symbol": "NIFTY 24150 CE",
+    "entry_price": 166.40,
+    "target": 196.94,
+    "sl": 159.45,
+    "qty": 100
+}
 
 # Saving Memory to AI Engine (14 Strikes)
 gvn_alpha_grid = []

@@ -220,8 +220,9 @@ class GVNMasterRobot:
         """
         try:
             level_key = trigger_info['level']
-            entry_price = ltp
-            sl_price = entry_price - self.stop_loss_pts
+            # Use exact GVN level trigger price if available, otherwise ltp
+            entry_price = trigger_info.get('price', ltp)
+            sl_price = round(entry_price - self.stop_loss_pts, 2)
             
             # Calculate targets based on triggered level
             targets = self._calculate_targets(entry_price, levels)
@@ -237,11 +238,12 @@ class GVNMasterRobot:
                 qty=1
             )
             
+            ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
             # Track active trade
             self.active_trades[symbol] = {
                 "order_id": order_id,
                 "entry_price": entry_price,
-                "entry_time": datetime.datetime.now(),
+                "entry_time": datetime.datetime.now(ist_tz),
                 "sl": sl_price,
                 "targets": targets,
                 "triggered_level": level_key,
@@ -353,22 +355,27 @@ class GVNMasterRobot:
 
     def _calculate_targets(self, entry_price, levels):
         """
-        Calculates profit targets based on GVN levels.
-        Uses i2, i3, i5 as target levels.
+        Calculates profit targets strictly based on exact GVN levels (i5, i3, i2, etc.).
+        E.g., Entry at i6 (319.32) -> Target 1 at i5 (389.82), Target 2 at i3 (460.31).
         """
         targets = []
+        if isinstance(levels, dict):
+            # Extract all GVN level prices above entry_price
+            valid_higher_levels = [
+                round(float(price), 2) for key, price in levels.items()
+                if isinstance(price, (int, float)) and price > entry_price + 0.5
+            ]
+            targets = sorted(list(set(valid_higher_levels)))
         
-        for level_key in ['i2', 'i3', 'i5']:
-            level_price = levels.get(level_key, 0)
-            if level_price > entry_price:  # Only upside targets
-                targets.append(level_price)
+        # Fallback if specific GVN levels higher than entry are unavailable
+        if len(targets) == 0:
+            targets.append(round(entry_price + 70.5, 2))  # Approx ~0.50 level jump
+            targets.append(round(entry_price + 141.0, 2)) # Approx ~0.30 level jump
+        elif len(targets) == 1:
+            targets.append(round(targets[0] + 70.5, 2))
         
-        # Add default targets if levels insufficient
-        if len(targets) < 2:
-            targets.append(entry_price + 10)
-            targets.append(entry_price + 20)
-        
-        return sorted(targets)
+        logger.info(f"🎯 [GVN TARGETS] Entry: {entry_price} -> GVN Targets: {targets}")
+        return targets
 
     def _is_market_hours(self, dt):
         """

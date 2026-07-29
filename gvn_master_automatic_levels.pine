@@ -1,0 +1,266 @@
+//@version=5
+indicator("MN Indicators", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ==========================================
+// INPUT SETTINGS
+// ==========================================
+group_mode = "Mode Settings"
+mode_input = input.string("Auto Detect", "Chart Mode", options=["Auto Detect", "Main Index", "Option Market"], group=group_mode, tooltip="Auto Detect switches to Index if Price > 2000, else Option Market.")
+
+group_idx = "Main Index Settings"
+show_idx_levels = input.bool(true, "Show Index Levels", group=group_idx)
+num_thousand_blocks = input.int(3, "Thousand Blocks Range (Above & Below)", minval=1, maxval=10, group=group_idx, tooltip="Renders levels for X blocks above and below current price.")
+
+group_opt = "Option Market Settings (3 Fixed Sets)"
+show_opt_levels   = input.bool(true, "Show Option Levels", group=group_opt)
+show_set_0_100    = input.bool(true, "Set 1: 0 to 100 Block", group=group_opt)
+show_set_100_200  = input.bool(true, "Set 2: 100 to 200 Block", group=group_opt)
+show_set_150_250  = input.bool(true, "Set 3: 150 to 250 Block", group=group_opt)
+
+group_indicators = "Indicators Customization (VWAP & EMA)"
+show_vwap   = input.bool(true, "Show VWAP (Step Line)", group=group_indicators)
+c_vwap      = input.color(color.rgb(156, 39, 176), "VWAP Color", group=group_indicators)
+w_vwap      = input.int(2, "VWAP Line Width", minval=1, maxval=4, group=group_indicators)
+
+show_ema21  = input.bool(true, "Show 21 EMA", group=group_indicators)
+c_ema21     = input.color(color.rgb(255, 179, 0), "21 EMA Color", group=group_indicators)
+w_ema21     = input.int(2, "21 EMA Line Width", minval=1, maxval=4, group=group_indicators)
+
+group_signals = "MN Reversal Signals & Custom Fills"
+show_buy_text   = input.bool(true, "Show 'BUY' Text Label", group=group_signals)
+buy_label_size  = input.string("tiny", "BUY Label Size", options=["tiny", "small", "normal", "large"], group=group_signals)
+c_buy_text      = input.color(color.white, "BUY Text Color", group=group_signals)
+c_buy_bg        = input.color(color.green, "BUY Label Background Color", group=group_signals)
+
+show_target_bg  = input.bool(true, "Show Target Green Background", group=group_signals)
+show_sl_bg      = input.bool(true, "Show Stop Loss Red Background", group=group_signals)
+color_target_bg = input.color(color.new(color.green, 85), "Target Fill Color & Opacity", group=group_signals)
+color_sl_bg     = input.color(color.new(color.red, 85), "SL Fill Color & Opacity", group=group_signals)
+
+buffer_pts   = input.float(0.5, "Buffer Points for Reversal Touch", minval=0.1, maxval=5.0, group=group_signals)
+sl_pts       = input.float(12.0, "Stop Loss Points", minval=5.0, maxval=30.0, group=group_signals)
+
+group_style = "Style & Display Settings"
+line_width_main = input.int(2, "Main Baseline Line Width", minval=1, maxval=4, group=group_style)
+line_width_fib  = input.int(1, "Fibonacci Level Width", minval=1, maxval=4, group=group_style)
+label_offset    = input.int(15, "Right Label Offset (Bars)", minval=2, maxval=50, group=group_style)
+
+// Color Definitions matching Screenshot
+c_red    = color.rgb(239, 83, 80)     // Red (#ef5350)
+c_green  = color.rgb(38, 166, 154)    // Green (#26a69a)
+c_orange = color.rgb(255, 152, 0)     // Orange (#ff9800)
+c_cyan   = color.rgb(0, 188, 212)     // Cyan (#00bcd4)
+c_blue   = color.rgb(41, 98, 255)     // Royal Blue (#2962ff)
+c_purple = color.rgb(156, 39, 176)    // Purple (#9c27b0)
+c_gray   = color.rgb(128, 128, 128)   // Gray (#808080)
+
+// ==========================================
+// VWAP & 21 EMA INDICATORS
+// ==========================================
+vwap_val  = ta.vwap(close)
+ema21_val = ta.ema(close, 21)
+
+// VWAP Step Line & 21 EMA Plots (Custom Colors & Widths)
+plot(show_vwap ? vwap_val : na, title="VWAP (Step Line)", color=c_vwap, linewidth=w_vwap, style=plot.style_stepline)
+plot(show_ema21 ? ema21_val : na, title="21 EMA", color=c_ema21, linewidth=w_ema21)
+
+// ==========================================
+// MODE DETERMINATION
+// ==========================================
+is_index = mode_input == "Main Index" or (mode_input == "Auto Detect" and close > 2000)
+
+// Active Option Block calculation for Buy signals (based on current price range)
+float active_b_low = 150.0
+float active_b_high = 250.0
+
+if close < 100.0
+    active_b_low := 0.0
+    active_b_high := 100.0
+else if close >= 100.0 and close < 150.0
+    active_b_low := 100.0
+    active_b_high := 200.0
+else
+    active_b_low := 150.0
+    active_b_high := 250.0
+
+range_val = active_b_high - active_b_low
+opt_236  = active_b_low + (range_val * 0.236)
+opt_382  = active_b_low + (range_val * 0.382)
+opt_618  = active_b_low + (range_val * 0.618)
+opt_786  = active_b_low + (range_val * 0.786)
+
+// Global Crossovers (prevents Pine v5 warnings)
+cross_236 = ta.crossover(close, opt_236)
+cross_382 = ta.crossover(close, opt_382)
+
+// Persistent state variables for single trade setup
+var int active_trade    = 0     // 0 = Flat, 1 = 0.236 Entry Active, 2 = 0.382 Entry Active
+var float entry_price   = na
+var float target_price  = na
+var float sl_price      = na
+bool signal_bar_buy     = false
+
+if not is_index and active_trade == 0
+    // Entry 1: 0.236 Reversal -> Target 0.786
+    if cross_236 and (low[1] <= opt_236 + buffer_pts)
+        active_trade   := 1
+        entry_price    := opt_236
+        target_price   := opt_786  // Target 0.786
+        sl_price       := opt_236 - sl_pts
+        signal_bar_buy := true
+    // Entry 2: 0.382 Reversal -> Target 0.618
+    else if cross_382 and (low[1] <= opt_382 + buffer_pts)
+        active_trade   := 2
+        entry_price    := opt_382
+        target_price   := opt_618  // Target 0.618
+        sl_price       := opt_382 - sl_pts
+        signal_bar_buy := true
+
+// If trade is active, track target / SL hit to close fill immediately
+if active_trade > 0
+    if high >= target_price or low <= sl_price
+        active_trade := 0
+        entry_price  := na
+        target_price := na
+        sl_price     := na
+
+// Clean "BUY" Label Badge with Constant Size Types
+plotshape(show_buy_text and signal_bar_buy and buy_label_size == "tiny", title="BUY Signal (Tiny)", style=shape.labelup, location=location.belowbar, text="BUY", textcolor=c_buy_text, color=c_buy_bg, size=size.tiny)
+plotshape(show_buy_text and signal_bar_buy and buy_label_size == "small", title="BUY Signal (Small)", style=shape.labelup, location=location.belowbar, text="BUY", textcolor=c_buy_text, color=c_buy_bg, size=size.small)
+plotshape(show_buy_text and signal_bar_buy and buy_label_size == "normal", title="BUY Signal (Normal)", style=shape.labelup, location=location.belowbar, text="BUY", textcolor=c_buy_text, color=c_buy_bg, size=size.normal)
+plotshape(show_buy_text and signal_bar_buy and buy_label_size == "large", title="BUY Signal (Large)", style=shape.labelup, location=location.belowbar, text="BUY", textcolor=c_buy_text, color=c_buy_bg, size=size.large)
+
+// Plot Target Zone and SL Zone Lines for Fills
+p_entry  = plot(active_trade > 0 ? entry_price : na, title="Entry Level", color=color.new(c_green, 30), linewidth=1, style=plot.style_linebr)
+p_target = plot(active_trade > 0 ? target_price : na, title="Target Level", color=color.new(c_cyan, 30), linewidth=1, style=plot.style_linebr)
+p_sl     = plot(active_trade > 0 ? sl_price : na, title="SL Level", color=color.new(c_red, 30), linewidth=1, style=plot.style_linebr)
+
+// Dynamic Separate Background Fills (Customizable Color & Transparency)
+fill(p_entry, p_target, color=show_target_bg and active_trade > 0 ? color_target_bg : na, title="Target Green Background Fill")
+fill(p_entry, p_sl, color=show_sl_bg and active_trade > 0 ? color_sl_bg : na, title="SL Red Background Fill")
+
+// Arrays to store dynamic level lines and labels
+var line[]  lines_arr  = array.new_line(0)
+var label[] labels_arr = array.new_label(0)
+var float[] drawn_p    = array.new_float(0)
+
+// Helper Function to Check if Price is Already Drawn (Prevents Label Overlap)
+is_price_drawn(float p, float[] drawn_arr) =>
+    bool found = false
+    if array.size(drawn_arr) > 0
+        for i = 0 to array.size(drawn_arr) - 1
+            if math.abs(array.get(drawn_arr, i) - p) < 0.05
+                found := true
+                break
+    found
+
+// Helper Function to Draw Level
+add_level_item(float val, string txt, color col, string style_str, line[] l_arr, label[] lbl_arr, float[] drawn_arr, int lw) =>
+    if not is_price_drawn(val, drawn_arr)
+        array.push(drawn_arr, val)
+        l_style = style_str == "dashed" ? line.style_dashed : line.style_solid
+        ln = line.new(bar_index - 50, val, bar_index + label_offset, val, xloc=xloc.bar_index, extend=extend.right, color=col, style=l_style, width=lw)
+        lb = label.new(bar_index + label_offset, val, txt, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(col, 100), textcolor=col, size=size.normal)
+        array.push(l_arr, ln)
+        array.push(lbl_arr, lb)
+
+// Helper Function to Draw a Full Fibonacci Block Set
+draw_opt_block(float b_low, float b_high, line[] l_arr, label[] lbl_arr, float[] drawn_arr, int lw) =>
+    float range_v = b_high - b_low
+    float d_opt_0    = b_low
+    float d_opt_236  = b_low + (range_v * 0.236)
+    float d_opt_382  = b_low + (range_v * 0.382)
+    float d_opt_500  = b_low + (range_v * 0.500)
+    float d_opt_618  = b_low + (range_v * 0.618)
+    float d_opt_786  = b_low + (range_v * 0.786)
+    float d_opt_100  = b_high
+    
+    add_level_item(d_opt_0, "0 (" + str.tostring(d_opt_0, "#.00") + ")", c_gray, "dashed", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_236, "0.236 (" + str.tostring(d_opt_236, "#.00") + ")", c_red, "solid", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_382, "0.382 (" + str.tostring(d_opt_382, "#.00") + ")", c_orange, "solid", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_500, "0.5 (" + str.tostring(d_opt_500, "#.00") + ")", c_green, "solid", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_618, "0.618 (" + str.tostring(d_opt_618, "#.00") + ")", c_green, "solid", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_786, "0.786 (" + str.tostring(d_opt_786, "#.00") + ")", c_cyan, "solid", l_arr, lbl_arr, drawn_arr, lw)
+    add_level_item(d_opt_100, "1 (" + str.tostring(d_opt_100, "#.00") + ")", c_gray, "dashed", l_arr, lbl_arr, drawn_arr, lw)
+
+// ==========================================
+// DYNAMIC LEVELS DRAWING (INDEX & OPTION)
+// ==========================================
+if barstate.islast
+    // Clear previous drawings safely
+    if array.size(lines_arr) > 0
+        for i = 0 to array.size(lines_arr) - 1
+            line.delete(array.get(lines_arr, i))
+        array.clear(lines_arr)
+        
+    if array.size(labels_arr) > 0
+        for i = 0 to array.size(labels_arr) - 1
+            label.delete(array.get(labels_arr, i))
+        array.clear(labels_arr)
+
+    array.clear(drawn_p)
+
+    // 1. MAIN INDEX MODE (1000 Point Blocks with Fibonacci Levels)
+    if is_index and show_idx_levels
+        float current_price = close
+        int current_thousand = int(math.floor(current_price / 1000.0) * 1000)
+        
+        for block_idx = -num_thousand_blocks to num_thousand_blocks
+            int base = current_thousand + (block_idx * 1000)
+            
+            float l000 = base + 0.0
+            float l236 = base + 236.0
+            float l382 = base + 382.0
+            float l500 = base + 500.0
+            float l618 = base + 618.0
+            float l786 = base + 786.0
+            
+            // Level 000 (Red Line)
+            ln0 = line.new(bar_index - 50, l000, bar_index + label_offset, l000, xloc=xloc.bar_index, extend=extend.right, color=c_red, style=line.style_solid, width=line_width_main)
+            lb0 = label.new(bar_index + label_offset, l000, str.tostring(l000, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_red, 100), textcolor=c_red, size=size.normal)
+            array.push(lines_arr, ln0)
+            array.push(labels_arr, lb0)
+            
+            // Level 236 (Green Line)
+            ln236 = line.new(bar_index - 50, l236, bar_index + label_offset, l236, xloc=xloc.bar_index, extend=extend.right, color=c_green, style=line.style_solid, width=line_width_fib)
+            lb236 = label.new(bar_index + label_offset, l236, str.tostring(l236, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_green, 100), textcolor=c_green, size=size.normal)
+            array.push(lines_arr, ln236)
+            array.push(labels_arr, lb236)
+
+            // Level 382 (Green Line)
+            ln382 = line.new(bar_index - 50, l382, bar_index + label_offset, l382, xloc=xloc.bar_index, extend=extend.right, color=c_green, style=line.style_solid, width=line_width_fib)
+            lb382 = label.new(bar_index + label_offset, l382, str.tostring(l382, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_green, 100), textcolor=c_green, size=size.normal)
+            array.push(lines_arr, ln382)
+            array.push(labels_arr, lb382)
+
+            // Level 500 (Red Line)
+            ln500 = line.new(bar_index - 50, l500, bar_index + label_offset, l500, xloc=xloc.bar_index, extend=extend.right, color=c_red, style=line.style_solid, width=line_width_main)
+            lb500 = label.new(bar_index + label_offset, l500, str.tostring(l500, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_red, 100), textcolor=c_red, size=size.normal)
+            array.push(lines_arr, ln500)
+            array.push(labels_arr, lb500)
+
+            // Level 618 (Green Line)
+            ln618 = line.new(bar_index - 50, l618, bar_index + label_offset, l618, xloc=xloc.bar_index, extend=extend.right, color=c_green, style=line.style_solid, width=line_width_fib)
+            lb618 = label.new(bar_index + label_offset, l618, str.tostring(l618, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_green, 100), textcolor=c_green, size=size.normal)
+            array.push(lines_arr, ln618)
+            array.push(labels_arr, lb618)
+
+            // Level 786 (Green Line)
+            ln786 = line.new(bar_index - 50, l786, bar_index + label_offset, l786, xloc=xloc.bar_index, extend=extend.right, color=c_green, style=line.style_solid, width=line_width_fib)
+            lb786 = label.new(bar_index + label_offset, l786, str.tostring(l786, "#,###.00"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(c_green, 100), textcolor=c_green, size=size.normal)
+            array.push(lines_arr, ln786)
+            array.push(labels_arr, lb786)
+
+    // 2. OPTION MARKET MODE (EXACT 3 FIXED SETS WITH ANTI-OVERLAP FILTER)
+    else if not is_index and show_opt_levels
+        // Set 3: 150 to 250 Block (Priority 1 for High Premium)
+        if show_set_150_250
+            draw_opt_block(150.0, 250.0, lines_arr, labels_arr, drawn_p, line_width_fib)
+            
+        // Set 2: 100 to 200 Block
+        if show_set_100_200
+            draw_opt_block(100.0, 200.0, lines_arr, labels_arr, drawn_p, line_width_fib)
+            
+        // Set 1: 0 to 100 Block
+        if show_set_0_100
+            draw_opt_block(0.0, 100.0, lines_arr, labels_arr, drawn_p, line_width_fib)

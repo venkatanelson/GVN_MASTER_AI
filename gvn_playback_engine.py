@@ -70,12 +70,15 @@ def black_scholes(S, K, T, r, sigma, option_type="CE"):
 def _record_trade_db(app, db, AlgoTrade, User, trade):
     with app.app_context():
         try:
+            from datetime import datetime, timezone, timedelta
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
             u = User.query.first()
             if u:
                 new_trade = AlgoTrade(
                     user_id=u.id, symbol=trade["symbol"], entry_price=trade["entry_price"],
                     quantity=trade["qty"], trade_type='BUY', status='Open',
-                    delta=trade["delta"], sentiment=f"Breakout detected at playback"
+                    delta=trade["delta"], sentiment=f"Breakout detected at playback",
+                    timestamp=datetime.now(ist_tz)
                 )
                 db.session.add(new_trade)
                 db.session.commit()

@@ -28,7 +28,9 @@ class VirtualPortfolio:
         self.daily_pnl = 0.0
     
     def open_trade(self, symbol, strike, option_type, entry_price, target, sl, quantity):
-        """Open virtual trade"""
+        """Open virtual trade with IST timestamp"""
+        from datetime import timezone, timedelta
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
         trade = {
             "id": len(self.active_trades) + 1,
             "symbol": symbol,
@@ -40,7 +42,7 @@ class VirtualPortfolio:
             "quantity": quantity,
             "notional_value": entry_price * quantity,
             "status": "OPEN",
-            "entry_time": datetime.now().isoformat(),
+            "entry_time": datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S IST"),
             "exit_time": None,
             "exit_price": None,
             "pnl": 0.0,
@@ -52,11 +54,14 @@ class VirtualPortfolio:
         return trade
     
     def close_trade(self, trade_id, exit_price, exit_reason="MANUAL"):
-        """Close virtual trade and calculate P&L"""
+        """Close virtual trade and calculate P&L with IST timestamp"""
         trade = next((t for t in self.active_trades if t["id"] == trade_id), None)
         if not trade:
             logger.warning(f"⚠️ Trade {trade_id} not found")
             return None
+        
+        from datetime import timezone, timedelta
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
         
         # Calculate P&L
         pnl = (exit_price - trade["entry_price"]) * trade["quantity"]
@@ -64,7 +69,7 @@ class VirtualPortfolio:
         
         # Update trade
         trade["exit_price"] = exit_price
-        trade["exit_time"] = datetime.now().isoformat()
+        trade["exit_time"] = datetime.now(ist_tz).strftime("%Y-%m-%d %H:%M:%S IST")
         trade["pnl"] = round(pnl, 2)
         trade["pnl_percent"] = round(pnl_percent, 2)
         trade["status"] = "CLOSED"

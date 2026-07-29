@@ -101,6 +101,9 @@ This formula uses Delta-60 option contracts and index Fibonacci levels to identi
         *   **Strong Side (Bullish PE / Bearish Market):** PE candle starts near the bottom levels (between 0.7 and 0.6 GVN levels) and prints a strong, full-bodied **green candle** crossing above the **0.6 GVN level** from below, backed by high volume (e.g. 2x margin volume). The exact retracement (50% or 80%) doesn't matter; the break and close above the 0.6/0.5 levels confirm the trend.
         *   **Weak Side (Bearish CE):** CE candle starts near upper levels (between 0.3 and 0.2 GVN levels) and prints a **red candle** cutting down horizontally through the **0.5 GVN level** and closing below it, without ever touching its 0.6 level.
     *   **Asymmetric Level Retest Rule:** If one side (e.g., PE) touches or crosses its 0.6 or 0.7 level from below, but the opposite side (CE) does not touch its corresponding GVN level, the market pressure is locked on the side that successfully tested/broke its levels.
+    *   **Option Chain OI % Asymmetry Surge Rule (Institutional Lock Filter):**
+        *   **Bullish Surge:** When Put Option strikes (e.g. 24150, 24250, 24350) display a massive **+2,000% to +7,000%+** positive OI Change % surge (heavy Put Writing) accompanied by Put price decay (-50% to -60%), while Call side shows negative OI % (unwinding) or significantly lower OI % build-up, the Wind Sentinel locks **+100% BULLISH WIND DIRECTION**. This confirms institutional support floor and predicts Spot index expansion towards higher targets (e.g. 24300 - 24350+).
+        *   **Bearish Surge:** When Call Option strikes display a **+2,000% to +7,000%+** positive OI Change % surge with Call price decay while Put side unwinds, the Wind Sentinel locks **-100% BEARISH WIND DIRECTION**.
 *   **Anti-Trap Rule (Trend Filter):**
     *   No trades are allowed on the opposite side as long as the dominant side stays above its 0.5 level.
     *   Opposite option trade is blocked if it remains below its 0.6 and 0.5 levels.
@@ -112,6 +115,38 @@ This formula uses Delta-60 option contracts and index Fibonacci levels to identi
 *   **Stop Loss:** Strict 12.0 point stop loss.
 
 ---
-*Status: Strategy locked in memory. Formula 1 (Zero-to-Hero), Formula 2 (Level Acceleration with Gamma Physics), Formula 3 (9:15 Option Level Confirmation), and Formula 4 (Wind Direction Sentinel) fully saved.*
+
+### 📉 Formula 5: GVN RSI-50 Gravity Retracement Sync (Level Continuation Lock)
+This formula maps the index and active option strike to identify continuation and re-entry trade setups when the pullback is clean and backed by RSI midline support.
+*   **Trend Confirmation:** Nifty Spot is trading in a clean channel (e.g. above its 50% midpoint).
+*   **Option Setup:** Option premium has broken out above a key GVN level (e.g., Target 1 / Level i6 or Level i7) and takes support (holds above it) during a pullback.
+*   **Continuation Trigger:** Trigger a continuation trade when the **Option RSI 14 pulls back to exactly the 50 midline (RSI 50 Retracement) and bounces**, validating that the breakout momentum is intact.
+*   **Target:** Next higher GVN level.
+*   **Stop Loss:** Strict 12.0 point stop loss.
+
+---
+
+### 📊 Formula 6: GVN QQE MOD + RSI-15 Volume Divergence (Trend Breakout / Reversal)
+This formula uses a combination of QQE MOD, smoothed RSI, and 2x volume pressure to confirm true breakouts and detect early reversals from fake breakouts.
+*   **Indicator Configurations (QQE MOD):**
+    *   *Primary QQE:* RSI Length 6, Smoothing 5, Factor 3.0, Threshold 3.0.
+    *   *Secondary QQE:* RSI Length 6, Smoothing 5, Factor 1.61, Threshold 3.0.
+    *   *Bollinger Bands of Primary QQE:* Length 50, Multiplier 0.35.
+*   **RSI 15 Confirmation & Volume Spike:**
+    *   Breakout requires the Option RSI 14 (computed over 15 closed candle points, referred to as RSI-15) to cross above the 50 midline and hold, accompanied by a volume spike of **>= 2x average volume**.
+*   **QQE MOD Signal Validation:**
+    *   *Bullish (QQE Up):* Secondary RSI Histogram - 50 > 3.0 and Primary QQE Trend Line - 50 > Bollinger Upper Band.
+    *   *Bearish (QQE Down):* Secondary RSI Histogram - 50 < -3.0 and Primary QQE Trend Line - 50 < Bollinger Lower Band.
+*   **RSI 50 Divert (Fake Breakout / Reversal Confirmation):**
+    *   If an option strike (e.g., PE) attempts to break above 50 on RSI but gets rejected/diverted downwards (turns back below 50, e.g. from 48-52 range back to under 47) even though volume is green and above the line:
+        *   This is a **best confirmation** of PE side weakness and momentum failure.
+        *   It confirms a high-probability CALL-side (CE) breakout, especially when spot support is verified (e.g., at round-number strikes like 24000, 24100, 24150).
+        *   The algorithm blocks PE trades and prioritizes or triggers a CE entry.
+*   **Targets:** Next key GVN level (e.g., Level i3 or Level i2).
+*   **Stop Loss:** Strict 12.0 point stop loss.
+
+---
+*Status: Strategy locked in memory. Formula 1 (Zero-to-Hero), Formula 2 (Level Acceleration with Gamma Physics), Formula 3 (9:15 Option Level Confirmation), Formula 4 (Wind Direction Sentinel), Formula 5 (RSI-50 Gravity Retracement Sync), and Formula 6 (QQE MOD + RSI-15 Volume Divergence) fully saved.*
+
 
 

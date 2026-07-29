@@ -1,0 +1,218 @@
+// GVN Master Algo: Reference Pine Scripts
+// Included indicators:
+// 1. QQE MOD (Version 6)
+// 2. Relative Strength Index (RSI) with Divergence (Version 6)
+
+// ==========================================
+// 1. QQE MOD INDICATOR
+// ==========================================
+/*
+//@version=6
+indicator("QQE MOD", overlay=false, max_lines_count=1)
+
+// === PRIMARY QQE SETTINGS ===
+group_primary = "Primary QQE Settings"
+rsiLengthPrimary = input.int(6, title="RSI Length", group=group_primary)
+rsiSmoothingPrimary = input.int(5, title="RSI Smoothing", group=group_primary)
+qqeFactorPrimary = input.float(3.0, title="QQE Factor", group=group_primary)
+thresholdPrimary = input.float(3.0, title="Threshold", group=group_primary)
+sourcePrimary = input.source(close, title="RSI Source", group=group_primary)
+
+// === SECONDARY QQE SETTINGS ===
+group_secondary = "Secondary QQE Settings"
+rsiLengthSecondary = input.int(6, title="RSI Length", group=group_secondary)
+rsiSmoothingSecondary = input.int(5, title="RSI Smoothing", group=group_secondary)
+qqeFactorSecondary = input.float(1.61, title="QQE Factor", group=group_secondary)
+thresholdSecondary = input.float(3.0, title="Threshold", group=group_secondary)
+sourceSecondary = input.source(close, title="RSI Source", group=group_secondary)
+
+// === BOLLINGER BANDS SETTINGS ===
+group_bollinger = "Bollinger Bands Settings"
+bollingerLength = input.int(50, minval=1, title="Length", group=group_bollinger, tooltip="The length of the Bollinger Bands calculation.")
+bollingerMultiplier = input.float(0.35, step=0.1, minval=0.001, maxval=5, title="Multiplier", group=group_bollinger, tooltip="The multiplier used to calculate Bollinger Band width.")
+
+// === FUNCTIONS ===
+calculateQQE(rsiLength, smoothingFactor, qqeFactor, source) =>
+    wildersLength = rsiLength * 2 - 1
+    rsi = ta.rsi(source, rsiLength)
+    smoothedRsi = ta.ema(rsi, smoothingFactor)
+    atrRsi = math.abs(smoothedRsi[1] - smoothedRsi)
+    smoothedAtrRsi = ta.ema(atrRsi, wildersLength)
+    dynamicAtrRsi = smoothedAtrRsi * qqeFactor
+
+    longBand = 0.0
+    shortBand = 0.0
+    trendDirection = 0
+
+    atrDelta = dynamicAtrRsi
+    newShortBand = smoothedRsi + atrDelta
+    newLongBand = smoothedRsi - atrDelta
+    longBand := smoothedRsi[1] > longBand[1] and smoothedRsi > longBand[1] ? math.max(longBand[1], newLongBand) : newLongBand
+    shortBand := smoothedRsi[1] < shortBand[1] and smoothedRsi < shortBand[1] ? math.min(shortBand[1], newShortBand) : newShortBand
+    longBandCross = ta.cross(longBand[1], smoothedRsi)
+    
+    if ta.cross(smoothedRsi, shortBand[1])
+        trendDirection := 1
+    else if longBandCross
+        trendDirection := -1
+    else
+        trendDirection := trendDirection[1]
+
+    qqeTrendLine = trendDirection == 1 ? longBand : shortBand
+    [qqeTrendLine, smoothedRsi]
+
+[primaryQQETrendLine, primaryRSI] = calculateQQE(rsiLengthPrimary, rsiSmoothingPrimary, qqeFactorPrimary, sourcePrimary)
+[secondaryQQETrendLine, secondaryRSI] = calculateQQE(rsiLengthSecondary, rsiSmoothingSecondary, qqeFactorSecondary, sourceSecondary)
+
+bollingerBasis = ta.sma(primaryQQETrendLine - 50, bollingerLength)
+bollingerDeviation = bollingerMultiplier * ta.stdev(primaryQQETrendLine - 50, bollingerLength)
+bollingerUpper = bollingerBasis + bollingerDeviation
+bollingerLower = bollingerBasis - bollingerDeviation
+
+rsiColorPrimary = primaryRSI - 50 > bollingerUpper ? color.new(#00c3ff, 0) : primaryRSI - 50 < bollingerLower ? color.new(#ff0062, 0) : color.new(#707070, 20)
+rsiColorSecondary = secondaryRSI - 50 > thresholdSecondary ? color.new(#707070, 20) : secondaryRSI - 50 < -thresholdSecondary ? color.new(#707070, 20) : na
+
+plot(secondaryQQETrendLine - 50, title="Secondary QQE Trend Line", color=color.white, linewidth=2)
+plot(secondaryRSI - 50, color=rsiColorSecondary, title="Secondary RSI Histogram", style=plot.style_columns)
+
+plot(secondaryRSI - 50 > thresholdSecondary and primaryRSI - 50 > bollingerUpper ? secondaryRSI - 50 : na, title="QQE Up Signal", style=plot.style_columns, color=#00c3ff)
+plot(secondaryRSI - 50 < -thresholdSecondary and primaryRSI - 50 < bollingerLower ? secondaryRSI - 50 : na, title="QQE Down Signal", style=plot.style_columns, color=#ff0062)
+
+hline(0, title="Zero Line", color=color.white, linestyle=hline.style_dotted)
+
+alertcondition(ta.crossover(primaryRSI, 50), title="Primary RSI Cross Above Zero", message="Primary RSI crossed above zero")
+alertcondition(ta.crossunder(primaryRSI, 50), title="Primary RSI Cross Below Zero", message="Primary RSI crossed below zero")
+*/
+
+// ==========================================
+// 2. RELATIVE STRENGTH INDEX (RSI) WITH DIVERGENCE
+// ==========================================
+/*
+//@version=6
+indicator(title="Relative Strength Index", shorttitle="RSI", format=format.price, precision=2, timeframe="", timeframe_gaps=true)
+
+rsiLengthInput = input.int(14, minval=1, title="RSI Length", group="RSI Settings")
+rsiSourceInput = input.source(close, "Source", group="RSI Settings")
+calculateDivergence = input.bool(false, title="Calculate Divergence", group="RSI Settings", display = display.none, tooltip = "Calculating divergences is needed in order for divergence alerts to fire.")
+
+change = ta.change(rsiSourceInput)
+up = ta.rma(math.max(change, 0), rsiLengthInput)
+down = ta.rma(-math.min(change, 0), rsiLengthInput)
+rsi = down == 0 ? 100 : up == 0 ? 0 : 100 - (100 / (1 + up / down))
+
+rsiPlot = plot(rsi, "RSI", color=#7E57C2)
+rsiUpperBand = hline(70, "RSI Upper Band", color=#787B86)
+midline = hline(50, "RSI Middle Band", color=color.new(#787B86, 50))
+rsiLowerBand = hline(30, "RSI Lower Band", color=#787B86)
+fill(rsiUpperBand, rsiLowerBand, color=color.rgb(126, 87, 194, 90), title="RSI Background Fill")
+midLinePlot = plot(50, color = na, editable = false, display = display.none)
+fill(rsiPlot, midLinePlot, 100, 70, top_color = color.new(color.green, 0), bottom_color = color.new(color.green, 100),  title = "Overbought Gradient Fill")
+fill(rsiPlot, midLinePlot, 30,  0,  top_color = color.new(color.red, 100), bottom_color = color.new(color.red, 0),      title = "Oversold Gradient Fill")
+
+// Smoothing MA inputs
+GRP = "Smoothing"
+TT_BB = "Only applies when 'SMA + Bollinger Bands' is selected. Determines the distance between the SMA and the bands."
+maTypeInput = input.string("SMA", "Type", options = ["None", "SMA", "SMA + Bollinger Bands", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group = GRP, display = display.none)
+var isBB = maTypeInput == "SMA + Bollinger Bands"
+maLengthInput = input.int(14, "Length", group = GRP, display = display.none, active = maTypeInput != "None")
+bbMultInput = input.float(2.0, "BB StdDev", minval = 0.001, maxval = 50, step = 0.5, tooltip = TT_BB, group = GRP, display = display.none, active = isBB)
+var enableMA = maTypeInput != "None"
+
+// Smoothing MA Calculation
+ma(source, length, MAtype) =>
+	switch MAtype
+		"SMA"                   => ta.sma(source, length)
+		"SMA + Bollinger Bands" => ta.sma(source, length)
+		"EMA"                   => ta.ema(source, length)
+		"SMMA (RMA)"            => ta.rma(source, length)
+		"WMA"                   => ta.wma(source, length)
+		"VWMA"                  => ta.vwma(source, length)
+
+// Smoothing MA plots
+smoothingMA = enableMA ? ma(rsi, maLengthInput, maTypeInput) : na
+smoothingStDev = isBB ? ta.stdev(rsi, maLengthInput) * bbMultInput : na
+plot(smoothingMA, "RSI-based MA", color=color.yellow, display = enableMA ? display.all : display.none, editable = enableMA)
+bbUpperBand = plot(smoothingMA + smoothingStDev, title = "Upper Bollinger Band", color=color.green, display = isBB ? display.all : display.none, editable = isBB)
+bbLowerBand = plot(smoothingMA - smoothingStDev, title = "Lower Bollinger Band", color=color.green, display = isBB ? display.all : display.none, editable = isBB)
+fill(bbUpperBand, bbLowerBand, color= isBB ? color.new(color.green, 90) : na, title="Bollinger Bands Background Fill", display = isBB ? display.all : display.none, editable = isBB)
+
+// Divergence
+lookbackRight = 5
+lookbackLeft = 5
+rangeUpper = 60
+rangeLower = 5
+bearColor = color.red
+bullColor = color.green
+textColor = color.white
+noneColor = color.new(color.white, 100)
+
+_inRange(bool cond) =>
+    bars = ta.barssince(cond)
+    rangeLower <= bars and bars <= rangeUpper
+
+plFound = false
+phFound = false
+
+bullCond = false
+bearCond = false
+
+rsiLBR = rsi[lookbackRight]
+
+if calculateDivergence
+    plFound := not na(ta.pivotlow(rsi, lookbackLeft, lookbackRight))    
+    rsiHL = rsiLBR > ta.valuewhen(plFound, rsiLBR, 1) and _inRange(plFound[1])
+    lowLBR = low[lookbackRight]
+    priceLL = lowLBR < ta.valuewhen(plFound, lowLBR, 1)
+    bullCond := priceLL and rsiHL and plFound
+
+    phFound := not na(ta.pivothigh(rsi, lookbackLeft, lookbackRight))
+    rsiLH = rsiLBR < ta.valuewhen(phFound, rsiLBR, 1) and _inRange(phFound[1])
+    highLBR = high[lookbackRight]
+    priceHH = highLBR > ta.valuewhen(phFound, highLBR, 1)
+    bearCond := priceHH and rsiLH and phFound
+
+plot(
+     plFound   ? rsiLBR : na,
+     offset    = -lookbackRight,
+     title     = "Regular Bullish",
+     linewidth = 2,
+     color     = (bullCond ? bullColor : noneColor),
+     display   = display.pane,
+     editable  = calculateDivergence)
+
+plotshape(
+     bullCond  ? rsiLBR : na,
+     offset    = -lookbackRight,
+     title     = "Regular Bullish Label",
+     text      = " Bull ",
+     style     = shape.labelup,
+     location  = location.absolute,
+     color     = bullColor,
+     textcolor = textColor,
+     display   = display.pane,
+     editable  = calculateDivergence)
+
+plot(
+     phFound   ? rsiLBR : na,
+     offset    = -lookbackRight,
+     title     = "Regular Bearish",
+     linewidth = 2,
+     color     = (bearCond ? bearColor : noneColor),
+     display   = display.pane,
+     editable  = calculateDivergence)
+
+plotshape(
+     bearCond  ? rsiLBR : na,
+     offset    = -lookbackRight,
+     title     = "Regular Bearish Label",
+     text      = " Bear ",
+     style     = shape.labeldown,
+     location  = location.absolute,
+     color     = bearColor,
+     textcolor = textColor,
+     display   = display.pane,
+     editable  = calculateDivergence)
+
+alertcondition(bullCond, title='Regular Bullish Divergence', message="Found a new Regular Bullish Divergence, `Pivot Lookback Right` number of bars to the left of the current bar.")
+alertcondition(bearCond, title='Regular Bearish Divergence', message='Found a new Regular Bearish Divergence, `Pivot Lookback Right` number of bars to the left of the current bar.')
+*/

@@ -1,0 +1,1066 @@
+//@version=5
+indicator("GVN Master Mobile Friendly", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ==========================================
+// 🌟 MARKET MODE SELECTOR (ONE-CLICK SETUP)
+// ==========================================
+marketMode = input.string("Main Market", "Select Market Mode", options=["Main Market", "Option Market", "Custom Setting"], group="Market Selection Settings")
+
+// =====================
+// TOGGLING TABLES (Raw Inputs & Mobile View)
+// =====================
+in_mobileMode = input.bool(false, "Enable Mobile View Mode", tooltip="Forces compact font, consolidates all entry tables into one, and shortens level labels on mobile screens", group="Table Settings")
+mobilePosInput = input.string("Bottom Left", "Mobile Table Position", options=["Top Left", "Middle Left", "Bottom Left", "Top Center", "Middle Center", "Bottom Center", "Top Right", "Middle Right", "Bottom Right"], group="Table Settings")
+in_showTable1 = input.bool(true, "Show 1st Entry Table", group="Table Settings")
+in_showTable2 = input.bool(true, "Show 2nd Entry Table", group="Table Settings")
+in_showTable3 = input.bool(true, "Show 3rd (Z to H) Entry Table", group="Table Settings")
+
+// =====================
+// LABELS SETTINGS (SL & GVN - Raw Inputs)
+// =====================
+in_showSLLabels = input.bool(false, "Show SL Labels", group="Labels Settings")
+in_showGVNLabel = input.bool(true, "Show GVN POC Label", group="Labels Settings")
+in_showFibLabels = input.bool(true, "Show Fibonacci Level Labels", group="Labels Settings")
+in_showBuySellConf = input.bool(false, "Show Basic Buy/Sell Signals", group="Labels Settings")
+in_showAlgoSignals = input.bool(false, "Show Algo Perfect Signals", group="Labels Settings")
+in_showMomentumFlashes = input.bool(false, "Show Momentum Flashes", group="Labels Settings")
+in_showGVNS = input.bool(false, "Show GVNS Level", group="Labels Settings")
+
+// Option Market Custom Labels Settings
+lbl_opt_gvn100 = input.string("Auto", "Option Mode Gvn=i1 (Top) Label", tooltip="Set to 'Auto' to dynamically use '0.0' for Call options and '0.1' for Put options.", group="Labels Settings")
+lbl_opt_i2     = input.string("0.2", "Option Mode Gvn=i2 Label", group="Labels Settings")
+lbl_opt_i3     = input.string("0.3", "Option Mode Gvn=i3 Label", group="Labels Settings")
+lbl_opt_i5     = input.string("0.5", "Option Mode Gvn=i5 Label", group="Labels Settings")
+lbl_opt_i6     = input.string("0.6", "Option Mode Gvn=i6 Label", group="Labels Settings")
+lbl_opt_i7     = input.string("0.7", "Option Mode Gvn=i7 Label", group="Labels Settings")
+lbl_opt_gvn0   = input.string("0.1", "Option Mode Gvn=i0 (Bottom) Label", group="Labels Settings")
+
+// =====================
+// MAIN LINES SETTINGS (Raw Inputs)
+// =====================
+in_showMainLines = input.bool(false, "Main Market Only (1 Click Show All)", group="Main Lines Settings")
+lineStyleInput = input.string("Solid", "Main Market Lines Style", options=["Solid", "Circles", "Cross", "Step Line"], group="Main Lines Settings")
+mLineStyle = lineStyleInput == "Circles" ? plot.style_circles : lineStyleInput == "Cross" ? plot.style_cross : lineStyleInput == "Step Line" ? plot.style_stepline : plot.style_linebr
+
+in_showCP = input.bool(false, "Show CP Level", group="Main Lines Settings")
+in_showBarColor = input.bool(true, "Color Bars (Open=Low / Open=High)", group="Main Lines Settings")
+in_showTradeBoxes = input.bool(true, "Show GVN Trade Entry Boxes", group="Main Lines Settings")
+in_showInstZones = input.bool(true, "Show Institutional S/R Zones", group="Main Lines Settings")
+
+// =====================
+// AUTO VOLUME PROFILE (Raw Inputs)
+// =====================
+vpLookback = input.int(100, "Fixed Range Volume Lookback", minval=10, group="Auto Volume Profile (POC)")
+vpStep = input.float(5.0, "Volume Profile Price Step", minval=0.5, group="Auto Volume Profile (POC)")
+in_showVP = input.bool(true, "Show Automatic POC Line", group="Auto Volume Profile (POC)")
+
+// =====================
+// 80% Previous Day's Levels (Raw Inputs)
+// =====================
+in_show80Lines = input.bool(true, 'Show 80% Previous Day Levels', group='80% Levels')
+
+// ==========================================
+// GVN AI SMART DASHBOARD (Raw Inputs)
+// ==========================================
+in_showAI = input.bool(true, "Show AI Sentiment Dashboard", group="AI Dashboard Settings")
+aiBoxPos = input.string("Bottom Right", "AI Dashboard Position", options=["Top Left", "Middle Left", "Bottom Left", "Top Center", "Middle Center", "Bottom Center", "Top Right", "Middle Right", "Bottom Right"], group="AI Dashboard Settings")
+aiFontInput = input.string("tiny", "AI Dashboard Font Size", options=["tiny", "small", "normal", "large"], group="AI Dashboard Settings")
+in_showOverallWind = input.bool(true, "Show Wind in AI Dashboard", group="AI Dashboard Settings")
+
+// ==========================================
+// 📈 ADVANCED EMA (Raw Inputs & Color Customization)
+// ==========================================
+in_show200EMA = input.bool(true, "Show Advanced 200 EMA", group="200 EMA Settings")
+emaColor = input.color(color.black, "200 EMA Color", group="200 EMA Settings")
+
+// ==========================================
+// 🛡️ DYNAMIC ATR-BASED STOP LOSS SETTINGS
+// ==========================================
+in_useDynamicSL = input.bool(true, "Use Dynamic ATR-based Stop Loss", group="Dynamic SL Settings")
+in_atrLength    = input.int(14, "ATR Length for Stop Loss", minval=1, group="Dynamic SL Settings")
+in_atrMult      = input.float(0.7, "ATR Multiplier for Stop Loss", minval=0.1, step=0.1, group="Dynamic SL Settings")
+
+
+// ==========================================
+// 🎨 LINE COLOR CUSTOMIZATION SETTINGS
+// ==========================================
+// Main Market Lines Colors
+color_N1 = input.color(color.green, "Main Market 1 (N1) Color", group="Main Lines Settings")
+color_N2 = input.color(color.rgb(231, 42, 42), "Main Market 2 (N2) Color", group="Main Lines Settings")
+color_C1 = input.color(color.rgb(243, 121, 64), "Main Market 3 (C1) Color", group="Main Lines Settings")
+
+// GVN & Option Levels Colors
+color_gvn0   = input.color(color.rgb(16,231,124), "Gvn=i0 (Base 0) Color", group="GVN & Option Levels Colors")
+color_gvn100 = input.color(color.aqua, "Gvn=i1 (Base 100) Color", group="GVN & Option Levels Colors")
+color_i2     = input.color(color.red, "Gvn=i2 Color", group="GVN & Option Levels Colors")
+color_i3     = input.color(color.rgb(231,43,168), "Gvn=i3 Color", group="GVN & Option Levels Colors")
+color_i5     = input.color(color.rgb(11,46,201), "Gvn=i5 Color", group="GVN & Option Levels Colors")
+color_i6     = input.color(color.purple, "Gvn=i6 Color", group="GVN & Option Levels Colors")
+color_i7     = input.color(color.black, "Gvn=i7 Color", group="GVN & Option Levels Colors")
+
+// VWAP, Hcl, CP Colors
+color_vwap = input.color(color.rgb(137, 35, 233), "VWAP Color", group="Other Indicators Colors")
+color_hcl  = input.color(color.red, "Hcl Color", group="Other Indicators Colors")
+color_cp   = input.color(color.black, "CP Color", group="Other Indicators Colors")
+
+
+// ==========================================
+// 🔄 RESOLVING CONTROLS BASED ON SELECTOR MODE
+// ==========================================
+showTable1          = in_mobileMode ? false : ((marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showTable1)
+showTable2          = in_mobileMode ? false : ((marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showTable2)
+showTable3          = in_mobileMode ? false : ((marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showTable3)
+
+showSLLabels        = in_showSLLabels
+showGVNLabel        = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showGVNLabel
+showFibLabels       = in_showFibLabels
+showBuySellConf     = in_showBuySellConf
+showAlgoSignals     = in_showAlgoSignals
+showMomentumFlashes = in_showMomentumFlashes
+showGVNS            = in_showGVNS
+
+showMainLines       = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? false : in_showMainLines
+showCP              = (marketMode == "Option Market") ? true : in_showCP
+showBarColor        = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showBarColor
+showTradeBoxes      = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? false : in_showTradeBoxes
+showInstZones       = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showInstZones
+
+showVP              = (marketMode == "Main Market") ? false : (marketMode == "Option Market") ? true  : in_showVP
+show80Lines         = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_show80Lines
+showAI              = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showAI
+showOverallWind     = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_showOverallWind
+show200EMA          = (marketMode == "Main Market") ? true  : (marketMode == "Option Market") ? true  : in_show200EMA
+
+
+// ==========================================
+// 🕒 9:15 Base Range Calculation
+// ==========================================
+var float baseHigh = na
+var float baseLow  = na
+
+if (hour(time) == 9 and minute(time) == 15)
+    baseHigh := high
+    baseLow  := low
+
+baseDiff = baseHigh - baseLow
+baseMid  = baseDiff / 2
+
+N1 = baseHigh + baseMid
+N2 = baseLow  + baseMid
+
+// Center Level
+C1 = (N1 + N2) / 2
+
+// ==========================================
+// GVN Levels & Setup Mode Calculations
+// ==========================================
+bool isIndexMode = showMainLines // Toggle behavior based on Main Market selection
+
+float fibR = baseDiff / 0.118
+float gvn0 = na
+float gvn100 = na
+
+if not isIndexMode
+    gvn0   := N2 * 0.118 / 0.5
+    gvn100 := N1 * 0.786 / 0.5
+else
+    gvn0   := N2 - (0.5 * fibR)
+    gvn100 := gvn0 + fibR
+
+float gvnR = gvn100 - gvn0
+
+float i2 = gvn0 + (isIndexMode ? 0.786 : 0.763) * gvnR
+float i3 = gvn0 + 0.618 * gvnR
+float i5 = gvn0 + 0.5   * gvnR
+float i6 = gvn0 + 0.382 * gvnR
+float i7 = gvn0 + (isIndexMode ? 0.236 : 0.220) * gvnR
+
+// Check if it is the first bar of the day to prevent vertical connecting lines
+isFirstBar = (hour(time) == 9 and minute(time) == 15)
+
+plot_N1 = isFirstBar ? na : N1
+plot_N2 = isFirstBar ? na : N2
+plot_C1 = isFirstBar ? na : C1
+
+plot_gvn0   = isFirstBar ? na : gvn0
+plot_gvn100 = isFirstBar ? na : gvn100
+plot_i2     = isFirstBar ? na : i2
+plot_i3     = isFirstBar ? na : i3
+plot_i5     = isFirstBar ? na : i5
+plot_i6     = isFirstBar ? na : i6
+plot_i7     = isFirstBar ? na : i7
+
+plot(showMainLines ? plot_N1 : na, "Main Market 1", color=color_N1, linewidth=2, style=mLineStyle)
+plot(showMainLines ? plot_N2 : na, "Main Market 2", color=color_N2, linewidth=2, style=mLineStyle)
+plot(showMainLines ? plot_C1 : na, "Main Market 3", color=color_C1, linewidth=1, style=mLineStyle)
+
+plot(plot_gvn0,   title="Gvn=i0",   color=color.new(color_gvn0, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_gvn100, title="Gvn=i1",   color=color.new(color_gvn100, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_i2, "Gvn=i2", color=color.new(color_i2, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i3, "Gvn=i3", color=color.new(color_i3, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i5, "Gvn=i5", color=color.new(color_i5, isIndexMode ? 100 : 0), linewidth=1, style=plot.style_linebr)
+plot(plot_i6, "Gvn=i6", color=color.new(color_i6, isIndexMode ? 100 : 0), style=plot.style_linebr)
+plot(plot_i7, "Gvn=i7", color=color.new(color_i7, isIndexMode ? 100 : 0), style=plot.style_linebr)
+
+// ==========================================
+// SEEDA FIB & EXTENSIONS (Main Market Only)
+// ==========================================
+float seeda_0 = isIndexMode ? N1 + (0.5 * fibR) : na
+float seeda_236 = isIndexMode ? seeda_0 - (0.236 * fibR) : na
+float seeda_382 = isIndexMode ? seeda_0 - (0.382 * fibR) : na
+float seeda_500 = isIndexMode ? seeda_0 - (0.5 * fibR) : na
+float seeda_618 = isIndexMode ? seeda_0 - (0.618 * fibR) : na
+float seeda_786 = isIndexMode ? seeda_0 - (0.786 * fibR) : na
+float seeda_1000 = isIndexMode ? seeda_0 - fibR : na
+float ext_up_1618_ulta = isIndexMode ? (gvn0 + 1.618 * fibR) : na
+float ext_dn_1618_seeda = isIndexMode ? (seeda_0 - 1.618 * fibR) : na 
+
+// GVN & SEEDA Line/Label references (Only keep today's)
+var line ln_gvn0 = na
+var label lb_gvn0 = na
+var line ln_gvn100 = na
+var label lb_gvn100 = na
+var line ln_i2 = na
+var label lb_i2 = na
+var line ln_i3 = na
+var label lb_i3 = na
+var line ln_i5 = na
+var label lb_i5 = na
+var line ln_i6 = na
+var label lb_i6 = na
+var line ln_i7 = na
+var label lb_i7 = na
+
+var line ln_seeda_0 = na
+var label lb_seeda_0 = na
+var line ln_seeda_236 = na
+var label lb_seeda_236 = na
+var line ln_seeda_382 = na
+var label lb_seeda_382 = na
+var line ln_seeda_500 = na
+var label lb_seeda_500 = na
+var line ln_seeda_618 = na
+var label lb_seeda_618 = na
+var line ln_seeda_786 = na
+var label lb_seeda_786 = na
+var line ln_seeda_1000 = na
+var label lb_seeda_1000 = na
+
+var line ln_ext_up = na
+var label lb_ext_up = na
+var line ln_ext_dn = na
+var label lb_ext_dn = na
+
+// Split lines variables for Main Index mode (half-half color)
+var line ln_i3_left = na
+var line ln_i3_right = na
+var line ln_i5_left = na
+var line ln_i5_right = na
+
+// Helper function to update a line
+update_line(ln_ref, start_time, end_time, price, line_color, is_dashed, line_width) =>
+    line.delete(ln_ref)
+    line new_ln = na
+    if not na(price)
+        line_style = is_dashed ? line.style_dashed : line.style_solid
+        new_ln := line.new(start_time, price, end_time, price, xloc=xloc.bar_time, color=line_color, style=line_style, width=line_width)
+    new_ln
+
+// Helper function to update split lines (for left/right halves with different colors/styles)
+update_split_line(ln_ref_left, ln_ref_right, start_time, end_time, price, color_left, is_dashed_left, width_left, color_right, is_dashed_right, width_right) =>
+    line.delete(ln_ref_left)
+    line.delete(ln_ref_right)
+    line new_ln_left = na
+    line new_ln_right = na
+    if not na(price)
+        mid_time = start_time + math.round((end_time - start_time) / 2)
+        style_left = is_dashed_left ? line.style_dashed : line.style_solid
+        style_right = is_dashed_right ? line.style_dashed : line.style_solid
+        new_ln_left := line.new(start_time, price, mid_time, price, xloc=xloc.bar_time, color=color_left, style=style_left, width=width_left)
+        new_ln_right := line.new(mid_time, price, end_time, price, xloc=xloc.bar_time, color=color_right, style=style_right, width=width_right)
+    [new_ln_left, new_ln_right]
+
+// Helper function to update a label (With Left-Side Offset logic for dashed lines and custom text suffixes)
+update_label(lb_ref, price, ratio_text, line_color, start_time, end_time, label_align, show_label, suff_text) =>
+    label.delete(lb_ref)
+    label new_lb = na
+    if not na(price) and show_label
+        // Shift left labels 4 hours (14400000 ms) to the left to place them in the overnight gap
+        label_x = (label_align == "left") ? (start_time - 14400000) : end_time
+        label_style = (label_align == "left") ? label.style_label_right : label.style_label_left
+        new_lb := label.new(label_x, price, ratio_text + " (" + str.tostring(price, "#.##") + ")" + suff_text, xloc=xloc.bar_time, color=color.new(color.white, 100), textcolor=line_color, style=label_style, size=size.small)
+    new_lb
+
+// Track the 9:15 start time of the latest day
+var int startT = na
+if (hour(time) == 9 and minute(time) == 15)
+    startT := time
+
+// Determine if we should draw lines/labels (either Index Mode or Option Mode is active)
+bool shouldDrawGVN = isIndexMode or (marketMode == "Option Market") or (marketMode == "Custom Setting")
+
+// Only draw on the last bar
+if shouldDrawGVN and barstate.islast and not na(startT)
+    int endT = startT + 22500000 
+    
+    // Detect option call vs put
+    isCall = str.contains(syminfo.ticker, "CE") or str.contains(syminfo.ticker, "CALL") or str.contains(syminfo.ticker, "C")
+
+    // Resolve dynamic top level label (0.0 for Calls, 0.1 for Puts based on ticker)
+    string opt_gvn100_lbl = lbl_opt_gvn100
+    if lbl_opt_gvn100 == "Auto"
+        opt_gvn100_lbl := isCall ? "0.0" : "0.1"
+
+    // GVN Levels & Labels (Solid Lines - Right aligned, close to price scale)
+    string gvn100_ratio = isIndexMode ? "1" : opt_gvn100_lbl
+    string i2_ratio     = isIndexMode ? "0.786" : lbl_opt_i2
+    string i3_ratio     = isIndexMode ? "0.618" : lbl_opt_i3
+    string i5_ratio     = isIndexMode ? "0.5" : lbl_opt_i5
+    string i6_ratio     = isIndexMode ? "0.382" : lbl_opt_i6
+    string i7_ratio     = isIndexMode ? "0.236" : lbl_opt_i7
+    string gvn0_ratio   = isIndexMode ? "0"     : lbl_opt_gvn0
+    
+    // Suffix texts for labels based on market mode
+    string suff_gvn100      = ""
+    string suff_i2          = ""
+    string suff_i3          = ""
+    string suff_i5          = ""
+    string suff_i6          = ""
+    string suff_i7          = ""
+    string suff_gvn0        = ""
+    string suff_seeda_0     = ""
+    string suff_seeda_236   = ""
+    string suff_seeda_382   = ""
+    string suff_seeda_500   = ""
+    string suff_seeda_618   = ""
+    string suff_seeda_786   = ""
+    string suff_seeda_1000  = ""
+    string suff_ext_up      = ""
+    string suff_ext_dn      = ""
+
+    if isIndexMode
+        suff_gvn100      := in_mobileMode ? " PE Exp" : " put buy expiry day"
+        suff_i2          := in_mobileMode ? " PE Buy" : " put buy"
+        suff_i3          := in_mobileMode ? " PE Buy" : " put buy"
+        suff_seeda_500   := in_mobileMode ? " CE Buy" : " ce buy"
+        suff_seeda_618   := in_mobileMode ? " CE Buy" : " ce buy"
+        suff_i5          := in_mobileMode ? " PE Buy" : " put buy"
+        suff_seeda_786   := in_mobileMode ? " CE Buy" : " ce buy"
+        suff_i6          := in_mobileMode ? " T1" : " target 1"
+        suff_i7          := in_mobileMode ? " T2" : " target 2"
+        suff_seeda_236   := in_mobileMode ? " T2" : " target 2"
+        suff_seeda_382   := in_mobileMode ? " Target" : " target"
+        suff_seeda_1000  := in_mobileMode ? " CE Exp" : " ce expiry day buy"
+    else
+        opt_suffix = isCall ? "ce" : "pe"
+        opt_suffix_upper = isCall ? "CE" : "PE"
+        suff_i2          := in_mobileMode ? " T2" : " target 2"
+        suff_i3          := in_mobileMode ? " Target" : " target"
+        suff_i5          := in_mobileMode ? " " + opt_suffix_upper + " Buy" : " " + opt_suffix + " buy"
+        suff_i6          := in_mobileMode ? " " + opt_suffix_upper + " Buy" : " " + opt_suffix + " buy"
+        suff_i7          := in_mobileMode ? " " + opt_suffix_upper + " Buy" : " " + opt_suffix + " buy"
+        suff_gvn0        := in_mobileMode ? " " + opt_suffix_upper + " Exp" : " " + opt_suffix + " expiry day buy"
+    
+    ln_gvn0 := update_line(ln_gvn0, startT, endT, gvn0, color_gvn0, false, 1)
+    lb_gvn0 := update_label(lb_gvn0, gvn0, gvn0_ratio, color_gvn0, startT, endT, "right", showFibLabels, suff_gvn0)
+    
+    ln_gvn100 := update_line(ln_gvn100, startT, endT, gvn100, color_gvn100, false, 1)
+    lb_gvn100 := update_label(lb_gvn100, gvn100, gvn100_ratio, color_gvn100, startT, endT, "right", showFibLabels, suff_gvn100)
+    
+    // 0.786 level is Black in Main Index mode
+    color_i2_eff = isIndexMode ? color.black : color_i2
+    ln_i2 := update_line(ln_i2, startT, endT, i2, color_i2_eff, false, 2)
+    lb_i2 := update_label(lb_i2, i2, i2_ratio, color_i2_eff, startT, endT, "right", showFibLabels, suff_i2)
+    
+    // i3/seeda_500 split logic (23481.43)
+    if isIndexMode
+        [ln_i3_left_new, ln_i3_right_new] = update_split_line(ln_i3_left, ln_i3_right, startT, endT, i3, color_i5, true, 1, color_i6, false, 2)
+        ln_i3_left := ln_i3_left_new
+        ln_i3_right := ln_i3_right_new
+        line.delete(ln_i3)
+        ln_i3 := na
+        lb_i3 := update_label(lb_i3, i3, i3_ratio, color_i6, startT, endT, "right", showFibLabels, suff_i3)
+    else
+        line.delete(ln_i3_left)
+        line.delete(ln_i3_right)
+        ln_i3_left := na
+        ln_i3_right := na
+        ln_i3 := update_line(ln_i3, startT, endT, i3, color_i3, false, 2)
+        lb_i3 := update_label(lb_i3, i3, i3_ratio, color_i3, startT, endT, "right", showFibLabels, suff_i3)
+        
+    // i5/seeda_618 split logic (23430.48)
+    if isIndexMode
+        [ln_i5_left_new, ln_i5_right_new] = update_split_line(ln_i5_left, ln_i5_right, startT, endT, i5, color_i6, true, 1, color_i5, false, 2)
+        ln_i5_left := ln_i5_left_new
+        ln_i5_right := ln_i5_right_new
+        line.delete(ln_i5)
+        ln_i5 := na
+        lb_i5 := update_label(lb_i5, i5, i5_ratio, color_i5, startT, endT, "right", showFibLabels, suff_i5)
+    else
+        line.delete(ln_i5_left)
+        line.delete(ln_i5_right)
+        ln_i5_left := na
+        ln_i5_right := na
+        ln_i5 := update_line(ln_i5, startT, endT, i5, color_i5, false, 2)
+        lb_i5 := update_label(lb_i5, i5, i5_ratio, color_i5, startT, endT, "right", showFibLabels, suff_i5)
+    
+    ln_i6 := update_line(ln_i6, startT, endT, i6, color_i6, false, 2)
+    lb_i6 := update_label(lb_i6, i6, i6_ratio, color_i6, startT, endT, "right", showFibLabels, suff_i6)
+    
+    ln_i7 := update_line(ln_i7, startT, endT, i7, color_i7, false, 2)
+    lb_i7 := update_label(lb_i7, i7, i7_ratio, color_i7, startT, endT, "right", showFibLabels, suff_i7)
+    
+    // SEEDA Levels & Labels (Dashed Lines - Left aligned, in the overnight gap)
+    ln_seeda_0 := update_line(ln_seeda_0, startT, endT, seeda_0, color.gray, true, 1)
+    lb_seeda_0 := update_label(lb_seeda_0, seeda_0, "0", color.gray, startT, endT, "left", showFibLabels, suff_seeda_0)
+    
+    ln_seeda_236 := update_line(ln_seeda_236, startT, endT, seeda_236, #ff9800, true, 1)
+    lb_seeda_236 := update_label(lb_seeda_236, seeda_236, "0.236", #ff9800, startT, endT, "left", showFibLabels, suff_seeda_236)
+    
+    ln_seeda_382 := update_line(ln_seeda_382, startT, endT, seeda_382, #009688, true, 1)
+    lb_seeda_382 := update_label(lb_seeda_382, seeda_382, "0.382", #009688, startT, endT, "left", showFibLabels, suff_seeda_382)
+    
+    if isIndexMode
+        line.delete(ln_seeda_500)
+        ln_seeda_500 := na
+        lb_seeda_500 := update_label(lb_seeda_500, i3, "0.5", color_i5, startT, endT, "left", showFibLabels, suff_seeda_500)
+    else
+        ln_seeda_500 := update_line(ln_seeda_500, startT, endT, seeda_500, color.green, true, 1)
+        lb_seeda_500 := update_label(lb_seeda_500, seeda_500, "0.5", color.green, startT, endT, "left", showFibLabels, suff_seeda_500)
+        
+    if isIndexMode
+        line.delete(ln_seeda_618)
+        ln_seeda_618 := na
+        lb_seeda_618 := update_label(lb_seeda_618, i5, "0.618", color_i6, startT, endT, "left", showFibLabels, suff_seeda_618)
+    else
+        ln_seeda_618 := update_line(ln_seeda_618, startT, endT, seeda_618, color.rgb(0, 150, 136), true, 1)
+        lb_seeda_618 := update_label(lb_seeda_618, seeda_618, "0.618", color.rgb(0, 150, 136), startT, endT, "left", showFibLabels, suff_seeda_618)
+        
+    color_seeda_786_eff = isIndexMode ? color.black : #e91e63
+    ln_seeda_786 := update_line(ln_seeda_786, startT, endT, seeda_786, color_seeda_786_eff, true, 1)
+    lb_seeda_786 := update_label(lb_seeda_786, seeda_786, "0.786", color_seeda_786_eff, startT, endT, "left", showFibLabels, suff_seeda_786)
+    
+    ln_seeda_1000 := update_line(ln_seeda_1000, startT, endT, seeda_1000, color.gray, true, 1)
+    lb_seeda_1000 := update_label(lb_seeda_1000, seeda_1000, "1", color.gray, startT, endT, "left", showFibLabels, suff_seeda_1000)
+    
+    // Extensions (Solid Lines - Right aligned, close to price scale)
+    ln_ext_up := update_line(ln_ext_up, startT, endT, ext_up_1618_ulta, color.rgb(33, 150, 243), false, 2)
+    lb_ext_up := update_label(lb_ext_up, ext_up_1618_ulta, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels, suff_ext_up)
+    
+    ln_ext_dn := update_line(ln_ext_dn, startT, endT, ext_dn_1618_seeda, color.rgb(33, 150, 243), false, 2)
+    lb_ext_dn := update_label(lb_ext_dn, ext_dn_1618_seeda, "1.618", color.rgb(33, 150, 243), startT, endT, "right", showFibLabels, suff_ext_dn)
+else if barstate.islast
+    // Clear all if Index/Option Mode drawings are disabled
+    line.delete(ln_gvn0)
+    label.delete(lb_gvn0)
+    ln_gvn0 := na
+    lb_gvn0 := na
+    
+    line.delete(ln_gvn100)
+    label.delete(lb_gvn100)
+    ln_gvn100 := na
+    lb_gvn100 := na
+    
+    line.delete(ln_i2)
+    label.delete(lb_i2)
+    ln_i2 := na
+    lb_i2 := na
+    
+    line.delete(ln_i3)
+    line.delete(ln_i3_left)
+    line.delete(ln_i3_right)
+    label.delete(lb_i3)
+    ln_i3 := na
+    ln_i3_left := na
+    ln_i3_right := na
+    lb_i3 := na
+    
+    line.delete(ln_i5)
+    line.delete(ln_i5_left)
+    line.delete(ln_i5_right)
+    label.delete(lb_i5)
+    ln_i5 := na
+    ln_i5_left := na
+    ln_i5_right := na
+    lb_i5 := na
+    
+    line.delete(ln_i6)
+    label.delete(lb_i6)
+    ln_i6 := na
+    lb_i6 := na
+    
+    line.delete(ln_i7)
+    label.delete(lb_i7)
+    ln_i7 := na
+    lb_i7 := na
+    
+    line.delete(ln_seeda_0)
+    label.delete(lb_seeda_0)
+    ln_seeda_0 := na
+    lb_seeda_0 := na
+    
+    line.delete(ln_seeda_236)
+    label.delete(lb_seeda_236)
+    ln_seeda_236 := na
+    lb_seeda_236 := na
+    
+    line.delete(ln_seeda_382)
+    label.delete(lb_seeda_382)
+    ln_seeda_382 := na
+    lb_seeda_382 := na
+    
+    line.delete(ln_seeda_500)
+    label.delete(lb_seeda_500)
+    ln_seeda_500 := na
+    lb_seeda_500 := na
+    
+    line.delete(ln_seeda_618)
+    label.delete(lb_seeda_618)
+    ln_seeda_618 := na
+    lb_seeda_618 := na
+    
+    line.delete(ln_seeda_786)
+    label.delete(lb_seeda_786)
+    ln_seeda_786 := na
+    lb_seeda_786 := na
+    
+    line.delete(ln_seeda_1000)
+    label.delete(lb_seeda_1000)
+    ln_seeda_1000 := na
+    lb_seeda_1000 := na
+    
+    line.delete(ln_ext_up)
+    label.delete(lb_ext_up)
+    ln_ext_up := na
+    lb_ext_up := na
+    
+    line.delete(ln_ext_dn)
+    label.delete(lb_ext_dn)
+    ln_ext_dn := na
+    lb_ext_dn := na
+
+// ==========================================
+// 🛡️ ATR-based Dynamic Stop Loss Calculation
+// ==========================================
+atrVal = ta.atr(in_atrLength)
+float slOffset = in_useDynamicSL ? (na(atrVal) ? 12.0 : atrVal * in_atrMult) : 12.0
+
+// ==========================================
+// 📈 1st BUY ENTRY calculations
+// ==========================================
+buyEntry = i5
+buyT1    = i3
+buyT2    = i2
+buySL    = buyEntry - slOffset
+
+var bool buyActive = false
+
+if ta.crossover(close, buyEntry)
+    buyActive := true
+    if showTradeBoxes
+        box.new(bar_index, buyT2, bar_index+10, buyEntry, bgcolor=color.new(#b4ddb6,60), border_color=na, border_width=0)
+        box.new(bar_index, buyEntry, bar_index+10, buySL, bgcolor=color.new(#e656c6,60), border_color=na, border_width=0)
+     
+    if showSLLabels
+        label.new(bar_index+5, buySL, "SL: " + str.tostring(buySL), color=color.new(#e656c6, 30), style=label.style_label_up, textcolor=color.white, size=size.small)
+
+if buyActive and (close >= buyT2 or close <= buySL)
+    buyActive := false
+
+// ==========================================
+// 📉 2nd SELL ENTRY calculations
+// ==========================================
+sellEntry = i7
+sellT1    = i6
+sellT2    = i5
+sellSL    = sellEntry - slOffset
+
+var bool sellActive = false
+
+if ta.crossunder(close, sellEntry)
+    sellActive := true
+    if showTradeBoxes
+        box.new(bar_index, sellEntry, bar_index+10, sellT2, bgcolor=color.new(#a1bba1, 80), border_color=na, border_width=0)
+        box.new(bar_index, sellSL, bar_index+10, sellEntry, bgcolor=color.new(#e656c6,80), border_color=na, border_width=0)
+
+    if showSLLabels
+        label.new(bar_index+5, sellSL, "SL: " + str.tostring(sellSL), color=color.new(#e656c6, 30), style=label.style_label_down, textcolor=color.white, size=size.small)
+
+if sellActive and (close <= sellT2 or close >= sellSL)
+    sellActive := false
+
+// ==========================================
+// 🚀 3rd ENTRY (Z to H) calculations
+// ==========================================
+thirdEntry = gvn0
+thirdT1 = i7
+thirdT2 = i6
+thirdT3 = i5
+thirdSL = thirdEntry - slOffset
+
+var bool thirdActive = false
+
+if ta.crossover(close, thirdEntry)
+    thirdActive := true
+    if showTradeBoxes
+        box.new(bar_index, thirdT3, bar_index+10, thirdEntry, bgcolor=color.new(#b4ddb6, 80), border_color=na, border_width=0)
+        box.new(bar_index, thirdEntry, bar_index+10, thirdSL, bgcolor=color.new(#e656c6,80), border_color=na, border_width=0)
+
+    if showSLLabels
+        label.new(bar_index+5, thirdSL, "SL: " + str.tostring(thirdSL), color=color.new(#e656c6, 30), style=label.style_label_up, textcolor=color.white, size=size.small)
+
+if thirdActive and (close >= thirdT3 or close <= thirdSL)
+    thirdActive := false
+
+// ==========================================
+// FIXED RANGE VOLUME PROFILE POC (Zero-Lag Fix)
+// ==========================================
+var float pocLevel = na
+var int last_vp_bar = -1
+
+if showVP and barstate.islast and bar_index != last_vp_bar
+    last_vp_bar := bar_index
+    a_prices = array.new_float(0)
+    a_vols   = array.new_float(0)
+    
+    for i = 0 to vpLookback - 1
+        p = math.round(hlc3[i] / vpStep) * vpStep
+        v = volume[i]
+        
+        idx = array.indexof(a_prices, p)
+        if idx >= 0
+            array.set(a_vols, idx, array.get(a_vols, idx) + v)
+        else
+            array.push(a_prices, p)
+            array.push(a_vols, v)
+
+    maxV = 0.0
+    maxIdx = -1
+    for i = 0 to array.size(a_vols) - 1
+        if array.get(a_vols, i) > maxV
+            maxV := array.get(a_vols, i)
+            maxIdx := i
+            
+    pocLevel := maxIdx >= 0 ? array.get(a_prices, maxIdx) : na
+
+var line pocLine = na
+var label pocLabel = na
+if showVP and barstate.islast and not na(pocLevel)
+    line.delete(pocLine)
+    label.delete(pocLabel)
+    
+    pocLine := line.new(bar_index - 15, pocLevel, bar_index + 10, pocLevel, color=color.rgb(255, 153, 0), width=3, style=line.style_solid)
+    if showGVNLabel
+        pocLabel := label.new(bar_index + 10, pocLevel, "GVN: " + str.tostring(pocLevel), color=color.rgb(255, 153, 0), textcolor=color.black, style=label.style_label_left, size=size.small)
+
+// =====================
+// VWAP & Trend Lines
+// =====================
+plot(ta.vwap, color=color_vwap, title="VWAP", style=plot.style_stepline, linewidth=1)
+
+hcl3 = hlc3
+hcl3_52 = ta.sma(hcl3, 52)
+plot(hcl3_52, color=color_hcl, title="Hcl", style=plot.style_stepline, linewidth=1)
+
+pivotCandle = (high[1] + low[1] + close[1]) / 3
+touchedCandle = high >= pivotCandle and low <= pivotCandle
+colorCandle = touchedCandle ? color.new(color_cp, 100) : color_cp
+plot(showCP ? pivotCandle : na, title="cp", color=colorCandle, linewidth=1, style=plot.style_stepline)
+
+openLowCandle = (open == low)
+openHighCandle = (open == high)
+barcolor(showBarColor ? (openLowCandle ? color.black : openHighCandle ? color.purple : na) : na)
+
+// =====================
+// Supertrend + EMA
+// =====================
+atrPeriod = input.int(7, "ATR Length", minval=1)
+factor = input.float(0.90, "Factor", minval=0.08, step=0.01)
+emaShortPeriod = input.int(5, "EMA 5", minval=1)
+emaLongPeriod = input.int(10, "EMA 10", minval=1)
+
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+emaShort = ta.ema(close, emaShortPeriod)
+emaLong  = ta.ema(close, emaLongPeriod)
+
+buySignal  = ta.crossover(close, supertrend)
+sellSignal = ta.crossunder(close, supertrend)
+
+plotshape(showBuySellConf ? buySignal : na, title="Buy Signal", location=location.belowbar, color=color.rgb(16, 211, 151), style=shape.labelup, text="buy", textcolor=color.rgb(10, 10, 10), size=size.tiny)
+plotshape(showBuySellConf ? sellSignal : na, title="Sell Signal", location=location.abovebar, color=color.rgb(216, 109, 211), style=shape.labeldown, text="sell", textcolor=color.rgb(27, 25, 25), size=size.tiny)
+
+alertcondition(buySignal, title="Buy Alert", message="Supertrend Buy Signal")
+alertcondition(sellSignal, title="Sell Alert", message="Supertrend Sell Signal")
+
+// =====================
+// TABLE POSITION SETTINGS
+// =====================
+firstPosInput  = input.string("Bottom Left",  "1st Entry Table Position", options=["Top Left","Middle Left","Bottom Left","Top Center","Middle Center","Bottom Center"], group="Table Settings")
+secondPosInput = input.string("Bottom Center",   "2nd Entry Table Position", options=["Top Center","Middle Center","Bottom Center","Top Right","Middle Right","Bottom Right"], group="Table Settings")
+thirdPosInput  = input.string("Bottom Right","3rd Entry Table Position", options=["Top Center","Middle Center","Bottom Center","Bottom Left","Top Right","Middle Right","Bottom Right"], group="Table Settings")
+
+posConvert(pos)=>
+     pos=="Top Left"?position.top_left:
+     pos=="Middle Left"?position.middle_left:
+     pos=="Bottom Left"?position.bottom_left:
+     pos=="Top Center"?position.top_center:
+     pos=="Middle Center"?position.middle_center:
+     pos=="Bottom Center"?position.bottom_center:
+     pos=="Top Right"?position.top_right:
+     pos=="Middle Right"?position.middle_right:
+     position.bottom_right
+
+firstTablePos  = posConvert(firstPosInput)
+secondTablePos = posConvert(secondPosInput)
+thirdTablePos  = posConvert(thirdPosInput)
+
+tableFont = input.string("tiny", "Table Font Size", options = ["tiny","small","normal","large"], group="Table Settings")
+fontSize = in_mobileMode ? size.tiny : (tableFont == "tiny" ? size.tiny : tableFont == "small" ? size.small : tableFont == "normal" ? size.normal : size.large)
+
+// =====================
+// TABLES GENERATION (LIVE DYNAMIC BOXES)
+// =====================
+var table table1 = na
+if showTable1 and na(table1)
+    table1 := table.new(firstTablePos, 2, 3, border_width=1, border_color=color.rgb(19, 73, 160), frame_color=color.rgb(19, 73, 160), frame_width=1)
+
+if showTable1 and barstate.islast
+    color t1_headBg = buyActive ? color.rgb(163, 211, 151) : #1e3a8a
+    color t1_headTx = buyActive ? color.black : color.white
+    color t1_bg     = buyActive ? color.rgb(200, 230, 200) : color.rgb(20, 35, 60)
+    color t1_txt    = buyActive ? color.black : color.rgb(130, 190, 250)
+    
+    table.cell(table1, 0, 0, "1st Entry 📈", bgcolor=t1_headBg, text_color=t1_headTx, text_size=fontSize)
+    table.cell(table1, 0, 1, "Target 1", bgcolor=t1_bg, text_color=t1_txt, text_size=fontSize)
+    table.cell(table1, 0, 2, "Target 2", bgcolor=t1_bg, text_color=t1_txt, text_size=fontSize)
+
+    table.cell(table1, 1, 0, str.tostring(buyEntry), bgcolor=t1_bg, text_color=t1_txt, text_size=fontSize)
+    table.cell(table1, 1, 1, str.tostring(buyT1),    bgcolor=t1_bg, text_color=t1_txt, text_size=fontSize)
+    table.cell(table1, 1, 2, str.tostring(buyT2),    bgcolor=t1_bg, text_color=t1_txt, text_size=fontSize)
+
+if not showTable1 and not na(table1)
+    table.delete(table1)
+    table1 := na
+
+var table table2 = na
+if showTable2 and na(table2)
+    table2 := table.new(secondTablePos, 2, 3, border_width=1, border_color=color.rgb(19, 73, 160), frame_color=color.rgb(19, 73, 160), frame_width=1)
+
+if showTable2 and barstate.islast
+    color t2_headBg = sellActive ? color.rgb(226, 144, 144) : #1e3a8a
+    color t2_headTx = sellActive ? color.black : color.white
+    color t2_bg     = sellActive ? color.rgb(240, 200, 200) : color.rgb(20, 35, 60)
+    color t2_txt    = sellActive ? color.black : color.rgb(130, 190, 250)
+
+    table.cell(table2, 0, 0, "2nd Entry 📉", bgcolor=t2_headBg, text_color=t2_headTx, text_size=fontSize)
+    table.cell(table2, 0, 1, "Target 1", bgcolor=t2_bg, text_color=t2_txt, text_size=fontSize)
+    table.cell(table2, 0, 2, "Target 2", bgcolor=t2_bg, text_color=t2_txt, text_size=fontSize)
+
+    table.cell(table2, 1, 0, str.tostring(sellEntry), bgcolor=t2_bg, text_color=t2_txt, text_size=fontSize)
+    table.cell(table2, 1, 1, str.tostring(sellT1),    bgcolor=t2_bg, text_color=t2_txt, text_size=fontSize)
+    table.cell(table2, 1, 2, str.tostring(sellT2),    bgcolor=t2_bg, text_color=t2_txt, text_size=fontSize)
+
+if not showTable2 and not na(table2)
+    table.delete(table2)
+    table2 := na
+
+var table table3 = na
+if showTable3 and na(table3)
+    table3 := table.new(thirdTablePos, 2, 4, border_width=1, border_color=color.rgb(19, 73, 160), frame_color=color.rgb(19, 73, 160), frame_width=1)
+
+if showTable3 and barstate.islast
+    color t3_headBg = thirdActive ? color.rgb(33, 150, 243) : #1e3a8a
+    color t3_headTx = thirdActive ? color.white : color.white
+    color t3_bg     = thirdActive ? color.rgb(200, 220, 250) : color.rgb(20, 35, 60)
+    color t3_txt    = thirdActive ? color.black : color.rgb(130, 190, 250)
+
+    table.cell(table3, 0, 0, "Z to H 🚀", bgcolor=t3_headBg, text_color=t3_headTx, text_size=fontSize)
+    table.cell(table3, 0, 1, "Target 1", bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+    table.cell(table3, 0, 2, "Target 2", bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+    table.cell(table3, 0, 3, "Target 3", bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+
+    table.cell(table3, 1, 0, str.tostring(thirdEntry), bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+    table.cell(table3, 1, 1, str.tostring(thirdT1),    bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+    table.cell(table3, 1, 2, str.tostring(thirdT2),    bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+    table.cell(table3, 1, 3, str.tostring(thirdT3),    bgcolor=t3_bg, text_color=t3_txt, text_size=fontSize)
+
+if not showTable3 and not na(table3)
+    table.delete(table3)
+    table3 := na
+
+// ==========================================
+// 📱 CONSOLIDATED MOBILE TABLE FOR MOBILE VIEW
+// ==========================================
+var table mobileTable = na
+if in_mobileMode and na(mobileTable)
+    mobileTable := table.new(posConvert(mobilePosInput), 2, 4, border_width=1, border_color=color.rgb(19, 73, 160), frame_color=color.rgb(19, 73, 160), frame_width=1)
+
+if in_mobileMode and barstate.islast
+    color m_headBg = #1e3a8a
+    color m_headTx = color.white
+    color m_bg     = color.rgb(20, 35, 60)
+    color m_txt    = color.rgb(130, 190, 250)
+    
+    table.cell(mobileTable, 0, 0, "GVN Entries 📱", bgcolor=m_headBg, text_color=m_headTx, text_size=fontSize)
+    table.cell(mobileTable, 1, 0, "Levels (Entry -> Targets)", bgcolor=m_headBg, text_color=m_headTx, text_size=fontSize)
+
+    color r1_bg = buyActive ? color.rgb(163, 211, 151) : m_bg
+    color r1_txt = buyActive ? color.black : m_txt
+    table.cell(mobileTable, 0, 1, "1st Entry 📈", bgcolor=r1_bg, text_color=r1_txt, text_size=fontSize)
+    table.cell(mobileTable, 1, 1, str.tostring(buyEntry) + " -> " + str.tostring(buyT1) + " | " + str.tostring(buyT2), bgcolor=r1_bg, text_color=r1_txt, text_size=fontSize)
+
+    color r2_bg = sellActive ? color.rgb(226, 144, 144) : m_bg
+    color r2_txt = sellActive ? color.black : m_txt
+    table.cell(mobileTable, 0, 2, "2nd Entry 📉", bgcolor=r2_bg, text_color=r2_txt, text_size=fontSize)
+    table.cell(mobileTable, 1, 2, str.tostring(sellEntry) + " -> " + str.tostring(sellT1) + " | " + str.tostring(sellT2), bgcolor=r2_bg, text_color=r2_txt, text_size=fontSize)
+
+    color r3_bg = thirdActive ? color.rgb(33, 150, 243) : m_bg
+    color r3_txt = thirdActive ? color.black : m_txt
+    table.cell(mobileTable, 0, 3, "Z to H 🚀", bgcolor=r3_bg, text_color=r3_txt, text_size=fontSize)
+    table.cell(mobileTable, 1, 3, str.tostring(thirdEntry) + " -> " + str.tostring(thirdT1) + " | " + str.tostring(thirdT2) + " | " + str.tostring(thirdT3), bgcolor=r3_bg, text_color=r3_txt, text_size=fontSize)
+
+if not in_mobileMode and not na(mobileTable)
+    table.delete(mobileTable)
+    mobileTable := na
+
+// =====================
+// 80% Previous Day's Levels
+// =====================
+prevHigh = ta.highest(high, 1)[1]
+prevLow = ta.lowest(low, 1)[1]
+range80 = (prevHigh - prevLow) * 0.8
+upperLevel = prevLow + range80
+lowerLevel = prevHigh - range80
+
+if show80Lines
+    var line upperLine = na
+    var line lowerLine = na
+    line.delete(upperLine)
+    line.delete(lowerLine)
+    upperLine := line.new(x1=bar_index, y1=upperLevel, x2=bar_index + 500, y2=upperLevel, width=1, color=color.rgb(131, 196, 134), style=line.style_dashed)
+    lowerLine := line.new(x1=bar_index, y1=lowerLevel, x2=bar_index + 500, y2=lowerLevel, width=1, color=color.rgb(226, 144, 144), style=line.style_dashed)
+
+// Calculate GVNS Level
+float GVNS = ta.valuewhen(ta.highestbars(volume, 50) == 0, close, 0)
+plot(showGVNS ? GVNS : na, title="GVNS Level", color=color.new(color.black, 0), linewidth=2)
+
+// ==========================================
+// GVN AI SMART DASHBOARD
+// ==========================================
+aiPosConvert(p) =>
+    p == "Top Left" ? position.top_left :
+     p == "Middle Left" ? position.middle_left :
+     p == "Bottom Left" ? position.bottom_left :
+     p == "Top Center" ? position.top_center :
+     p == "Middle Center" ? position.middle_center :
+     p == "Bottom Center" ? position.bottom_center :
+     p == "Top Right" ? position.top_right :
+     p == "Middle Right" ? position.middle_right :
+     position.bottom_right
+
+aiFontSize = in_mobileMode ? size.tiny : (aiFontInput == "tiny" ? size.tiny : aiFontInput == "small" ? size.small : aiFontInput == "normal" ? size.normal : size.large)
+
+aiLookback = input.int(20, "AI Volume Lookback", group="AI Dashboard Settings")
+buyingVolume = math.sum(close > open ? volume : 0, aiLookback)
+sellingVolume = math.sum(close < open ? volume : 0, aiLookback)
+
+volRatio = buyingVolume / (sellingVolume == 0 ? 1 : sellingVolume)
+
+isPriceAboveVWAP = close > ta.vwap
+isPriceAboveHLC = close > hcl3_52
+
+string aiMode = "SIDEWAYS"
+color aiColor = color.yellow
+
+if volRatio > 1.2 and isPriceAboveVWAP and isPriceAboveHLC
+    aiMode := "BULLISH 🟢"
+    aiColor := color.rgb(163, 211, 151)
+else if volRatio < 0.8 and not isPriceAboveVWAP and not isPriceAboveHLC
+    aiMode := "BEARISH 🔴"
+    aiColor := color.rgb(226, 144, 144)
+
+buyVolFlow = (close >= open) ? volume : 0
+sellVolFlow = (close < open) ? volume : 0
+deltaFlow = buyVolFlow - sellVolFlow
+avgDelta = ta.sma(deltaFlow, 10) 
+
+string flowText = avgDelta > 0 ? "BUYERS CONTROL 🟢" : "SELLERS CONTROL 🔴"
+color flowColor = avgDelta > 0 ? color.rgb(163, 211, 151) : color.rgb(226, 144, 144)
+
+tHour = hour(time, "Asia/Kolkata")
+tMin = minute(time, "Asia/Kolkata")
+float timeVal = tHour + (tMin / 60.0)
+
+string timeZoneStatus = "DULL ZONE (Wait ⚠️)"
+color tzColor = color.rgb(120, 123, 134)
+
+if (timeVal >= 9.25 and timeVal <= 10.5) 
+    tzColor := color.rgb(255, 153, 0)
+    if avgDelta > 0
+        timeZoneStatus := "BUYERS MOMENTUM 🟢 (Morning UP)"
+    else
+        timeZoneStatus := "SELLERS MOMENTUM 🔴 (Morning DOWN)"
+else if (timeVal >= 13.5 and timeVal <= 15.0) 
+    tzColor := color.rgb(33, 150, 243)
+    if avgDelta > 0
+        timeZoneStatus := "BUYERS MOMENTUM 🚀 (Breakout UP)"
+    else
+        timeZoneStatus := "SELLERS MOMENTUM 🩸 (Breakout DOWN)"
+
+avgV = ta.sma(volume, 20)
+cBody = math.abs(close - open)
+avgB = ta.sma(cBody, 20)
+bool isInstPump = volume > (avgV * 2.5) and cBody <= avgB
+
+string instText = "📊 Normal Volume"
+color instColor = color.rgb(230,230,230)
+
+if isInstPump
+    if avgDelta > 0
+        instText := "🚨 BIG BOYS BUYING"
+        instColor := color.aqua
+    else
+        instText := "🚨 BIG BOYS SELLING"
+        instColor := color.aqua
+
+get_st_dir(f, p) =>
+    [_, dir] = ta.supertrend(f, p)
+    dir
+
+dir5  = request.security(syminfo.tickerid, "5", get_st_dir(factor, atrPeriod))
+dir15 = request.security(syminfo.tickerid, "15", get_st_dir(factor, atrPeriod))
+dir60 = request.security(syminfo.tickerid, "60", get_st_dir(factor, atrPeriod))
+
+dot5  = dir5 < 0 ? "🟢" : "🔴"
+dot15 = dir15 < 0 ? "🟢" : "🔴"
+dot60 = dir60 < 0 ? "🟢" : "🔴"
+mtfDots = "  " + dot5 + dot15 + dot60
+
+// ==========================================
+// 🌟 ZERO-LAG WIND PRESSURE & LEVEL STRENGTH
+// ==========================================
+float baseWind = 50.0
+if volRatio > 2.0
+    baseWind := 85.0
+else if volRatio > 1.5
+    baseWind := 75.0
+else if volRatio > 1.2
+    baseWind := 65.0
+else if volRatio < 0.5
+    baseWind := 15.0
+else if volRatio < 0.8
+    baseWind := 35.0
+else if volRatio < 1.0
+    baseWind := 45.0
+
+if avgDelta > 0
+    baseWind := math.min(95, baseWind + 15)
+else if avgDelta < 0
+    baseWind := math.max(5, baseWind - 15)
+
+liveBuyVol = (close >= open) ? volume : 0
+liveSellVol = (close < open) ? volume : 0
+liveDelta = liveBuyVol - liveSellVol
+volSpikeAvg = ta.sma(volume, 10)
+
+if liveDelta > (volSpikeAvg * 0.5)
+    baseWind := math.min(95, baseWind + 10) 
+else if liveDelta < -(volSpikeAvg * 0.5)
+    baseWind := math.max(5, baseWind - 10)  
+
+var table aiTable = na
+
+if showAI and barstate.islast
+    table.delete(aiTable)
+    int rows_count = showOverallWind ? 6 : 5
+    aiTable := table.new(aiPosConvert(aiBoxPos), 1, rows_count, border_width=2, border_color=color.black, frame_color=color.black, frame_width=2)
+    
+    table.cell(aiTable, 0, 0, "🤖 GVN AI ANALYSIS" + mtfDots, bgcolor=color.black, text_color=color.white, text_size=aiFontSize)
+    table.cell(aiTable, 0, 1, "Mode: " + aiMode + "\nVol Ratio: " + str.tostring(volRatio, "#.##") + "\nATR SL: " + str.tostring(slOffset, "#.#"), bgcolor=aiColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 2, "Zone: " + timeZoneStatus, bgcolor=tzColor, text_color=color.white, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 3, "Inst: " + instText, bgcolor=instColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    table.cell(aiTable, 0, 4, "Flow: " + flowText, bgcolor=flowColor, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+    if showOverallWind
+        float bullsStr = baseWind
+        float bearsStr = 100 - baseWind
+        color windCol = bullsStr >= 60 ? color.rgb(16, 231, 124) : (bearsStr >= 60 ? color.rgb(226, 144, 144) : color.rgb(255, 153, 0))
+        table.cell(aiTable, 0, 5, "Wind: +" + str.tostring(math.round(bullsStr)) + "% 🟢 | -" + str.tostring(math.round(bearsStr)) + "% 🔴", bgcolor=windCol, text_color=color.black, text_size=aiFontSize, text_halign=text.align_left)
+
+// ==========================================
+// 🏦 INSTITUTIONAL SUPPORT & RESISTANCE ZONES
+// ==========================================
+var box supportBox = na
+var box resistBox  = na
+
+if showInstZones and isInstPump
+    if avgDelta > 0
+        supportBox := box.new(left=bar_index, top=low, right=bar_index + 50, bottom=low - (high-low)*0.1, bgcolor=color.new(color.lime, 90), border_color=color.new(color.lime, 60), text="SUP", text_size=size.tiny, text_color=color.lime, text_halign=text.align_right)
+    else
+        resistBox := box.new(left=bar_index, top=high + (high-low)*0.1, right=bar_index + 50, bottom=high, bgcolor=color.new(color.red, 90), border_color=color.new(color.red, 60), text="RES", text_size=size.tiny, text_color=color.red, text_halign=text.align_right)
+
+if not na(supportBox)
+    box.set_right(supportBox, bar_index + 20)
+if not na(resistBox)
+    box.set_right(resistBox, bar_index + 20)
+
+// ==========================================
+// ⚡ PERFECT ALGO ENTRY & MOMENTUM TRICK
+// ==========================================
+buyPrevHighBreak = close > high[1]
+sellPrevLowBreak = close < low[1]
+
+volSpike = volume > ta.sma(volume, 20) * 1.5
+
+aiBullishStrong = (volRatio > 1.0) or (avgDelta > 0)
+aiBearishStrong = (volRatio < 1.0) or (avgDelta < 0)
+
+touchedi5 = ta.barssince(low <= i5 and close >= i5) <= 3
+touchedi7 = ta.barssince(high >= i7 and close <= i7) <= 3
+
+strictBuyAlgo = touchedi5 and buyPrevHighBreak and volSpike and aiBullishStrong
+strictSellAlgo = touchedi7 and sellPrevLowBreak and volSpike and aiBearishStrong
+
+accelFlash = cBody > avgB * 2.0 and volSpike 
+
+plotshape(showAlgoSignals and strictBuyAlgo, title="Algo Perfect Buy", location=location.belowbar, color=color.new(color.lime, 0), style=shape.triangleup, text="🚀", textcolor=color.black, size=size.tiny)
+plotshape(showAlgoSignals and strictSellAlgo, title="Algo Perfect Sell", location=location.abovebar, color=color.new(color.red, 0), style=shape.triangledown, text="🩸", textcolor=color.white, size=size.tiny)
+
+plotshape(showMomentumFlashes and accelFlash and close > open, title="Bullish Flash", location=location.belowbar, color=color.new(color.yellow, 0), style=shape.circle, text="⚡", textcolor=color.yellow, size=size.tiny)
+plotshape(showMomentumFlashes and accelFlash and close < open, title="Bearish Flash", location=location.abovebar, color=color.new(color.orange, 0), style=shape.circle, text="⚡", textcolor=color.orange, size=size.tiny)
+
+// ==========================================
+// 📈 ADVANCED EMA (With Smoothing & BB)
+// ==========================================
+emaLen = input.int(200, minval=1, title="EMA Length", group="200 EMA Settings")
+emaSrc = input.source(close, title="Source", group="200 EMA Settings")
+emaOffset = input.int(title="Offset", defval=0, minval=-500, maxval=500, group="200 EMA Settings")
+outEma = ta.ema(emaSrc, emaLen)
+
+plot(show200EMA ? outEma : na, title="Main 200 EMA", color=emaColor, linewidth=2, offset=emaOffset)
+
+GRP_SMOOTH = "200 EMA Smoothing"
+TT_BB = "Only applies when 'SMA + Bollinger Bands' is selected. Determines the distance between the SMA and the bands."
+maTypeInput = input.string("None", "Type", options = ["None", "SMA", "SMA + Bollinger Bands", "EMA", "SMMA (RMA)", "WMA", "VWMA"], group = GRP_SMOOTH)
+isBB = maTypeInput == "SMA + Bollinger Bands"
+maLengthInput = input.int(14, "Length", group = GRP_SMOOTH)
+bbMultInput = input.float(2.0, "BB StdDev", minval = 0.001, maxval = 50, step = 0.5, tooltip = TT_BB, group = GRP_SMOOTH)
+enableMA = maTypeInput != "None"
+
+get_smoothed_ma(source, length, MAtype) =>
+    switch MAtype
+        "SMA"                   => ta.sma(source, length)
+        "SMA + Bollinger Bands" => ta.sma(source, length)
+        "EMA"                   => ta.ema(source, length)
+        "SMMA (RMA)"            => ta.rma(source, length)
+        "WMA"                   => ta.wma(source, length)
+        "VWMA"                  => ta.vwma(source, length)
+        => na
+
+smoothingMA = enableMA ? get_smoothed_ma(outEma, maLengthInput, maTypeInput) : na
+smoothingStDev = isBB ? ta.stdev(outEma, maLengthInput) * bbMultInput : na
+
+plot(show200EMA and enableMA ? smoothingMA : na, "EMA-based MA", color=color.yellow)
+bbUpperBand = plot(show200EMA and isBB ? smoothingMA + smoothingStDev : na, title = "Upper Bollinger Band", color=color.green)
+bbLowerBand = plot(show200EMA and isBB ? smoothingMA - smoothingStDev : na, title = "Lower Bollinger Band", color=color.green)
+fill(bbUpperBand, bbLowerBand, color = show200EMA and isBB ? color.new(color.green, 90) : na, title="Bollinger Bands Background Fill")

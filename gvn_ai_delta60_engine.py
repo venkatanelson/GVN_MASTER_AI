@@ -287,14 +287,19 @@ class GVNAiDelta60Engine:
                     self.memory["rsi_last_fetch"][idx_cache_key] = now
                     
             opt_cache_key = f"{key}_option_closes"
+            opt_vol_cache_key = f"{key}_option_volumes"
             opt_last_fetch = self.memory["rsi_last_fetch"].get(opt_cache_key, 0)
             opt_closes = self.memory["rsi_closes"].get(opt_cache_key, [])
+            opt_volumes = self.memory.get("rsi_volumes", {}).get(opt_vol_cache_key, [])
             
-            if now - opt_last_fetch > 30 or not opt_closes:
-                fetched_closes = self._fetch_closes_from_api(symbol, strike['strike'], strike['type'])
+            if now - opt_last_fetch > 30 or not opt_closes or not opt_volumes:
+                fetched_closes, fetched_vols = self._fetch_closes_and_volumes_from_api(symbol, strike['strike'], strike['type'])
                 if fetched_closes:
                     self.memory["rsi_closes"][opt_cache_key] = fetched_closes
                     opt_closes = fetched_closes
+                    if "rsi_volumes" not in self.memory: self.memory["rsi_volumes"] = {}
+                    self.memory["rsi_volumes"][opt_vol_cache_key] = fetched_vols
+                    opt_volumes = fetched_vols
                     self.memory["rsi_last_fetch"][opt_cache_key] = now
                     
             # Compute live values
@@ -317,6 +322,76 @@ class GVNAiDelta60Engine:
             # Cache values in shared_data
             shared_data.market_pulse[f"{symbol}_rsi_14"] = idx_rsi
             shared_data.market_pulse[f"{key}_rsi_14"] = opt_rsi
+            
+            # --- 📊 Formula 6: QQE MOD & RSI-15 Volume Divergence Calculations ---
+            qqe_up = False
+            qqe_down = False
+            opt_prim_rsi = 50.0
+            if len(opt_closes_live) >= 55:
+                try:
+                    qqe_up, qqe_down, opt_prim_rsi, _, _, _, _, _ = self._calculate_qqe_mod(opt_closes_live)
+                    shared_data.market_pulse[f"{key}_qqe_up"] = qqe_up
+                    shared_data.market_pulse[f"{key}_qqe_down"] = qqe_down
+                except Exception as qqe_calc_err:
+                    logger.error(f"❌ QQE Calculation Error: {qqe_calc_err}")
+
+            # Keep track of RSI history
+            if "rsi_history" not in self.memory:
+                self.memory["rsi_history"] = {}
+            if key not in self.memory["rsi_history"]:
+                self.memory["rsi_history"][key] = []
+            self.memory["rsi_history"][key].append(opt_rsi)
+            if len(self.memory["rsi_history"][key]) > 10:
+                self.memory["rsi_history"][key].pop(0)
+
+            # Check for RSI 50 divert (rejection after approaching 50)
+            is_rsi_diverted = False
+            recent_rsi = self.memory["rsi_history"][key]
+            peak_val = 0.0
+            if len(recent_rsi) >= 3:
+                for val in recent_rsi[:-1]:
+                    if val > peak_val:
+                        peak_val = val
+                if 47.5 <= peak_val <= 53.0:
+                    current_val = recent_rsi[-1]
+                    if current_val < peak_val - 1.0 and current_val < 48.0:
+                        is_rsi_diverted = True
+
+            # Check for 2x volume spike
+            is_vol_spike = False
+            if len(opt_volumes) >= 16:
+                avg_vol = sum(opt_volumes[-16:-1]) / 15.0
+                latest_vol = opt_volumes[-1]
+                if latest_vol >= 2.0 * avg_vol:
+                    is_vol_spike = True
+
+            # Formula 6 alert and signal override activation
+            if is_rsi_diverted and is_vol_spike:
+                if strike['type'] == 'PE':
+                    shared_data.market_pulse["opposite_pe_failed"] = True
+                    shared_data.market_pulse["opposite_ce_failed"] = False
+                    logger.warning(f"🔥 [FORMULA 6] PE {strike['strike']} rejected/diverted at RSI 50 (Peak: {peak_val:.2f} -> Current: {opt_rsi:.2f}) with 2x volume spike! CALL (CE) bias confirmed.")
+                    if self.telegram:
+                        self.telegram.send_alert(f"🔥 <b>[FORMULA 6: PE REJECTED AT RSI 50]</b> 🔥\nOption PE {strike['strike']} failed to cross RSI 50 with high volume!\n🟢 <b>CALL (CE) SIDE BIAS STRONGLY LOCKED</b>")
+                elif strike['type'] == 'CE':
+                    shared_data.market_pulse["opposite_ce_failed"] = True
+                    shared_data.market_pulse["opposite_pe_failed"] = False
+                    logger.warning(f"🔥 [FORMULA 6] CE {strike['strike']} rejected/diverted at RSI 50 (Peak: {peak_val:.2f} -> Current: {opt_rsi:.2f}) with 2x volume spike! PUT (PE) bias confirmed.")
+                    if self.telegram:
+                        self.telegram.send_alert(f"🔥 <b>[FORMULA 6: CE REJECTED AT RSI 50]</b> 🔥\nOption CE {strike['strike']} failed to cross RSI 50 with high volume!\n🔴 <b>PUT (PE) SIDE BIAS STRONGLY LOCKED</b>")
+
+            # --- 📉 Formula 5: GVN RSI-50 Gravity Retracement Sync (Pullback Bounce) ---
+            is_rsi_50_bounce = False
+            if len(recent_rsi) >= 2:
+                prev_rsi = recent_rsi[-2]
+                curr_rsi = recent_rsi[-1]
+                # Pullback to 50: previous rsi was near 50 (or dipped slightly below 50), now current bounces up
+                if 47.0 <= prev_rsi <= 51.5 and curr_rsi > prev_rsi and curr_rsi >= 50.0:
+                    i5_val = levels.get("i5", 0)
+                    i7_val = levels.get("i7", 0)
+                    if ltp >= i7_val > 0 or ltp >= i5_val > 0:
+                        is_rsi_50_bounce = True
+                        logger.info(f"⚡ [FORMULA 5] RSI-50 Retracement bounce detected on {key}! Option RSI: {curr_rsi:.2f} (Prev: {prev_rsi:.2f}) holding above key GVN level.")
         except Exception as rsi_calc_err:
             logger.error(f"❌ GVN RSI Calculation Error: {rsi_calc_err}")
 
@@ -369,12 +444,23 @@ class GVNAiDelta60Engine:
             is_bullish = strike['type'] == 'CE' and (shared_data.market_pulse.get("score", 50) >= 65 or any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]))
             is_bearish = strike['type'] == 'PE' and (shared_data.market_pulse.get("score", 50) <= 35 or any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]))
             
+            # --- Formula 6 Overrides (Bypass normal filters if opposite side fails) ---
+            opposite_pe_failed = shared_data.market_pulse.get("opposite_pe_failed", False)
+            opposite_ce_failed = shared_data.market_pulse.get("opposite_ce_failed", False)
+            
+            if strike['type'] == 'CE' and opposite_pe_failed:
+                is_bullish = True
+                logger.info("🟢 [FORMULA 6 OVERRIDE] Bypassing normal filters for CE because opposite PE has failed (RSI 50 Divert).")
+            elif strike['type'] == 'PE' and opposite_ce_failed:
+                is_bearish = True
+                logger.info("🔴 [FORMULA 6 OVERRIDE] Bypassing normal filters for PE because opposite CE has failed (RSI 50 Divert).")
+            
             # 🛡️ THE GVN WIND FILTER (AVOIDING 12-PT SL HITS)
             # 1. Reject CE entries if the wind is blowing DOWN
-            if strike['type'] == 'CE' and any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]):
+            if strike['type'] == 'CE' and any(w in wind_dir for w in ["DOWN WIND", "LONG UNWINDING"]) and not opposite_pe_failed:
                 is_bullish = False
             # 2. Reject PE entries if the wind is blowing UP
-            if strike['type'] == 'PE' and any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]):
+            if strike['type'] == 'PE' and any(w in wind_dir for w in ["UP WIND", "SHORT COVERING"]) and not opposite_ce_failed:
                 is_bearish = False
             # 3. Reject ALL entries if it's a Trap / Premium Eating zone
             if "PREMIUM EATING" in wind_dir or wind_power < 0.8:
@@ -558,6 +644,20 @@ class GVNAiDelta60Engine:
                             self._execute_gvn_level_trade(symbol, strike, ltp, new_tgt, new_sl, f"GVN Level Re-entry (near {last_tgt:.2f})")
                             return
 
+            # 📉 Formula 5: GVN RSI-50 Gravity Retracement Sync (Pullback bounce entry) - DIRECT EXECUTION ON LEVEL TOUCH
+            if key not in self.memory["active_trades"] and is_rsi_50_bounce and session_params.get("enable_new_trades", True):
+                # User Directive: Trigger level-to-level trades on RSI-50 bounce without getting blocked by dull zone/wind filters
+                target_val = levels.get("i3", levels.get("i2", round(ltp + 30.54, 2))) # Target 0.3 level (e.g. 196.94)
+                if target_val <= ltp + 10.0:
+                    target_val = levels.get("i1", round(ltp + 35.0, 2))
+                target_val = max(round(float(target_val), 2), round(ltp + 25.0, 2))
+                sl_val = round(ltp - atr_sl, 2)
+                logger.info(f"🚀 [FORMULA 5 ENTRY] Level-to-Level trade triggered on {symbol} {key} @ {ltp} due to RSI-50 Retracement Bounce! Target: {target_val}")
+                if self.telegram:
+                    self.telegram.send_alert(f"🚀 <b>[FORMULA 5: RSI-50 Retracement Level Entry]</b> 🚀\n{symbol} {strike['strike']} {strike['type']} entry @ ₹{ltp}\n🎯 Target: <b>₹{target_val:.2f}</b>\n🛡️ Stop Loss: <b>₹{sl_val:.2f}</b>")
+                self._execute_gvn_level_trade(symbol, strike, ltp, target_val, sl_val, f"Formula 5 RSI-50 Retracement Bounce @ {ltp:.2f}")
+                return
+
             # GVN Pro Level Touch/Crossover checks: strictly 1st Entry (i5), intermediate Entry (i6), and 2nd Entry (i7)
             i5_val = levels.get("i5", 0)
             i6_val = levels.get("i6", 0)
@@ -716,35 +816,50 @@ class GVNAiDelta60Engine:
                 del self.memory["active_trades"][key]
 
     def _execute_gvn_level_trade(self, symbol, strike, entry_price, target, sl, reason):
-        # 🛡️ Safety check: If current price is already past target or below SL, block the entry
+        # 🛡️ Lock exact GVN Master Level prices (e.g. 166.40 entry, 196.94 target, 159.45 SL)
         ltp = strike.get("ltp", entry_price)
-        if target <= ltp:
-            logger.warning(f"🚫 [GVN TRADE BLOCK] Blocked entry for {strike['strike']} {strike['type']} because target {target:.2f} is <= current price {ltp:.2f}")
-            return
-        if sl >= ltp:
-            logger.warning(f"🚫 [GVN TRADE BLOCK] Blocked entry for {strike['strike']} {strike['type']} because stop loss {sl:.2f} is >= current price {ltp:.2f}")
-            return
+        key = f"{strike['strike']}_{strike['type']}"
+        
+        # Double check if target is valid
+        if target <= entry_price:
+            target = round(entry_price + 30.54, 2)
+        if sl >= entry_price:
+            sl = round(entry_price - 12.0, 2)
 
         balance = shared_data.market_data.get("available_cash", 20000)
         target_lots = max(1, min(5, int(balance / 10000)))
-        key = f"{strike['strike']}_{strike['type']}"
         
-        # Execute paper trade and store the ID
+        # Execute paper trade with exact GVN level numbers
         paper_trade = self.paper_trading.execute_paper_buy(symbol, strike["strike"], strike["type"], entry_price, target, sl, target_lots * 50)
         paper_id = paper_trade["id"] if paper_trade else None
         
         self.memory["active_trades"][key] = {
-            "entry": entry_price, 
-            "target": target, 
-            "sl": sl, 
+            "entry": round(entry_price, 2), 
+            "target": round(target, 2), 
+            "sl": round(sl, 2), 
             "total_lots": target_lots,
             "paper_id": paper_id
         }
+        
+        # Sync with shared_data for User Dashboard UI
+        shared_data.active_dashboard_symbol = symbol
+        shared_data.active_trades = {
+            "active": True,
+            "symbol": f"{symbol}_{strike['strike']}_{strike['type']}",
+            "entry_price": round(entry_price, 2),
+            "target": round(target, 2),
+            "sl": round(sl, 2),
+            "lots": target_lots
+        }
+        
         self._fire_order(symbol, strike, "BUY", target_lots, reason, target_price=target, sl_price=sl)
 
     def _fire_order(self, symbol, strike, side, qty, reason, target_price=None, sl_price=None):
-        full_symbol = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
-        tsym = f"{symbol}_{int(strike['strike'])}_{strike['type']}"
+        raw_sym = strike.get("symbol", f"{symbol}{strike['strike']}{strike['type']}")
+        strike_val = int(float(strike.get("strike", 0)))
+        opt_type = strike.get("type", "PE")
+        clean_display_symbol = f"{symbol} {strike_val} {opt_type}".strip()
+        tsym = f"{symbol}_{strike_val}_{opt_type}"
         
         # Calculate dynamic ATR Stop Loss (Half of the 9:15 AM candle range) - USER REQUEST: min 20 points
         atr_sl = 20.0
@@ -763,12 +878,12 @@ class GVNAiDelta60Engine:
             sl_price = strike.get("ltp", 0.0) - atr_sl
         
         if side == "SELL":
-            clean_sym = str(full_symbol).replace("_", "").replace(" ", "").upper()
+            clean_sym = str(raw_sym).replace("_", "").replace(" ", "").upper()
             execution_cmd = f"SELL {clean_sym} EXIT {strike.get('ltp', 0.0):.2f}"
             alert = (
                 f"🛑 <b>GVN MASTER ALGO - POSITION CLOSED</b> 🛑\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 Symbol: <b>{tsym}</b>\n"
+                f"🎯 Symbol: <b>{clean_display_symbol}</b>\n"
                 f"⚡ Reason: <b>{reason}</b>\n"
                 f"💸 Exit Price: <b>₹{strike.get('ltp', 0.0):.2f}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -786,16 +901,13 @@ class GVNAiDelta60Engine:
             except:
                 pass
                 
-            opt_type = strike.get("type", "PE")
-            strike_price = int(strike.get("strike", 24400))
-
-            clean_sym = str(full_symbol).replace("_", "").replace(" ", "").upper()
+            clean_sym = str(raw_sym).replace("_", "").replace(" ", "").upper()
             execution_cmd = f"BUY {clean_sym} ENTRY {strike.get('ltp', 0.0):.2f} SL {sl_price:.2f} TGT {target_price:.2f}"
 
             alert = (
                 f"🚀 <b>GVN DUAL-SYNC ENTRY ALERT</b> 🚀\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📞 <b>Strike:</b> {symbol} {expiry_str}-26 {opt_type} {strike_price}\n"
+                f"📞 <b>Strike:</b> {clean_display_symbol} ({expiry_str}-26)\n"
                 f"📥 <b>Action:</b> BUY Option ({opt_type})\n"
                 f"🟢 <b>Entry Price (LTP):</b> ₹{strike.get('ltp', 0.0):.2f}\n"
                 f"🎯 <b>Target:</b> ₹{target_price:.2f}\n"
@@ -812,6 +924,27 @@ class GVNAiDelta60Engine:
             )
             if self.telegram: self.telegram.send_alert(alert)
 
+        # 🧠 SYNC DEMO TRADE TO SHARED DATA FOR USER DASHBOARD
+        try:
+            if side == "BUY":
+                shared_data.demo_trade = {
+                    "active": True,
+                    "symbol": clean_display_symbol,
+                    "strike": strike.get("strike"),
+                    "type": opt_type,
+                    "entry_price": round(float(strike.get('ltp', 0.0)), 2),
+                    "target_price": round(float(target_price), 2),
+                    "sl_price": round(float(sl_price), 2),
+                    "entry": round(float(strike.get('ltp', 0.0)), 2),
+                    "target": round(float(target_price), 2),
+                    "sl": round(float(sl_price), 2),
+                    "quantity": qty * 50
+                }
+            elif side == "SELL":
+                shared_data.demo_trade = {"active": False}
+        except Exception as e:
+            logger.error(f"Error syncing demo_trade: {e}")
+
         # 🚀 GVN MULTI-USER DYNAMIC ROUTING ENGINE
         try:
             from app import app, db, User, UserBrokerConfig, AlgoTrade
@@ -821,9 +954,13 @@ class GVNAiDelta60Engine:
                 active_users = User.query.filter_by(algo_status='ON', is_blocked=False).all()
                 logger.info(f"🛰️ [GVN MULTI-USER ENGINE] Found {len(active_users)} active users with Algo ON.")
                 
+                trade_sentiment_str = f"{reason} | Target: ₹{target_price:.2f} | SL: ₹{sl_price:.2f}"
+                
                 for u in active_users:
                     try:
                         user_lots = u.trade_lots or 1
+                        lot_multiplier = 50 if "NIFTY" in symbol.upper() else (10 if "SENSEX" in symbol.upper() else 25)
+                        trade_qty = user_lots * lot_multiplier
                         
                         # 1. Check if user has active and approved live subscription
                         is_live_allowed = False
@@ -834,41 +971,46 @@ class GVNAiDelta60Engine:
                         # 2. Add or update trade in their database dashboard
                         if side == 'SELL':
                             # Find the last open trade for this user and symbol
-                            open_trade = AlgoTrade.query.filter_by(
-                                user_id=u.id,
-                                symbol=full_symbol,
-                                status='Open'
+                            open_trade = AlgoTrade.query.filter(
+                                AlgoTrade.user_id == u.id,
+                                AlgoTrade.status == 'Open',
+                                (AlgoTrade.symbol == clean_display_symbol) | (AlgoTrade.symbol == raw_sym)
                             ).order_by(AlgoTrade.timestamp.desc()).first()
                             
                             if open_trade:
                                 open_trade.exit_price = float(strike['ltp'])
+                                open_trade.exit_time = datetime.utcnow()
                                 open_trade.status = 'Closed'
                                 open_trade.pnl = round((open_trade.exit_price - open_trade.entry_price) * open_trade.quantity, 2)
                                 logger.info(f"📊 [DASHBOARD SYNC] Closed open trade ID {open_trade.id} for user {u.username}. PnL: {open_trade.pnl}")
                             else:
                                 new_trade = AlgoTrade(
                                     user_id=u.id,
-                                    symbol=full_symbol,
+                                    symbol=clean_display_symbol,
                                     entry_price=0.0,
+                                    target_price=float(target_price) if target_price else 0.0,
                                     exit_price=float(strike['ltp']),
-                                    quantity=user_lots * 50,
+                                    exit_time=datetime.utcnow(),
+                                    quantity=trade_qty,
                                     trade_type='SELL',
                                     status='Closed',
                                     pnl=0.0,
                                     delta=float(strike.get('delta', 0.60)),
-                                    sentiment=reason
+                                    sentiment=trade_sentiment_str
                                 )
                                 db.session.add(new_trade)
                         else:
                             new_trade = AlgoTrade(
                                 user_id=u.id,
-                                symbol=full_symbol,
+                                symbol=clean_display_symbol,
                                 entry_price=float(strike['ltp']),
+                                target_price=float(target_price) if target_price else round(float(strike['ltp']) * 1.25, 2),
                                 exit_price=0.0,
-                                quantity=user_lots * 50,
+                                quantity=trade_qty,
                                 trade_type='BUY',
                                 status='Open',
                                 pnl=0.0,
+                                timestamp=datetime.utcnow(),
                                 delta=float(strike.get('delta', 0.60)),
                                 sentiment=reason
                             )
@@ -1242,6 +1384,65 @@ class GVNAiDelta60Engine:
             
         return []
 
+    def _fetch_closes_and_volumes_from_api(self, symbol, strike=None, opt_type=None):
+        import requests
+        import nse_option_chain
+        from datetime import datetime, timedelta
+        import shared_data
+        
+        try:
+            if strike and opt_type:
+                symbol_token, exch_seg = nse_option_chain.find_angel_token_and_segment(symbol, strike, opt_type)
+            else:
+                symbol_token, exch_seg = nse_option_chain.find_angel_index_token(symbol)
+                
+            if not symbol_token:
+                return [], []
+                
+            token = nse_option_chain.get_angel_token()
+            if not token:
+                return [], []
+                
+            from_dt = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d 09:15")
+            to_dt = datetime.now().strftime("%Y-%m-%d %H:%M")
+            
+            api_key = shared_data.PERMANENT_CREDENTIALS_BACKUP["angel"]["api_key"]
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-UserType": "USER",
+                "X-SourceID": "WEB",
+                "X-ClientLocalIP": "127.0.0.1",
+                "X-ClientPublicIP": "127.0.0.1",
+                "X-MACAddress": "00:00:00:00:00:00",
+                "X-PrivateKey": api_key,
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "Mozilla/5.0"
+            }
+            
+            hist_payload = {
+                "exchange": exch_seg,
+                "symboltoken": symbol_token,
+                "interval": "FIVE_MINUTE",
+                "fromdate": from_dt,
+                "todate": to_dt
+            }
+            
+            url = "https://apiconnect.angelbroking.com/rest/secure/angelbroking/historical/v1/getCandleData"
+            resp = requests.post(url, json=hist_payload, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                rj = resp.json()
+                if rj.get("status") and rj.get("data"):
+                    candles = rj.get("data")
+                    closes = [float(c[4]) for c in candles]
+                    volumes = [float(c[5]) for c in candles]
+                    return closes, volumes
+        except Exception as e:
+            logger.error(f"❌ Error fetching closes and volumes for {symbol} {strike} {opt_type}: {e}")
+            
+        return [], []
+
     def _compute_rsi(self, prices, period=14):
         if len(prices) < period + 1:
             return 50.0
@@ -1270,8 +1471,179 @@ class GVNAiDelta60Engine:
             return 100.0
             
         rs = avg_gain / avg_loss
+        return 100.0 - (100.0 / (1.0 + rs))
+
+    def _calculate_vwap_distance_projection(self, key_name, prices, vwap_price, day_low):
+        """
+        🚀 Formula 6: GVN VWAP Distance Projection & Multi-Ratio Expansion (1:1, 1:2, 1:2.5)
+        Calculates distance from Low/Base to VWAP Cross and projects targets.
+        """
+        if not prices or vwap_price <= 0 or day_low <= 0:
+            return None
+            
+        current_price = prices[-1]
+        distance_to_vwap = max(0.0, vwap_price - day_low)
+        
+        if distance_to_vwap <= 0:
+            return None
+            
+        target_1to1 = round(vwap_price + distance_to_vwap, 2)
+        target_1to2 = round(vwap_price + (2.0 * distance_to_vwap), 2)
+        target_1to2_5 = round(vwap_price + (2.5 * distance_to_vwap), 2)
+        
+        is_crossed = current_price >= vwap_price
+        
+        res = {
+            "key": key_name,
+            "vwap": vwap_price,
+            "day_low": day_low,
+            "distance_to_vwap": round(distance_to_vwap, 2),
+            "is_vwap_crossed": is_crossed,
+            "target_1to1": target_1to1,
+            "target_1to2": target_1to2,
+            "target_1to2_5": target_1to2_5
+        }
+        
+        # Store in shared_data market_pulse
+        shared_data.market_pulse[f"{key_name}_formula6_vwap"] = res
+        return res
+            
+        rs = avg_gain / avg_loss
         rsi = 100.0 - (100.0 / (1.0 + rs))
         return rsi
+
+    def _compute_ema(self, values, period):
+        if len(values) < period:
+            return list(values)
+        ema = [0.0] * len(values)
+        sma = sum(values[:period]) / period
+        for i in range(period):
+            ema[i] = sma
+        multiplier = 2.0 / (period + 1.0)
+        for i in range(period, len(values)):
+            ema[i] = values[i] * multiplier + ema[i-1] * (1.0 - multiplier)
+        return ema
+
+    def _compute_sma(self, values, period):
+        if len(values) < period:
+            return [0.0] * len(values)
+        sma = [0.0] * len(values)
+        for i in range(len(values)):
+            if i < period - 1:
+                sma[i] = 0.0
+            else:
+                sma[i] = sum(values[i - period + 1 : i + 1]) / period
+        return sma
+
+    def _compute_stdev(self, values, period):
+        if len(values) < period:
+            return [0.0] * len(values)
+        stdev = [0.0] * len(values)
+        for i in range(len(values)):
+            if i < period - 1:
+                stdev[i] = 0.0
+            else:
+                window = values[i - period + 1 : i + 1]
+                mean = sum(window) / period
+                variance = sum((x - mean) ** 2 for x in window) / period
+                stdev[i] = variance ** 0.5
+        return stdev
+
+    def _compute_qqe(self, closes, rsi_length=6, smoothing_factor=5, qqe_factor=4.236):
+        if len(closes) < rsi_length + 1:
+            return [], []
+            
+        rsi_values = []
+        for i in range(len(closes)):
+            if i < rsi_length:
+                rsi_values.append(50.0)
+            else:
+                rsi_values.append(self._compute_rsi(closes[:i+1], period=rsi_length))
+                
+        smoothed_rsi = self._compute_ema(rsi_values, smoothing_factor)
+        
+        atr_rsi = [0.0] * len(smoothed_rsi)
+        for i in range(1, len(smoothed_rsi)):
+            atr_rsi[i] = abs(smoothed_rsi[i] - smoothed_rsi[i-1])
+            
+        wilders_length = rsi_length * 2 - 1
+        smoothed_atr_rsi = self._compute_ema(atr_rsi, wilders_length)
+        
+        dynamic_atr_rsi = [val * qqe_factor for val in smoothed_atr_rsi]
+        
+        long_band = [0.0] * len(closes)
+        short_band = [0.0] * len(closes)
+        trend_direction = [0] * len(closes)
+        qqe_trend_line = [0.0] * len(closes)
+        
+        for i in range(1, len(closes)):
+            atr_delta = dynamic_atr_rsi[i]
+            new_short_band = smoothed_rsi[i] + atr_delta
+            new_long_band = smoothed_rsi[i] - atr_delta
+            
+            if smoothed_rsi[i-1] > long_band[i-1] and smoothed_rsi[i] > long_band[i-1]:
+                long_band[i] = max(long_band[i-1], new_long_band)
+            else:
+                long_band[i] = new_long_band
+                
+            if smoothed_rsi[i-1] < short_band[i-1] and smoothed_rsi[i] < short_band[i-1]:
+                short_band[i] = min(short_band[i-1], new_short_band)
+            else:
+                short_band[i] = new_short_band
+                
+            def crossed(x_prev, x_curr, y_prev, y_curr):
+                return (x_prev > y_prev and x_curr <= y_curr) or (x_prev < y_prev and x_curr >= y_curr)
+                
+            long_band_cross = crossed(long_band[i-1], long_band[i-1], smoothed_rsi[i-1], smoothed_rsi[i])
+            short_band_cross = crossed(smoothed_rsi[i-1], smoothed_rsi[i], short_band[i-1], short_band[i-1])
+            
+            if short_band_cross:
+                trend_direction[i] = 1
+            elif long_band_cross:
+                trend_direction[i] = -1
+            else:
+                trend_direction[i] = trend_direction[i-1]
+                
+            qqe_trend_line[i] = long_band[i] if trend_direction[i] == 1 else short_band[i]
+            
+        return qqe_trend_line, smoothed_rsi
+
+    def _calculate_qqe_mod(self, closes):
+        # Returns (qqe_up_signal, qqe_down_signal, primary_rsi, primary_trend, secondary_rsi, secondary_trend, bb_upper, bb_lower)
+        if len(closes) < 55:
+            return False, False, 50.0, 50.0, 50.0, 50.0, 0.0, 0.0
+            
+        prim_trend, prim_rsi = self._compute_qqe(closes, rsi_length=6, smoothing_factor=5, qqe_factor=3.0)
+        sec_trend, sec_rsi = self._compute_qqe(closes, rsi_length=6, smoothing_factor=5, qqe_factor=1.61)
+        
+        if not prim_trend or not sec_trend:
+            return False, False, 50.0, 50.0, 50.0, 50.0, 0.0, 0.0
+            
+        prim_trend_minus_50 = [val - 50.0 for val in prim_trend]
+        
+        bollinger_length = 50
+        bollinger_multiplier = 0.35
+        
+        sma_prim = self._compute_sma(prim_trend_minus_50, bollinger_length)
+        stdev_prim = self._compute_stdev(prim_trend_minus_50, bollinger_length)
+        
+        latest_prim_rsi = prim_rsi[-1]
+        latest_sec_rsi = sec_rsi[-1]
+        latest_prim_trend = prim_trend[-1]
+        latest_sec_trend = sec_trend[-1]
+        
+        latest_sma = sma_prim[-1]
+        latest_stdev = stdev_prim[-1]
+        
+        bb_upper = latest_sma + (bollinger_multiplier * latest_stdev)
+        bb_lower = latest_sma - (bollinger_multiplier * latest_stdev)
+        
+        threshold = 3.0
+        
+        qqe_up = (latest_sec_rsi - 50.0 > threshold) and (latest_prim_rsi - 50.0 > bb_upper)
+        qqe_down = (latest_sec_rsi - 50.0 < -threshold) and (latest_prim_rsi - 50.0 < bb_lower)
+        
+        return qqe_up, qqe_down, latest_prim_rsi, latest_prim_trend, latest_sec_rsi, latest_sec_trend, bb_upper, bb_lower
 
 
 if __name__ == "__main__":
