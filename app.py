@@ -302,6 +302,11 @@ class Subscription(db.Model):
 # --- DATABASE MIGRATION ---
 def migrate_database():
     with app.app_context():
+        try:
+            db.create_all()
+        except Exception as e:
+            print(f"⚠️ db.create_all() warning: {e}")
+            
         db_uri = app.config['SQLALCHEMY_DATABASE_URI']
         
         if db_uri.startswith('sqlite'):
@@ -315,7 +320,48 @@ def migrate_database():
             try:
                 conn = sqlite3.connect(db_path)
                 cursor = conn.cursor()
-                cols = [
+                user_cols = [
+                    ("password_hash", "VARCHAR(128)"),
+                    ("role", "VARCHAR(20) DEFAULT 'user'"),
+                    ("is_active", "BOOLEAN DEFAULT 1"),
+                    ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"),
+                    ("user_type", "VARCHAR(20) DEFAULT 'LIVE'"),
+                    ("is_admin", "BOOLEAN DEFAULT 0"),
+                    ("is_approved", "BOOLEAN DEFAULT 1"),
+                    ("is_locked", "BOOLEAN DEFAULT 0"),
+                    ("is_blocked", "BOOLEAN DEFAULT 0"),
+                    ("full_auto_mode", "BOOLEAN DEFAULT 0"),
+                    ("trade_lots", "INTEGER DEFAULT 1"),
+                    ("dhan_webhook_url", "VARCHAR(500) DEFAULT ''"),
+                    ("selected_plan", "VARCHAR(50) DEFAULT 'Basic'"),
+                    ("expiry_date", "TIMESTAMP"),
+                    ("demo_capital", "FLOAT DEFAULT 100000.0"),
+                    ("admin_kill_switch", "BOOLEAN DEFAULT 0")
+                ]
+                for tbl in ["user", "users"]:
+                    for col, col_type in user_cols:
+                        try: cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type};")
+                        except: pass
+
+                config_cols = [
+                    ("tv_secret", "VARCHAR(100) DEFAULT 'ANWZ22747T'"),
+                    ("call_strike", "VARCHAR(50)"),
+                    ("put_strike", "VARCHAR(50)"),
+                    ("support_number_1", "VARCHAR(20) DEFAULT '919966123078'"),
+                    ("support_number_2", "VARCHAR(20) DEFAULT ''"),
+                    ("admin_phone", "VARCHAR(20) DEFAULT ''"),
+                    ("admin_user", "VARCHAR(50) DEFAULT 'admin'"),
+                    ("admin_pass", "VARCHAR(50) DEFAULT 'admin123'"),
+                    ("plan_basic_price", "INTEGER DEFAULT 1500"),
+                    ("plan_premium_price", "INTEGER DEFAULT 3000"),
+                    ("plan_ultimate_price", "INTEGER DEFAULT 5000"),
+                    ("attack_mode", "BOOLEAN DEFAULT 0")
+                ]
+                for col, col_type in config_cols:
+                    try: cursor.execute(f"ALTER TABLE user_broker_config ADD COLUMN {col} {col_type};")
+                    except: pass
+
+                trade_cols = [
                     ("entry_price", "FLOAT DEFAULT 0.0"),
                     ("target_price", "FLOAT DEFAULT 0.0"),
                     ("exit_price", "FLOAT DEFAULT 0.0"),
@@ -328,9 +374,10 @@ def migrate_database():
                     ("iv", "FLOAT DEFAULT 0.0"),
                     ("sentiment", "VARCHAR(200) DEFAULT ''")
                 ]
-                for col, col_type in cols:
+                for col, col_type in trade_cols:
                     try: cursor.execute(f"ALTER TABLE algo_trades_v3 ADD COLUMN {col} {col_type};")
                     except: pass
+
                 conn.commit()
                 conn.close()
                 print("✅ SQLite Migration: Columns Verified.")
@@ -339,48 +386,127 @@ def migrate_database():
         
         elif db_uri.startswith('postgresql'):
             try:
-                # Use SQLAlchemy to check/add columns for Postgres
                 from sqlalchemy import text
                 
-                # Config Table
-                try: db.session.execute(text("ALTER TABLE user_broker_config ADD COLUMN IF NOT EXISTS tv_secret VARCHAR(100);"))
-                except: pass
+                # User tables migration
+                user_cols = [
+                    ("password_hash", "VARCHAR(128)"),
+                    ("role", "VARCHAR(20) DEFAULT 'user'"),
+                    ("is_active", "BOOLEAN DEFAULT TRUE"),
+                    ("algo_status", "VARCHAR(10) DEFAULT 'OFF'"),
+                    ("user_type", "VARCHAR(20) DEFAULT 'LIVE'"),
+                    ("is_admin", "BOOLEAN DEFAULT FALSE"),
+                    ("is_approved", "BOOLEAN DEFAULT TRUE"),
+                    ("is_locked", "BOOLEAN DEFAULT FALSE"),
+                    ("is_blocked", "BOOLEAN DEFAULT FALSE"),
+                    ("full_auto_mode", "BOOLEAN DEFAULT FALSE"),
+                    ("trade_lots", "INTEGER DEFAULT 1"),
+                    ("dhan_webhook_url", "VARCHAR(500) DEFAULT ''"),
+                    ("selected_plan", "VARCHAR(50) DEFAULT 'Basic'"),
+                    ("expiry_date", "TIMESTAMP"),
+                    ("demo_capital", "DOUBLE PRECISION DEFAULT 100000.0"),
+                    ("admin_kill_switch", "BOOLEAN DEFAULT FALSE")
+                ]
+                for tbl in ['"user"', 'users']:
+                    for col, col_type in user_cols:
+                        try: db.session.execute(text(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {col_type};"))
+                        except: pass
 
+                # Config Table
+                config_cols = [
+                    ("tv_secret", "VARCHAR(100) DEFAULT 'ANWZ22747T'"),
+                    ("call_strike", "VARCHAR(50)"),
+                    ("put_strike", "VARCHAR(50)"),
+                    ("support_number_1", "VARCHAR(20) DEFAULT '919966123078'"),
+                    ("support_number_2", "VARCHAR(20) DEFAULT ''"),
+                    ("admin_phone", "VARCHAR(20) DEFAULT ''"),
+                    ("admin_user", "VARCHAR(50) DEFAULT 'admin'"),
+                    ("admin_pass", "VARCHAR(50) DEFAULT 'admin123'"),
+                    ("plan_basic_price", "INTEGER DEFAULT 1500"),
+                    ("plan_premium_price", "INTEGER DEFAULT 3000"),
+                    ("plan_ultimate_price", "INTEGER DEFAULT 5000"),
+                    ("attack_mode", "BOOLEAN DEFAULT FALSE")
+                ]
+                for col, col_type in config_cols:
+                    try: db.session.execute(text(f"ALTER TABLE user_broker_config ADD COLUMN IF NOT EXISTS {col} {col_type};"))
+                    except: pass
+
+                # Trade Table
                 cols = [
-                    ("entry_price", "DOUBLE PRECISION"),
-                    ("exit_price", "DOUBLE PRECISION"),
-                    ("quantity", "INTEGER"),
-                    ("trade_type", "VARCHAR(10)"),
-                    ("delta", "DOUBLE PRECISION"),
-                    ("theta", "DOUBLE PRECISION"),
-                    ("gamma", "DOUBLE PRECISION"),
-                    ("iv", "DOUBLE PRECISION"),
-                    ("sentiment", "VARCHAR(200)")
+                    ("entry_price", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("target_price", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("exit_price", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("exit_time", "TIMESTAMP"),
+                    ("quantity", "INTEGER DEFAULT 50"),
+                    ("trade_type", "VARCHAR(10) DEFAULT 'BUY'"),
+                    ("delta", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("theta", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("gamma", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("iv", "DOUBLE PRECISION DEFAULT 0.0"),
+                    ("sentiment", "VARCHAR(200) DEFAULT ''")
                 ]
                 for col, col_type in cols:
-                    try:
-                        db.session.execute(text(f"ALTER TABLE algo_trades_v3 ADD COLUMN IF NOT EXISTS {col} {col_type};"))
+                    try: db.session.execute(text(f"ALTER TABLE algo_trades_v3 ADD COLUMN IF NOT EXISTS {col} {col_type};"))
                     except: pass
+                
                 db.session.commit()
                 print("✅ Postgres Migration: Columns Verified.")
             except Exception as e:
+                db.session.rollback()
                 print(f"⚠️ Postgres Migration Skip: {e}")
+
+        # Ensure default UserBrokerConfig exists
+        try:
+            config = UserBrokerConfig.query.filter_by(user_id=1).first()
+            if not config:
+                config = UserBrokerConfig(user_id=1, support_number_1="919966123078", support_number_2="")
+                db.session.add(config)
+                db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"⚠️ Seed UserBrokerConfig skip: {e}")
 
 migrate_database()
 
 # --- ROUTES ---
 @app.route('/')
 def index():
-    if 'user_id' in session:
-        user = db.session.get(User, session['user_id'])
-        if user:
-            return redirect(url_for('user_dashboard', user_id=user.id))
-        else:
-            session.pop('user_id', None)
-    
-    # Fetch config for support numbers
-    config = UserBrokerConfig.query.filter_by(user_id=1).first()
-    return render_template('ui.html', config=config)
+    try:
+        if 'user_id' in session:
+            user = db.session.get(User, session['user_id'])
+            if user:
+                return redirect(url_for('user_dashboard', user_id=user.id))
+            else:
+                session.pop('user_id', None)
+        
+        # Fetch config for support numbers
+        config = UserBrokerConfig.query.filter_by(user_id=1).first()
+        if not config:
+            config = UserBrokerConfig(user_id=1, support_number_1="919966123078", support_number_2="")
+            try:
+                db.session.add(config)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        return render_template('ui.html', config=config)
+    except Exception as e:
+        print(f"⚠️ Index Route Fallback Triggered: {e}")
+        class DummyConfig:
+            support_number_1 = "919966123078"
+            support_number_2 = ""
+        return render_template('ui.html', config=DummyConfig())
+
+@app.errorhandler(500)
+def handle_500_error(e):
+    print(f"❌ [500 INTERNAL SERVER ERROR]: {e}")
+    try:
+        migrate_database()
+    except Exception:
+        pass
+    class DummyConfig:
+        support_number_1 = "919966123078"
+        support_number_2 = ""
+    return render_template('ui.html', config=DummyConfig()), 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
