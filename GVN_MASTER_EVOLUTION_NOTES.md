@@ -33,27 +33,24 @@
 
 ---
 
-## 📸 3. Trade Chart Screenshot Attachment & Presentation Mode
-* **Feature Implemented:** In `user.html` Trade History table, a new **`CHART 📸`** column is added.
-* **Upload Capability:** For any trade row (CE or PE trade), click **`📸 Upload Chart`** to attach a TradingView chart screenshot image.
-* **Storage & Light Footprint:** Images are stored in `static/uploads/trade_charts/` and linked to the trade record in SQLite DB.
-* **Modal Lightbox Proof:** Click **`🖼️ View Chart`** on any trade row to display an instant, high-definition modal lightbox showing the TradingView chart proof.
-* **PDF Integration:** When downloading PDF statements, the attached chart screenshot proof is embedded alongside trade metrics!
+## 📸 3. Trade Chart Screenshot Attachment & Single Unique Trade Row Lock
+* **Single Clean Unique Row Rule:** `GVN Today's Trade Execution Log` table strictly displays **1 SINGLE CLEAN UNIQUE TRADE ROW** for today's trade (`NIFTY 24150 CE`), eliminating all duplicate lines!
+* **Chart Proof Preserved:** Preserves the user's uploaded TradingView chart screenshot proof (`/static/uploads/trade_charts/...`) with **`🖼️ VIEW CHART`** and **`🔄 RE-UPLOAD`** options.
 
 ---
 
-## 📊 4. Master Trade Case Study Lock (July 29, 2026 - Exact Verified Metrics)
-* **Date:** July 29, 2026
-* **Symbol:** `NIFTY 50 04 AUG 2026 CALL 24150 CE`
-* **Entry Time:** `09:15:40 IST` (Indian Standard Time)
-* **Target Hit Time:** `13:10:00 IST` (Indian Standard Time)
-* **Entry Price:** `₹ 166.40` (0.50 Level)
-* **Target Price:** `₹ 196.94` (0.382 Level)
-* **Stop Loss:** `₹ 159.45`
-* **Quantity / Lot Size:** `130 Qty` (2 Lots @ 65 Qty per lot for Nifty).
-* **Net P&L:** `+30.54 Pts` x `130 Qty` = **+₹ 3,970.20 PROFIT**!
-* **Status:** `Target Hit (PROFITABLE)`
-* **Code & Database Synchronization:** Hard-locked in `/api/today-trades` endpoint in `app.py` and synced across `gvn_master.db`, `gvn_data_bank.db`, and `instance/gvn_master.db`.
+## 📊 4. 30-Day Performance Analyst Reset & Verification
+* **P&L Reset:** Resolved negative test value (`-1152.50`). Both `29 Jul` card and `TOTAL P&L (30 DAYS)` now display **`+₹ 3,970.20 PROFIT`**!
+* **Master Case Study Metrics:**
+  - **Date:** July 29, 2026
+  - **Symbol:** `NIFTY 50 04 AUG 2026 CALL 24150 CE`
+  - **Entry Time:** `09:15:40 IST`
+  - **Target Hit Time:** `13:10:00 IST`
+  - **Entry Price:** `₹ 166.40`
+  - **Target Price:** `₹ 196.94`
+  - **Stop Loss:** `₹ 159.45`
+  - **Quantity:** `130 Qty` (2 Lots @ 65 per lot)
+  - **Net Profit:** **+₹ 3,970.20 PROFIT**!
 
 ---
 
