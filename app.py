@@ -2422,31 +2422,58 @@ def force_close(trade_id):
 @app.route('/admin')
 @app.route('/admin-control')
 def admin_dashboard():
-    admin = db.session.get(User, 1) # Assumes ID 1 is admin
-    
-    # Properly separate Live Approved subscribers from trial/demo clients
-    real_users = User.query.filter(User.role == 'user', User.user_type == 'LIVE', User.is_approved == True).all()
-    demo_users = User.query.filter(User.role == 'user', (User.user_type == 'DEMO') | (User.is_approved == False)).all()
-    
-    active_subscriptions = Subscription.query.filter_by(status='active').all()
-    pending_payments = PendingPayment.query.filter_by(status='Pending').all()
-    
-    # Retrieve system config from user 1's broker settings
-    config = UserBrokerConfig.query.filter_by(user_id=1).first()
-    if not config:
-        config = UserBrokerConfig(user_id=1)
-        db.session.add(config)
-        db.session.commit()
-    
-    return render_template(
-        'admin.html', 
-        user=admin, 
-        real_users=real_users, 
-        demo_users=demo_users, 
-        subscriptions=active_subscriptions, 
-        pending_payments=pending_payments,
-        config=config
-    )
+    try:
+        admin = db.session.get(User, 1)
+        if not admin:
+            admin = User(id=1, username="Venkat Master Admin", phone="9966123078", email="admin@gvnmaster.com", role="admin", is_admin=True, user_type="LIVE", is_approved=True)
+            try:
+                db.session.add(admin)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                
+        real_users = User.query.filter(User.role == 'user', User.user_type == 'LIVE', User.is_approved == True).all() or []
+        demo_users = User.query.filter(User.role == 'user', (User.user_type == 'DEMO') | (User.is_approved == False)).all() or []
+        
+        active_subscriptions = Subscription.query.filter_by(status='active').all() or []
+        pending_payments = PendingPayment.query.filter_by(status='Pending').all() or []
+        
+        config = UserBrokerConfig.query.filter_by(user_id=1).first()
+        if not config:
+            config = UserBrokerConfig(user_id=1, support_number_1="919966123078", support_number_2="")
+            try:
+                db.session.add(config)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        
+        return render_template(
+            'admin.html', 
+            user=admin, 
+            real_users=real_users, 
+            demo_users=demo_users, 
+            subscriptions=active_subscriptions, 
+            pending_payments=pending_payments,
+            config=config
+        )
+    except Exception as e:
+        print(f"⚠️ Admin Dashboard Error: {e}")
+        class DummyAdmin:
+            id = 1
+            username = "Venkat Master Admin"
+            is_admin = True
+        class DummyConfig:
+            support_number_1 = "919966123078"
+            support_number_2 = ""
+        return render_template(
+            'admin.html',
+            user=DummyAdmin(),
+            real_users=[],
+            demo_users=[],
+            subscriptions=[],
+            pending_payments=[],
+            config=DummyConfig()
+        )
 
 @app.route('/toggle-signal-lock/<int:user_id>')
 def toggle_signal_lock(user_id):
