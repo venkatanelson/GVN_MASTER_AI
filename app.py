@@ -1,5 +1,7 @@
 import sys
 import os
+import gc
+gc.collect() # Optimize memory footprint for Render 512MB Free Tier
 from dotenv import load_dotenv
 load_dotenv()
 import base64
