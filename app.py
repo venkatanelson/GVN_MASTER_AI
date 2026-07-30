@@ -152,6 +152,7 @@ def repair_render_db():
         trade_cols = [
             ("entry_price", "FLOAT DEFAULT 0.0"),
             ("exit_price", "FLOAT DEFAULT 0.0"),
+            ("exit_time", "TIMESTAMP"),
             ("quantity", "INTEGER DEFAULT 50"),
             ("trade_type", "VARCHAR(10) DEFAULT 'BUY'"),
             ("delta", "FLOAT DEFAULT 0.0"),
@@ -161,11 +162,12 @@ def repair_render_db():
             ("sentiment", "VARCHAR(200) DEFAULT ''")
         ]
         for col, col_type in trade_cols:
-            try:
-                cursor.execute(f'ALTER TABLE algo_trades_v3 ADD COLUMN {col} {col_type};')
-                results.append(f"✅ Added {col} to algo_trades_v3")
-            except Exception:
-                pass
+            for tbl in ['algo_trades_v3', 'algo_trade', 'trade_history']:
+                try:
+                    cursor.execute(f'ALTER TABLE {tbl} ADD COLUMN {col} {col_type};')
+                    results.append(f"✅ Added {col} to {tbl}")
+                except Exception:
+                    pass
         
         conn.close()
         return f"<h3>🛠️ GVN Database Stabilized</h3><ul><li>" + "</li><li>".join(results) + "</li></ul>"
@@ -504,7 +506,7 @@ def handle_500_error(e):
     except Exception:
         pass
     class DummyConfig:
-        support_number_1 = "919966123078"
+        support_number_1 = "9381490610"
         support_number_2 = ""
     return render_template('ui.html', config=DummyConfig()), 500
 
@@ -555,13 +557,25 @@ def login():
 def demo_register():
     data = request.form if request.form else request.json
     phone = data.get('phone', '').strip().lower()
-    if User.query.filter_by(phone=phone).first():
-        return jsonify({"error": "Phone number already registered"}), 400
+    email = data.get('email', '').strip().lower()
+    
+    digits_only = ''.join(c for c in phone if c.isdigit())
+    
+    # Check if user already exists
+    existing_user = User.query.filter(
+        (User.phone == phone) | 
+        (User.email == email) |
+        (User.phone.like(f"%{digits_only}%") if len(digits_only) >= 5 else False)
+    ).first()
+    
+    if existing_user:
+        session['user_id'] = existing_user.id
+        return redirect(url_for('user_dashboard', user_id=existing_user.id))
     
     new_user = User(
         username=data.get('username', 'Demo User'),
         phone=phone,
-        email=data.get('email', ''),
+        email=email,
         demo_capital=float(data.get('demo_capital', 100000.0)),
         user_type='DEMO',
         is_approved=False,
