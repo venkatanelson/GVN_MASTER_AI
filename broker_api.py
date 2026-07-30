@@ -533,6 +533,15 @@ def execute_broker_order_async(cfg, symbol, txn_type, qty, user_name="User"):
     """
     def run_order():
         try:
+            from datetime import datetime
+            now = datetime.now()
+            time_val = now.hour + (now.minute / 60.0)
+            
+            # 🛑 MARKET CLOSED CHECK (9:15 AM to 3:30 PM IST)
+            if time_val >= 15.5 or time_val < 9.25:
+                logger.info(f"⏸️ [MARKET CLOSED] Suppressing broker order execution & Telegram alert after 3:30 PM for {symbol}")
+                return
+
             logger.info(f"🚀 [ASYNC EXECUTION] User: {user_name} | {txn_type} {qty} {symbol}")
             order_id = place_order_universal(cfg, symbol, txn_type, qty)
             
@@ -560,7 +569,8 @@ def execute_broker_order_async(cfg, symbol, txn_type, qty, user_name="User"):
                     tg.bot.send_message(msg)
             else:
                 logger.error(f"❌ [FAILURE] Order failed for {user_name}")
-                if bot_token and chat_id:
+                # Suppress telegram alert spam if market is closed or after cutoff
+                if bot_token and chat_id and time_val < 15.5:
                     msg = (
                         f"❌ <b>[BROKER ORDER FAILURE]</b>\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
